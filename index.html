@@ -1,10 +1,105 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>My Simple Website</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Feature Crew</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+            color: #333;
+            line-height: 1.6;
+        }
+        main {
+            background: #fff;
+            margin: auto;
+            max-width: 800px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            font-size: 24px;
+            color: #0366d6; /* GitHub blue */
+            border-bottom: 1px solid #e1e4e8; /* GitHub border */
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center; /* Aligns the logo with the text */
+        }
+        h1 img {
+            height: 24px; /* Adjust size of the logo */
+            margin-right: 10px;
+        }
+        h2 {
+            font-size: 20px;
+            color: #24292e; /* GitHub text */
+            padding: 10px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 5px 0;
+        }
+        a {
+            color: #0366d6; /* GitHub link blue */
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #586069; /* GitHub footer text */
+        }
+    </style>
 </head>
 <body>
-    <h1>Welcome to My Website!</h1>
-    <p>This is a simple single-page site hosted on GitHub Pages.</p>
+    <main>
+        <h1>The Feature Crew <img src="logo-emoji.png" alt="Podcast Logo"></h1>
+
+        <section>
+            <h2>Who We Are 🚀</h2>
+            <p>We're a real feature crew focusing on AI planning and work completion. We say "human" a lot at work, which is wierd if you think about it.</p>
+            <i>Obligatory "opinions are our own."</i>
+        </section>
+
+        <section>
+            <h2>What We Talk About 💡</h2>
+            <p>We're pretty AI-pilled at this point so you won't catch us talking about much else. We try to stay grounded in papers, benchmarks, etc but often end up theory crafting about our future AI overlords.</p>
+        </section>
+
+        <section>
+            <h2>Why You Should Listen 🎧</h2>
+            <ul>
+                <li>Stay Updated: We <s>read</s> skim all of the papers so you don't have to.</li>
+                <li>Learn from the Pros: Gain insights from experts actively shaping the field. *horn tooting noises*</li>
+                <li>Laughs: I mean, we think we're pretty funny.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>How to Connect 🌍</h2>
+            <p>Subscribe on all major podcast platforms. Join our discussions on social media:</p>
+            <ul>
+                <li><a href="https://twitter.com/featurecrewpod">@FeatureCrewPod on X</a></li>
+                <li><a href="https://youtube.com/@featurecrewpodcast">@TheFeatureCrew on YouTube</a></li>
+                <li><a href="https://open.spotify.com/show/2Yh4r2wsYmZuhKtt6iBsFY">The Feature Crew on Spotify</a></li>
+            </ul>
+            <p>We love hearing from our listeners—drop us a line or leave a review!</p>
+        </section>
+
+        <section>
+            <h2>Latest Episode</h2>
+            <iframe style="border-radius:12px" src="https://open.spotify.com/embed/show/2Yh4r2wsYmZuhKtt6iBsFY/video?utm_source=generator" width="624" height="351" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+        </section>
+    </main>
+    <footer>
+        Thanks for checking us out and we hope you enjoy the podcast! 🌟
+    </footer>
 </body>
 </html>
