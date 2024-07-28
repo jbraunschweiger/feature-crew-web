@@ -14,14 +14,12 @@
             line-height: 1.6;
         }
         main {
-            background: #fff;
             margin: auto;
             max-width: 800px;
             padding: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         h1 {
-            font-size: 24px;
+            font-size: 28px;
             color: #0366d6; /* GitHub blue */
             border-bottom: 1px solid #e1e4e8; /* GitHub border */
             padding-bottom: 10px;
@@ -29,8 +27,8 @@
             align-items: center; /* Aligns the logo with the text */
         }
         h1 img {
-            height: 24px; /* Adjust size of the logo */
-            margin-right: 10px;
+            height: 32px; /* Adjust size of the logo */
+            margin-left: 5px;
         }
         h2 {
             font-size: 20px;
@@ -49,6 +47,11 @@
         }
         a:hover {
             text-decoration: underline;
+        }
+        .iframe-container {
+            display: flex;
+            align-items: center;
+            justify-content: left;
         }
         footer {
             text-align: center;
@@ -95,7 +98,9 @@
 
         <section>
             <h2>Latest Episode</h2>
-            <iframe style="border-radius:12px" src="https://open.spotify.com/embed/show/2Yh4r2wsYmZuhKtt6iBsFY/video?utm_source=generator" width="624" height="351" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+            <div class="iframe-container">
+                <iframe style="border-radius:12px;" src="https://open.spotify.com/embed/show/2Yh4r2wsYmZuhKtt6iBsFY/video?utm_source=generator" width="624" height="351" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+            </div>
         </section>
     </main>
     <footer>
