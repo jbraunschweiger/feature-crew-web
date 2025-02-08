@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Procedural City Simulation</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { touch-action: none; }
+        #info { position: absolute; top: 10px; left: 10px; color: white; }
+    </style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+<script>
+const SIMULATION_SCALE = 256; // City size in blocks
+let clock = new THREE.Clock();
+
+// Scene setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x87CEEB);
+document.body.appendChild(renderer.domElement);
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+const sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
+sunLight.position.set(100, 100, 50);
+scene.add(sunLight);
+
+// Camera controls
+let mouseDown = false, mouseX = 0, mouseY = 0;
+document.addEventListener('mousedown', e => { mouseDown = true; });
+document.addEventListener('mouseup', e => { mouseDown = false; });
+document.addEventListener('mousemove', e => {
+    if (!mouseDown) return;
+    camera.position.x -= (e.movementX * 0.1);
+    camera.position.z -= (e.movementY * 0.1);
+});
+document.addEventListener('wheel', e => {
+    camera.position.y += e.deltaY * 0.01;
+});
+
+class City {
+    constructor() {
+        this.districts = [];
+        this.buildings = [];
+        this.roads = [];
+        this.parks = [];
+        this.time = 0;
+        this.economy = 1.0;
+        this.population = 0;
+        
+        this.generateBaseTerrain();
+        this.generateRoadNetwork();
+        this.generateZones();
+        this.generateInitialBuildings();
+    }
+
+    generateBaseTerrain() {
+        const terrain = new THREE.Mesh(
+            new THREE.PlaneGeometry(SIMULATION_SCALE, SIMULATION_SCALE),
+            new THREE.MeshPhongMaterial({ color: 0x228B22 })
+        );
+        terrain.rotation.x = -Math.PI / 2;
+        scene.add(terrain);
+    }
+
+    generateRoadNetwork() {
+        // Generate grid-based roads with main avenues
+        for(let x = -SIMULATION_SCALE/2; x <= SIMULATION_SCALE/2; x += 8) {
+            const road = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(x, 0.1, -SIMULATION_SCALE/2),
+                    new THREE.Vector3(x, 0.1, SIMULATION_SCALE/2)
+                ]),
+                new THREE.LineBasicMaterial({ color: 0x444444 })
+            );
+            this.roads.push(road);
+            scene.add(road);
+        }
+        for(let z = -SIMULATION_SCALE/2; z <= SIMULATION_SCALE/2; z += 8) {
+            const road = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(-SIMULATION_SCALE/2, 0.1, z),
+                    new THREE.Vector3(SIMULATION_SCALE/2, 0.1, z)
+                ]),
+                new THREE.LineBasicMaterial({ color: 0x444444 })
+            );
+            this.roads.push(road);
+            scene.add(road);
+        }
+    }
+
+    generateZones() {
+        // Create district zones using simplex noise
+        const noise = new SimplexNoise();
+        for(let x = -SIMULATION_SCALE/2; x < SIMULATION_SCALE/2; x += 16) {
+            for(let z = -SIMULATION_SCALE/2; z < SIMULATION_SCALE/2; z += 16) {
+                const n = noise.noise2D(x/50, z/50);
+                this.districts.push({
+                    x, z,
+                    type: n < -0.3 ? 'industrial' : n < 0.3 ? 'commercial' : 'residential',
+                    value: 1.0
+                });
+            }
+        }
+    }
+
+    generateInitialBuildings() {
+        this.districts.forEach(zone => {
+            if(Math.random() > 0.7) return; // Leave some empty space
+            
+            const height = zone.type === 'commercial' ? 
+                Math.random()*8 + 8 : 
+                zone.type === 'industrial' ? 
+                Math.random()*4 + 4 : 
+                Math.random()*2 + 2;
+
+            const building = new THREE.Mesh(
+                new THREE.BoxGeometry(3, height, 3),
+                new THREE.MeshStandardMaterial({ 
+                    color: zone.type === 'commercial' ? 0x4682B4 :
+                           zone.type === 'industrial' ? 0x808080 : 0xDEB887
+                })
+            );
+            building.position.set(
+                zone.x + Math.random()*8 - 4,
+                height/2,
+                zone.z + Math.random()*8 - 4
+            );
+            this.buildings.push(building);
+            scene.add(building);
+        });
+    }
+
+    update(delta) {
+        // Simple day-night cycle
+        this.time = (this.time + delta * 0.1) % (Math.PI * 2);
+        sunLight.intensity = Math.cos(this.time) * 0.4 + 0.6;
+        ambientLight.intensity = Math.cos(this.time) * 0.4 + 0.4;
+    }
+}
+
+// Initialize city and camera
+const city = new City();
+camera.position.set(50, 50, 50);
+camera.lookAt(0, 0, 0);
+
+// Animation loop
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    
+    city.update(delta);
+    
+    // Simple economy simulation
+    city.economy += (Math.random() - 0.45) * 0.01;
+    city.economy = Math.max(0.5, Math.min(1.5, city.economy));
+    
+    renderer.render(scene, camera);
+}
+animate();
+
+// Responsive handling
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+<div id="info">City Simulation - Drag to move · Scroll to zoom</div>
+</body>
+</html>
