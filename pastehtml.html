@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Paste & Render HTML in Fullscreen</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: sans-serif;
+    }
+
+    #inputArea {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      box-sizing: border-box;
+      padding: 1rem;
+    }
+
+    #htmlInput {
+      width: 80%;
+      height: 200px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    #renderButton {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="inputArea">
+    <textarea id="htmlInput" placeholder="Paste your HTML code here..."></textarea>
+    <button id="renderButton" onclick="renderFullscreen()">Render Fullscreen</button>
+  </div>
+
+  <script>
+    function renderFullscreen() {
+      // Grab the user's code
+      const code = document.getElementById("htmlInput").value;
+
+      // Create an iframe
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "absolute";
+      iframe.style.top = 0;
+      iframe.style.left = 0;
+      iframe.style.width = "100%";
+      iframe.style.height = "100%";
+      iframe.style.border = "none";
+      iframe.srcdoc = code;  // Inject the pasted HTML
+
+      // Hide the input area
+      document.getElementById("inputArea").style.display = "none";
+
+      // Add iframe to the page
+      document.body.appendChild(iframe);
+
+      // Attempt to request fullscreen
+      if (iframe.requestFullscreen) {
+        iframe.requestFullscreen();
+      } else if (iframe.mozRequestFullScreen) { // Firefox
+        iframe.mozRequestFullScreen();
+      } else if (iframe.webkitRequestFullscreen) { // Chrome, Safari, Opera
+        iframe.webkitRequestFullscreen();
+      } else if (iframe.msRequestFullscreen) { // IE/Edge
+        iframe.msRequestFullscreen();
+      }
+    }
+  </script>
+</body>
+</html>
+
