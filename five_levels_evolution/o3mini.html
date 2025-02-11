@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Advanced Evolution Simulator</title>
+  <style>
+    /* Global Styles */
+    body {
+      background: linear-gradient(135deg, #2c3e50, #4ca1af);
+      color: #ecf0f1;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    h1, h2 {
+      margin: 10px 0;
+    }
+    .container {
+      width: 90%;
+      max-width: 1200px;
+      margin: 20px auto;
+      text-align: center;
+    }
+    .description {
+      margin-bottom: 20px;
+      font-size: 1.1em;
+    }
+    /* Controls Panel */
+    #controls {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 15px;
+      border-radius: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    #controls > div {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+    #controls label {
+      margin: 5px;
+    }
+    #controls input, #controls select {
+      margin: 5px;
+      padding: 5px;
+      border: none;
+      border-radius: 4px;
+      width: 80px;
+    }
+    #controls input[type="checkbox"] {
+      width: auto;
+    }
+    #controls button {
+      margin: 5px;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 5px;
+      background-color: #27ae60;
+      color: #ecf0f1;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    #controls button:hover {
+      background-color: #1e8449;
+    }
+    /* Canvas & Info */
+    canvas {
+      background: #1c1c1c;
+      border: 2px solid #34495e;
+      border-radius: 10px;
+      display: block;
+      margin: 0 auto 20px auto;
+    }
+    #info {
+      margin-bottom: 20px;
+      font-size: 1.2em;
+    }
+    #info span {
+      margin: 0 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Advanced Evolution Simulator</h1>
+    <p class="description">
+      In this simulation, rockets evolve over generations to reach a target while overcoming gravity, wind, and obstacles.
+      Adjust parameters like population size, mutation rate, simulation speed, environmental forces, and more.
+      Click on the canvas to reposition the target.
+    </p>
+    <div id="controls">
+      <div>
+        <label for="populationSize">Population:</label>
+        <input type="number" id="populationSize" value="50" min="10" max="300">
+      </div>
+      <div>
+        <label for="lifespan">Lifespan:</label>
+        <input type="number" id="lifespan" value="200" min="50" max="500">
+      </div>
+      <div>
+        <label for="mutationRate">Mutation:</label>
+        <input type="number" id="mutationRate" value="0.01" step="0.01" min="0" max="1">
+      </div>
+      <div>
+        <label for="gravity">Gravity:</label>
+        <input type="number" id="gravity" value="0.1" step="0.01">
+      </div>
+      <div>
+        <label for="wind">Wind:</label>
+        <input type="number" id="wind" value="0" step="0.01">
+      </div>
+      <div>
+        <label for="maxSpeed">Max Speed:</label>
+        <input type="number" id="maxSpeed" value="4" step="0.1" min="2" max="10">
+      </div>
+      <div>
+        <label for="simSpeed">Sim Speed:</label>
+        <input type="number" id="simSpeed" value="1" step="1" min="1" max="10">
+      </div>
+      <div>
+        <label for="obstacleMode">Obstacles:</label>
+        <select id="obstacleMode">
+          <option value="static">Static</option>
+          <option value="dynamic">Dynamic</option>
+        </select>
+      </div>
+      <div>
+        <label for="numObstacles"># Obstacles:</label>
+        <input type="number" id="numObstacles" value="2" min="1" max="10">
+      </div>
+      <div>
+        <label for="showTrails">Trails:</label>
+        <input type="checkbox" id="showTrails">
+      </div>
+      <div>
+        <button id="applyParameters">Apply Parameters</button>
+        <button id="pauseResume">Pause</button>
+        <button id="resetSim">Reset Simulation</button>
+        <button id="randomizeObstacles">Randomize Obstacles</button>
+      </div>
+    </div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="info">
+      <span>Generation: <span id="generation">1</span></span>
+      <span>Frame: <span id="frameCount">0</span></span>
+      <span>Best Fitness: <span id="bestFitness">0</span></span>
+      <span>Avg Fitness: <span id="avgFitness">0</span></span>
+    </div>
+    <h2>Fitness Graph</h2>
+    <canvas id="graph" width="800" height="150"></canvas>
+  </div>
+
+  <script>
+    /****************************************************
+     * Global Variables and Configurations
+     ****************************************************/
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const graphCanvas = document.getElementById('graph');
+    const graphCtx = graphCanvas.getContext('2d');
+
+    // Simulation parameters
+    let population;
+    let lifespan = parseInt(document.getElementById('lifespan').value, 10);
+    let mutationRate = parseFloat(document.getElementById('mutationRate').value);
+    let populationSize = parseInt(document.getElementById('populationSize').value, 10);
+    let simulationSpeed = parseInt(document.getElementById('simSpeed').value, 10);
+    let gravityVal = parseFloat(document.getElementById('gravity').value);
+    let windVal = parseFloat(document.getElementById('wind').value);
+    let maxSpeed = parseFloat(document.getElementById('maxSpeed').value);
+    let obstacleMode = document.getElementById('obstacleMode').value;
+    let numObstacles = parseInt(document.getElementById('numObstacles').value, 10);
+    let showTrails = document.getElementById('showTrails').checked;
+    let paused = false;
+
+    let lifeCounter = 0;
+    let generation = 1;
+
+    // Target settings (initially at top center)
+    const targetRadius = 10;
+    let target = { x: canvas.width / 2, y: 50 };
+
+    const maxForce = 0.2; // Maximum magnitude for a gene force
+
+    // Obstacles array (each obstacle: {x, y, width, height, vx, vy} if dynamic)
+    let obstacles = [];
+    function initObstacles() {
+      obstacles = [];
+      // Avoid division by zero: ensure numObstacles is at least 1.
+      numObstacles = Math.max(1, numObstacles);
+      const spacing = canvas.width / (numObstacles + 1);
+      for (let i = 1; i <= numObstacles; i++) {
+        const obs = {
+          x: spacing * i - 50,
+          y: canvas.height / 2,
+          width: 100,
+          height: 20
+        };
+        if (obstacleMode === 'dynamic') {
+          obs.vx = (Math.random() - 0.5) * 2;
+          obs.vy = (Math.random() - 0.5) * 2;
+        }
+        obstacles.push(obs);
+      }
+    }
+    initObstacles();
+
+    // Fitness history arrays for graphing
+    let bestFitnessHistory = [];
+    let avgFitnessHistory = [];
+
+    /****************************************************
+     * Helper Classes and Utility Functions
+     ****************************************************/
+    class Vector {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+      }
+      add(v) {
+        this.x += v.x;
+        this.y += v.y;
+      }
+      copy() {
+        return new Vector(this.x, this.y);
+      }
+      // Returns a random vector with magnitude = maxForce
+      static random() {
+        const angle = Math.random() * 2 * Math.PI;
+        return new Vector(Math.cos(angle) * maxForce, Math.sin(angle) * maxForce);
+      }
+      mag() {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+      }
+      setMag(m) {
+        const currentMag = this.mag();
+        if (currentMag !== 0) {
+          this.x = (this.x / currentMag) * m;
+          this.y = (this.y / currentMag) * m;
+        }
+      }
+    }
+
+    class DNA {
+      constructor(genes) {
+        if (genes) {
+          this.genes = genes;
+        } else {
+          this.genes = [];
+          for (let i = 0; i < lifespan; i++) {
+            this.genes[i] = Vector.random();
+          }
+        }
+      }
+      // Mix genes from two parents
+      crossover(partner) {
+        const newGenes = [];
+        const mid = Math.floor(Math.random() * this.genes.length);
+        for (let i = 0; i < this.genes.length; i++) {
+          newGenes[i] = (i > mid) ? this.genes[i].copy() : partner.genes[i].copy();
+        }
+        return new DNA(newGenes);
+      }
+      // Mutate genes with a probability defined by mutationRate
+      mutate() {
+        for (let i = 0; i < this.genes.length; i++) {
+          if (Math.random() < mutationRate) {
+            this.genes[i] = Vector.random();
+          }
+        }
+      }
+    }
+
+    class Rocket {
+      constructor(dna) {
+        this.pos = new Vector(canvas.width / 2, canvas.height - 10);
+        this.vel = new Vector(0, 0);
+        this.acc = new Vector(0, 0);
+        this.dna = dna || new DNA();
+        this.completed = false;
+        this.crashed = false;
+        this.fitness = 0;
+        this.recordTime = Infinity;
+        this.trail = []; // Stores past positions if trails are enabled
+      }
+      applyForce(force) {
+        this.acc.add(force);
+      }
+      update() {
+        // Check if target reached
+        const d = distance(this.pos, target);
+        if (d < targetRadius) {
+          this.completed = true;
+          // Snap to target and record the time if first arrival
+          this.pos = new Vector(target.x, target.y);
+          if (lifeCounter < this.recordTime) {
+            this.recordTime = lifeCounter;
+          }
+        }
+        // Check for collisions with obstacles
+        for (let obs of obstacles) {
+          if (this.pos.x > obs.x && this.pos.x < obs.x + obs.width &&
+              this.pos.y > obs.y && this.pos.y < obs.y + obs.height) {
+            this.crashed = true;
+          }
+        }
+        // Check if outside canvas boundaries
+        if (this.pos.x < 0 || this.pos.x > canvas.width ||
+            this.pos.y < 0 || this.pos.y > canvas.height) {
+          this.crashed = true;
+        }
+        // If still active, apply gene and environmental forces
+        if (!this.completed && !this.crashed) {
+          if (lifeCounter < this.dna.genes.length) {
+            this.applyForce(this.dna.genes[lifeCounter]);
+          }
+          // Apply gravity and wind
+          this.applyForce(new Vector(windVal, gravityVal));
+          this.vel.add(this.acc);
+          if (this.vel.mag() > maxSpeed) {
+            this.vel.setMag(maxSpeed);
+          }
+          this.pos.add(this.vel);
+          this.acc = new Vector(0, 0);
+          // Record trail if enabled
+          if (showTrails) {
+            this.trail.push(this.pos.copy());
+            if (this.trail.length > 50) {
+              this.trail.shift();
+            }
+          }
+        }
+      }
+      calculateFitness() {
+        const d = distance(this.pos, target);
+        // Map distance inversely to fitness
+        this.fitness = map(d, 0, canvas.width, canvas.width, 0);
+        if (this.completed) {
+          this.fitness *= 2;
+          this.fitness *= map(this.recordTime, 0, lifespan, lifespan, 0.5);
+        }
+        if (this.crashed) {
+          this.fitness *= 0.1;
+        }
+      }
+      show() {
+        // Draw rocket trail (only rockets draw trails, not obstacles)
+        if (showTrails && this.trail.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(this.trail[0].x, this.trail[0].y);
+          for (let pos of this.trail) {
+            ctx.lineTo(pos.x, pos.y);
+          }
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+          ctx.stroke();
+        }
+        // Draw the rocket as a rotated triangle
+        ctx.save();
+        ctx.translate(this.pos.x, this.pos.y);
+        const angle = Math.atan2(this.vel.y, this.vel.x);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#ecf0f1';
+        ctx.beginPath();
+        ctx.moveTo(0, -5);
+        ctx.lineTo(10, 0);
+        ctx.lineTo(0, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    class Population {
+      constructor() {
+        this.rockets = [];
+        for (let i = 0; i < populationSize; i++) {
+          this.rockets[i] = new Rocket();
+        }
+        this.matingPool = [];
+      }
+      run() {
+        // Update and draw each rocket
+        for (let rocket of this.rockets) {
+          rocket.update();
+          rocket.show();
+        }
+      }
+      evaluate() {
+        let maxFitness = 0;
+        let totalFitness = 0;
+        // Calculate fitness for all rockets
+        for (let rocket of this.rockets) {
+          rocket.calculateFitness();
+          totalFitness += rocket.fitness;
+          if (rocket.fitness > maxFitness) {
+            maxFitness = rocket.fitness;
+          }
+        }
+        const avgFitness = totalFitness / this.rockets.length;
+        bestFitnessHistory.push(maxFitness);
+        avgFitnessHistory.push(avgFitness);
+        document.getElementById('bestFitness').textContent = maxFitness.toFixed(2);
+        document.getElementById('avgFitness').textContent = avgFitness.toFixed(2);
+        updateGraph();
+        // Build mating pool
+        this.matingPool = [];
+        for (let rocket of this.rockets) {
+          // Normalize fitness
+          rocket.fitness /= maxFitness;
+          const n = Math.floor(rocket.fitness * 100);
+          for (let j = 0; j < n; j++) {
+            this.matingPool.push(rocket);
+          }
+        }
+      }
+      selection() {
+        const newRockets = [];
+        for (let i = 0; i < this.rockets.length; i++) {
+          const parentA = randomChoice(this.matingPool).dna;
+          const parentB = randomChoice(this.matingPool).dna;
+          const childDNA = parentA.crossover(parentB);
+          childDNA.mutate();
+          newRockets[i] = new Rocket(childDNA);
+        }
+        this.rockets = newRockets;
+      }
+    }
+
+    // Utility: Euclidean distance between two vectors
+    function distance(v1, v2) {
+      const dx = v1.x - v2.x;
+      const dy = v1.y - v2.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    // Utility: map a number from one range to another
+    function map(value, in_min, in_max, out_min, out_max) {
+      return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+    }
+    // Utility: randomly select an element from an array
+    function randomChoice(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    /****************************************************
+     * Drawing Functions
+     ****************************************************/
+    // Draw the target as a red circle with a white border
+    function drawTarget() {
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, targetRadius, 0, 2 * Math.PI);
+      ctx.fillStyle = '#e74c3c';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    }
+
+    // Draw obstacles (these are redrawn fresh each frame)
+    function drawObstacles() {
+      for (let obs of obstacles) {
+        ctx.fillStyle = '#95a5a6';
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+      }
+    }
+
+    // Update positions of dynamic obstacles (if enabled)
+    function updateObstacles() {
+      if (obstacleMode === 'dynamic') {
+        for (let obs of obstacles) {
+          obs.x += obs.vx;
+          obs.y += obs.vy;
+          // Bounce off the canvas edges
+          if (obs.x < 0 || obs.x + obs.width > canvas.width) {
+            obs.vx *= -1;
+          }
+          if (obs.y < 0 || obs.y + obs.height > canvas.height) {
+            obs.vy *= -1;
+          }
+        }
+      }
+    }
+
+    // Update the fitness graph on the lower canvas
+    function updateGraph() {
+      graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+      // Draw axes
+      graphCtx.strokeStyle = '#fff';
+      graphCtx.beginPath();
+      graphCtx.moveTo(40, 10);
+      graphCtx.lineTo(40, graphCanvas.height - 20);
+      graphCtx.lineTo(graphCanvas.width - 10, graphCanvas.height - 20);
+      graphCtx.stroke();
+
+      const gens = bestFitnessHistory.length;
+      if (gens < 2) return;
+      const maxFitnessRecorded = Math.max(...bestFitnessHistory);
+      const xSpacing = (graphCanvas.width - 50) / (gens - 1);
+
+      // Draw best fitness line (red)
+      graphCtx.strokeStyle = '#e74c3c';
+      graphCtx.beginPath();
+      for (let i = 0; i < gens; i++) {
+        const x = 40 + i * xSpacing;
+        const y = graphCanvas.height - 20 - (bestFitnessHistory[i] / maxFitnessRecorded) * (graphCanvas.height - 40);
+        if (i === 0) {
+          graphCtx.moveTo(x, y);
+        } else {
+          graphCtx.lineTo(x, y);
+        }
+      }
+      graphCtx.stroke();
+
+      // Draw average fitness line (cyan)
+      graphCtx.strokeStyle = '#1abc9c';
+      graphCtx.beginPath();
+      for (let i = 0; i < gens; i++) {
+        const x = 40 + i * xSpacing;
+        const y = graphCanvas.height - 20 - (avgFitnessHistory[i] / maxFitnessRecorded) * (graphCanvas.height - 40);
+        if (i === 0) {
+          graphCtx.moveTo(x, y);
+        } else {
+          graphCtx.lineTo(x, y);
+        }
+      }
+      graphCtx.stroke();
+
+      // Labels for the lines
+      graphCtx.fillStyle = '#e74c3c';
+      graphCtx.fillText('Best', 50, 20);
+      graphCtx.fillStyle = '#1abc9c';
+      graphCtx.fillText('Avg', 100, 20);
+    }
+
+    /****************************************************
+     * Main Simulation Loop
+     ****************************************************/
+    function simulationStep() {
+      // Clear the entire canvas so that only rocket trails (if enabled) are redrawn
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Update dynamic obstacles (if any)
+      updateObstacles();
+      
+      // Draw obstacles (always drawn fresh each frame)
+      drawObstacles();
+      
+      // Run rockets (updates positions and draws rockets and their trails)
+      population.run();
+      
+      // Draw the target last so it stays visible
+      drawTarget();
+      
+      // Update the frame counter display
+      lifeCounter++;
+      document.getElementById('frameCount').textContent = lifeCounter;
+      
+      // If we've reached the end of this generation, evaluate and evolve
+      if (lifeCounter >= lifespan) {
+        population.evaluate();
+        population.selection();
+        lifeCounter = 0;
+        generation++;
+        document.getElementById('generation').textContent = generation;
+      }
+    }
+
+    // The main loop – runs simulation steps (possibly several per animation frame)
+    function updateSim() {
+      if (!paused) {
+        for (let i = 0; i < simulationSpeed; i++) {
+          simulationStep();
+        }
+      }
+      requestAnimationFrame(updateSim);
+    }
+
+    // Initialize the population and begin the animation loop
+    population = new Population();
+    updateSim();
+
+    /****************************************************
+     * Event Listeners & Control Panel Handlers
+     ****************************************************/
+    // Apply new parameters and reinitialize the simulation
+    document.getElementById('applyParameters').addEventListener('click', () => {
+      lifespan = parseInt(document.getElementById('lifespan').value, 10);
+      mutationRate = parseFloat(document.getElementById('mutationRate').value);
+      populationSize = parseInt(document.getElementById('populationSize').value, 10);
+      simulationSpeed = parseInt(document.getElementById('simSpeed').value, 10);
+      gravityVal = parseFloat(document.getElementById('gravity').value);
+      windVal = parseFloat(document.getElementById('wind').value);
+      maxSpeed = parseFloat(document.getElementById('maxSpeed').value);
+      obstacleMode = document.getElementById('obstacleMode').value;
+      numObstacles = parseInt(document.getElementById('numObstacles').value, 10);
+      showTrails = document.getElementById('showTrails').checked;
+      initObstacles();
+      lifeCounter = 0;
+      generation = 1;
+      bestFitnessHistory = [];
+      avgFitnessHistory = [];
+      document.getElementById('generation').textContent = generation;
+      document.getElementById('frameCount').textContent = lifeCounter;
+      population = new Population();
+    });
+
+    // Pause or resume the simulation
+    document.getElementById('pauseResume').addEventListener('click', () => {
+      paused = !paused;
+      document.getElementById('pauseResume').textContent = paused ? 'Resume' : 'Pause';
+    });
+
+    // Reset the simulation entirely
+    document.getElementById('resetSim').addEventListener('click', () => {
+      lifeCounter = 0;
+      generation = 1;
+      bestFitnessHistory = [];
+      avgFitnessHistory = [];
+      document.getElementById('generation').textContent = generation;
+      document.getElementById('frameCount').textContent = lifeCounter;
+      population = new Population();
+      initObstacles();
+      graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+    });
+
+    // Randomize obstacles (positions and velocities if dynamic)
+    document.getElementById('randomizeObstacles').addEventListener('click', () => {
+      initObstacles();
+    });
+
+    // Click on the canvas to reposition the target
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      target.x = e.clientX - rect.left;
+      target.y = e.clientY - rect.top;
+    });
+  </script>
+</body>
+</html>

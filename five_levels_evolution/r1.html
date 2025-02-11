@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Evolution Simulator</title>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --secondary: #2196F3;
+        }
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            height: 90vh;
+        }
+        canvas {
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            background: #000;
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.2);
+        }
+        .controls {
+            background: #333;
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 300px;
+            overflow-y: auto;
+        }
+        .param-group {
+            background: #222;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .param {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--primary);
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--primary);
+        }
+        button {
+            background: linear-gradient(45deg, var(--primary), #45a049);
+            border: none;
+            padding: 12px 24px;
+            color: white;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 5px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        .stats {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            border-bottom: 1px dotted #666;
+            cursor: help;
+        }
+        .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background: #222;
+            color: #fff;
+            text-align: center;
+            padding: 5px;
+            border-radius: 4px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+        }
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+        }
+    </style>
+</head>
+<body>
+    <div class="stats">
+        Generation: <span id="genCount">0</span><br>
+        Best Fitness: <span id="bestFitness">0</span><br>
+        Population: <span id="currentPop">0</span>
+    </div>
+    <div class="container">
+        <canvas id="simCanvas" width="800" height="600"></canvas>
+        <div class="controls">
+            <h2>🌱 Evolution Controls</h2>
+            <button id="startStop">▶ Start</button>
+            <button id="reset">🔄 Reset</button>
+            
+            <div class="param-group">
+                <h3>⚙️ Simulation Parameters</h3>
+                <div class="param">
+                    <label class="tooltip">Mutation Rate: <span id="mutationRateValue">0.1</span>
+                        <span class="tooltip-text">Probability of genetic mutations occurring during reproduction</span>
+                    </label>
+                    <input type="range" id="mutationRate" min="0" max="0.5" step="0.01" value="0.1">
+                </div>
+                <div class="param">
+                    <label>Population Size: <span id="popSizeValue">100</span></label>
+                    <input type="range" id="popSize" min="10" max="300" step="10" value="100">
+                </div>
+                <div class="param">
+                    <label>Food Density: <span id="foodDensityValue">50</span></label>
+                    <input type="range" id="foodDensity" min="10" max="100" step="5" value="50">
+                </div>
+            </div>
+
+            <div class="param-group">
+                <h3>🧬 Evolutionary Pressures</h3>
+                <div class="param">
+                    <label>Speed Cost: <span id="speedCostValue">0.5</span></label>
+                    <input type="range" id="speedCost" min="0" max="2" step="0.1" value="0.5">
+                </div>
+                <div class="param">
+                    <label>Size Cost: <span id="sizeCostValue">0.3</span></label>
+                    <input type="range" id="sizeCost" min="0" max="2" step="0.1" value="0.3">
+                </div>
+                <div class="param">
+                    <label>Predator Strength: <span id="predatorValue">0.2</span></label>
+                    <input type="range" id="predatorStrength" min="0" max="1" step="0.05" value="0.2">
+                </div>
+            </div>
+
+            <div id="selectedCreature" class="param-group" style="display:none;">
+                <h3>🔍 Selected Creature</h3>
+                <p>Size: <span id="selSize">-</span></p>
+                <p>Speed: <span id="selSpeed">-</span></p>
+                <p>Sense: <span id="selSense">-</span></p>
+                <p>Energy: <span id="selEnergy">-</span></p>
+            </div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+let isRunning = false;
+let generation = 0;
+let population = [];
+let foods = [];
+let predators = [];
+const ENV = {
+    FOOD_ENERGY: 5,
+    REPRODUCE_COST: 30,
+    MAX_ENERGY: 100,
+    PREDATOR_SPAWN_RATE: 0.02
+};
+
+class Creature {
+    constructor(dna, parent) {
+        this.dna = dna || {
+            size: Math.random() * 20 + 10,
+            speed: Math.random() * 2 + 0.5,
+            sense: Math.random() * 150 + 50,
+            color: `hsl(${Math.random() * 360}, 70%, 50%)`
+        };
+        this.energy = ENV.MAX_ENERGY;
+        this.age = 0;
+        this.parent = parent;
+        this.position = {
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height
+        };
+        this.targetFood = null;
+    }
+
+    update() {
+        this.age++;
+        this.energy -= 0.1 + this.dna.speed * parseFloat(document.getElementById('speedCost').value)
+                        + this.dna.size * parseFloat(document.getElementById('sizeCost').value);
+
+        // Find food
+        if (!this.targetFood || this.energy > ENV.MAX_ENERGY * 0.8) {
+            this.targetFood = this.findFood();
+        }
+
+        // Move towards food
+        if (this.targetFood) {
+            const dx = this.targetFood.x - this.position.x;
+            const dy = this.targetFood.y - this.position.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < this.dna.sense) {
+                const angle = Math.atan2(dy, dx);
+                this.position.x += Math.cos(angle) * this.dna.speed;
+                this.position.y += Math.sin(angle) * this.dna.speed;
+                
+                // Eat food
+                if (dist < this.dna.size/2) {
+                    this.energy += ENV.FOOD_ENERGY;
+                    foods = foods.filter(f => f !== this.targetFood);
+                    this.targetFood = null;
+                }
+            }
+        }
+
+        // Reproduction
+        if (this.energy >= ENV.REPRODUCE_COST) {
+            this.energy -= ENV.REPRODUCE_COST;
+            return this.reproduce();
+        }
+        return null;
+    }
+
+    findFood() {
+        return foods.reduce((closest, food) => {
+            const dist = this.distanceTo(food);
+            return dist < this.distanceTo(closest) ? food : closest;
+        }, {x: Infinity, y: Infinity});
+    }
+
+    distanceTo(point) {
+        const dx = point.x - this.position.x;
+        const dy = point.y - this.position.y;
+        return Math.sqrt(dx*dx + dy*dy);
+    }
+
+    reproduce() {
+        const mutationRate = parseFloat(document.getElementById('mutationRate').value);
+        return new Creature({
+            size: this.mutate(this.dna.size, mutationRate, 0.2),
+            speed: this.mutate(this.dna.speed, mutationRate, 0.2),
+            sense: this.mutate(this.dna.sense, mutationRate, 0.2),
+            color: this.mutateColor(this.dna.color, mutationRate)
+        }, this);
+    }
+
+    mutate(value, rate, range) {
+        if (Math.random() < rate) {
+            return value * (1 + (Math.random() * range * 2 - range));
+        }
+        return value;
+    }
+
+    mutateColor(color, rate) {
+        if (Math.random() < rate) {
+            const hsl = color.match(/\d+/g).map(Number);
+            return `hsl(${(hsl[0] + Math.random() * 60 - 30) % 360}, 
+                    ${Math.min(100, hsl[1] + Math.random() * 20 - 10)}%, 
+                    ${Math.min(100, hsl[2] + Math.random() * 20 - 10)}%)`;
+        }
+        return color;
+    }
+
+    draw() {
+        // Body
+        ctx.beginPath();
+        ctx.arc(this.position.x, this.position.y, this.dna.size/2, 0, Math.PI * 2);
+        ctx.fillStyle = this.dna.color;
+        ctx.fill();
+
+        // Energy ring
+        ctx.beginPath();
+        ctx.arc(this.position.x, this.position.y, this.dna.size/2 + 2, 
+                -Math.PI/2, -Math.PI/2 + (Math.PI * 2 * (this.energy/ENV.MAX_ENERGY)));
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Sense radius
+        if (document.querySelector('#showSense:checked')) {
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.dna.sense, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.stroke();
+        }
+    }
+}
+
+function initializePopulation(size) {
+    population = Array.from({length: size}, () => new Creature());
+}
+
+function spawnFood(amount) {
+    foods = Array.from({length: amount}, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height
+    }));
+}
+
+function naturalSelection() {
+    // Energy-based selection
+    const newPopulation = [];
+    const candidates = population.flatMap(creature => 
+        Array(Math.ceil(creature.energy)).fill(creature)
+    );
+    
+    while (newPopulation.length < population.length && candidates.length > 0) {
+        const parent = candidates.splice(Math.floor(Math.random() * candidates.length), 1)[0];
+        const child = parent.reproduce();
+        if (child) newPopulation.push(child);
+    }
+    
+    // Fill remaining spots with new creatures if needed
+    while (newPopulation.length < population.length) {
+        newPopulation.push(new Creature());
+    }
+    
+    population = newPopulation;
+    generation++;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw food
+    ctx.fillStyle = '#4CAF50';
+    foods.forEach(food => {
+        ctx.beginPath();
+        ctx.arc(food.x, food.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Update and draw creatures
+    population.forEach(creature => {
+        const newChild = creature.update();
+        if (newChild) population.push(newChild);
+        creature.draw();
+    });
+
+    // Remove dead creatures
+    population = population.filter(c => c.energy > 0);
+
+    // Update stats
+    document.getElementById('genCount').textContent = generation;
+    document.getElementById('bestFitness').textContent = 
+        Math.max(...population.map(c => c.energy)).toFixed(1);
+    document.getElementById('currentPop').textContent = population.length;
+
+    // Schedule next frame
+    if (isRunning) {
+        requestAnimationFrame(draw);
+        naturalSelection();
+        spawnFood(document.getElementById('foodDensity').value);
+    }
+}
+
+// Event listeners
+document.getElementById('startStop').addEventListener('click', () => {
+    isRunning = !isRunning;
+    document.getElementById('startStop').textContent = isRunning ? '⏸ Pause' : '▶ Start';
+    if (isRunning) draw();
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+    generation = 0;
+    initializePopulation(parseInt(document.getElementById('popSize').value));
+    spawnFood(document.getElementById('foodDensity').value);
+    draw();
+});
+
+// Parameter updates
+document.querySelectorAll('input[type="range"]').forEach(input => {
+    input.addEventListener('input', (e) => {
+        document.getElementById(e.target.id + 'Value').textContent = e.target.value;
+    });
+});
+
+// Initialize
+initializePopulation(100);
+spawnFood(50);
+draw();
+</script>
+</body>
+</html>

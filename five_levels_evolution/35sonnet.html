@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Predator-Prey Evolution Simulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 1000px;
+            width: 100%;
+        }
+        canvas {
+            background: #000;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .panel {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .control-group {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .stat-box {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        input {
+            width: 120px;
+            padding: 8px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #3a3a3a;
+            color: white;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧬 Predator-Prey Evolution Simulator</h1>
+        
+        <div class="panel">
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff6b6b;"></div>
+                    <span>Predators</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ecdc4;"></div>
+                    <span>Prey</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #95a5a6;"></div>
+                    <span>Food</span>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <h3>Population Controls</h3>
+                    <div class="tooltip">
+                        <label>Initial Prey:</label>
+                        <span class="tooltiptext">Starting number of prey creatures</span>
+                        <input type="number" id="preyCount" value="30" min="5" max="100">
+                    </div>
+                    <div class="tooltip">
+                        <label>Initial Predators:</label>
+                        <span class="tooltiptext">Starting number of predator creatures</span>
+                        <input type="number" id="predatorCount" value="10" min="1" max="50">
+                    </div>
+                    <div class="tooltip">
+                        <label>Food Amount:</label>
+                        <span class="tooltiptext">Amount of food available for prey</span>
+                        <input type="number" id="foodAmount" value="50" min="10" max="200">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Evolution Parameters</h3>
+                    <div class="tooltip">
+                        <label>Mutation Rate:</label>
+                        <span class="tooltiptext">Chance of genetic mutations (0-1)</span>
+                        <input type="number" id="mutationRate" value="0.1" min="0" max="1" step="0.1">
+                    </div>
+                    <div class="tooltip">
+                        <label>Generation Time (ms):</label>
+                        <span class="tooltiptext">Duration of each generation</span>
+                        <input type="number" id="generationDuration" value="3000" min="1000" max="10000" step="500">
+                    </div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <button id="startBtn">▶️ Start Evolution</button>
+                <button id="pauseBtn">⏸️ Pause</button>
+                <button id="resetBtn">🔄 Reset</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Simulation Statistics</h3>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="tooltip">
+                        <h4>Generation</h4>
+                        <span class="tooltiptext">Current generation number</span>
+                    </div>
+                    <span id="generation">0</span>
+                </div>
+                <div class="stat-box">
+                    <div class="tooltip">
+                        <h4>Prey Population</h4>
+                        <span class="tooltiptext">Number of surviving prey</span>
+                    </div>
+                    <span id="preyPopulation">0</span>
+                </div>
+                <div class="stat-box">
+                    <div class="tooltip">
+                        <h4>Predator Population</h4>
+                        <span class="tooltiptext">Number of surviving predators</span>
+                    </div>
+                    <span id="predatorPopulation">0</span>
+                </div>
+                <div class="stat-box">
+                    <div class="tooltip">
+                        <h4>Avg Prey Speed</h4>
+                        <span class="tooltiptext">Average speed of prey population</span>
+                    </div>
+                    <span id="avgPreySpeed">0</span>
+                </div>
+                <div class="stat-box">
+                    <div class="tooltip">
+                        <h4>Avg Predator Speed</h4>
+                        <span class="tooltiptext">Average speed of predator population</span>
+                    </div>
+                    <span id="avgPredatorSpeed">0</span>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="evolutionCanvas" width="1000" height="600"></canvas>
+    </div>
+
+    <script>
+        class Vector {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            add(v) {
+                return new Vector(this.x + v.x, this.y + v.y);
+            }
+
+            subtract(v) {
+                return new Vector(this.x - v.x, this.y - v.y);
+            }
+
+            multiply(n) {
+                return new Vector(this.x * n, this.y * n);
+            }
+
+            magnitude() {
+                return Math.sqrt(this.x * this.x + this.y * this.y);
+            }
+
+            normalize() {
+                const mag = this.magnitude();
+                if (mag > 0) {
+                    return new Vector(this.x / mag, this.y / mag);
+                }
+                return new Vector(0, 0);
+            }
+        }
+
+        class Food {
+            constructor(x, y) {
+                this.position = new Vector(x, y);
+                this.size = 4;
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = '#95a5a6';
+                ctx.beginPath();
+                ctx.arc(this.position.x, this.position.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Creature {
+            constructor(x, y, type) {
+                this.position = new Vector(x, y);
+                this.velocity = new Vector(0, 0);
+                this.type = type; // 'prey' or 'predator'
+                this.genes = {
+                    maxSpeed: type === 'prey' ? Math.random() * 3 + 2 : Math.random() * 4 + 3,
+                    senseRadius: type === 'prey' ? Math.random() * 50 + 30 : Math.random() * 70 + 50,
+                    size: type === 'prey' ? Math.random() * 4 + 6 : Math.random() * 6 + 8
+                };
+                this.energy = 100;
+                this.age = 0;
+            }
+
+            mutate(rate) {
+                if (Math.random() < rate) {
+                    this.genes.maxSpeed += (Math.random() - 0.5) * 0.5;
+                    this.genes.maxSpeed = Math.max(1, Math.min(8, this.genes.maxSpeed));
+                }
+                if (Math.random() < rate) {
+                    this.genes.senseRadius += (Math.random() - 0.5) * 10;
+                    this.genes.senseRadius = Math.max(20, Math.min(120, this.genes.senseRadius));
+                }
+                if (Math.random() < rate) {
+                    this.genes.size += (Math.random() - 0.5) * 2;
+                    this.genes.size = Math.max(4, Math.min(15, this.genes.size));
+                }
+            }
+
+            seek(target) {
+                const desired = target.subtract(this.position);
+                const d = desired.magnitude();
+                
+                if (d < this.genes.senseRadius) {
+                    const steer = desired.normalize().multiply(this.genes.maxSpeed);
+                    return steer.subtract(this.velocity);
+                }
+                return new Vector(0, 0);
+            }
+
+            flee(predator) {
+                const desired = this.position.subtract(predator);
+                const d = desired.magnitude();
+                
+                if (d < this.genes.senseRadius) {
+                    const steer = desired.normalize().multiply(this.genes.maxSpeed * 1.5);
+                    return steer.subtract(this.velocity);
+                }
+                return new Vector(0, 0);
+            }
+
+            update(width, height, creatures, food) {
+                let acceleration = new Vector(0, 0);
+                
+                if (this.type === 'prey') {
+                    // Flee from predators
+                    const predators = creatures.filter(c => c.type === 'predator');
+                    for (const predator of predators) {
+                        acceleration = acceleration.add(this.flee(predator.position).multiply(2));
+                    }
+                    
+                    // Seek food
+                    for (const f of food) {
+                        acceleration = acceleration.add(this.seek(f.position));
+                    }
+                } else {
+                    // Seek prey
+                    const prey = creatures.filter(c => c.type === 'prey');
+                    for (const p of prey) {
+                        acceleration = acceleration.add(this.seek(p.position));
+                    }
+                }
+
+                // Update velocity and position
+                this.velocity = this.velocity.add(acceleration);
+                if (this.velocity.magnitude() > this.genes.maxSpeed) {
+                    this.velocity = this.velocity.normalize().multiply(this.genes.maxSpeed);
+                }
+                this.position = this.position.add(this.velocity);
+
+                // Wrap around edges
+                if (this.position.x < 0) this.position.x = width;
+                if (this.position.x > width) this.position.x = 0;
+                if (this.position.y < 0) this.position.y = height;
+                if (this.position.y > height) this.position.y = 0;
+
+                // Update energy and age
+                this.energy -= 0.1;
+                this.age += 1;
+            }
+
+            draw(ctx) {
+                const angle = Math.atan2(this.velocity.y, this.velocity.x);
+                
+                ctx.save();
+                ctx.translate(this.position.x, this.position.y);
+                ctx.rotate(angle);
+
+                // Draw creature
+                ctx.fillStyle = this.type === 'prey' ? '#4ecdc4' : '#ff6b6b';
+                ctx.beginPath();
+                ctx.moveTo(this.genes.size, 0);
+                ctx.lineTo(-this.genes.size, this.genes.size/2);
+                ctx.lineTo(-this.genes.size, -this.genes.size/2);
+                ctx.closePath();
+                ctx.fill();
+
+                // Draw energy bar
+                const barWidth = this.genes.size * 2;
+                const barHeight = 2;
+                ctx.fillStyle = '#2c3e50';
+                ctx.fillRect(-barWidth/2, -this.genes.size - 5, barWidth, barHeight);
+                ctx.fillStyle = '#27ae60';
+                ctx.fillRect(-barWidth/2, -this.genes.size - 5, barWidth * (this.energy/100), barHeight);
+
+                ctx.restore();
+
+                // Draw sense radius (debug)
+                if (false) {  // Set to true to debug
+                    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                    ctx.beginPath();
+                    ctx.arc(this.position.x, this.position.y, this.genes.senseRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+
+            checkCollisions(creatures, food) {
+                const eatDistance = this.genes.size;
+                
+                if (this.type === 'prey') {
+                    // Prey eats food
+                    for (let i = food.length - 1; i >= 0; i--) {
+                        const d = this.position.subtract(food[i].position).magnitude();
+                        if (d < eatDistance) {
+                            food.splice(i, 1);
+                            this.energy = Math.min(100, this.energy + 30);
+                        }
+                    }
+                } else {
+                    // Predator eats prey
+                    for (let i = creatures.length - 1; i >= 0; i--) {
+                        if (creatures[i].type === 'prey') {
+                            const d = this.position.subtract(creatures[i].position).magnitude();
+                            if (d < eatDistance) {
+                                creatures.splice(i, 1);
+                                this.energy = Math.min(100, this.energy + 50);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        class EvolutionSimulator {
+            constructor() {
+                this.canvas = document.getElementById('evolutionCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.creatures = [];
+                this.food = [];
+                this.generation = 0;
+                this.isRunning = false;
+                this.generationDuration = 3000;
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                document.getElementById('startBtn').addEventListener('click', () => this.start());
+                document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
+                document.getElementById('resetBtn').addEventListener('click', () => this.reset());
+                
+                document.getElementById('generationDuration').addEventListener('change', (e) => {
+                    this.generationDuration = parseInt(e.target.value);
+                    if (this.isRunning) {
+                        clearInterval(this.evolveInterval);
+                        this.evolveInterval = setInterval(() => this.evolve(), this.generationDuration);
+                    }
+                });
+            }
+
+            initializePopulation() {
+                this.creatures = [];
+                this.food = [];
+                
+                const preyCount = parseInt(document.getElementById('preyCount').value);
+                const predatorCount = parseInt(document.getElementById('predatorCount').value);
+                const foodAmount = parseInt(document.getElementById('foodAmount').value);
+
+                // Create initial prey
+                for (let i = 0; i < preyCount; i++) {
+                    const x = Math.random() * this.canvas.width;
+                    const y = Math.random() * this.canvas.height;
+                    this.creatures.push(new Creature(x, y, 'prey'));
+                }
+
+                // Create initial predators
+                for (let i = 0; i < predatorCount; i++) {
+                    const x = Math.random() * this.canvas.width;
+                    const y = Math.random() * this.canvas.height;
+                    this.creatures.push(new Creature(x, y, 'predator'));
+                }
+
+                this.generateFood(foodAmount);
+            }
+
+            generateFood(amount) {
+                for (let i = 0; i < amount; i++) {
+                    const x = Math.random() * this.canvas.width;
+                    const y = Math.random() * this.canvas.height;
+                    this.food.push(new Food(x, y));
+                }
+            }
+
+            start() {
+                if (!this.isRunning) {
+                    this.isRunning = true;
+                    if (this.creatures.length === 0) {
+                        this.initializePopulation();
+                    }
+                    this.animate();
+                    this.evolveInterval = setInterval(() => this.evolve(), this.generationDuration);
+                }
+            }
+
+            pause() {
+                this.isRunning = false;
+                clearInterval(this.evolveInterval);
+            }
+
+            reset() {
+                this.pause();
+                this.generation = 0;
+                this.creatures = [];
+                this.food = [];
+                this.updateStats();
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            evolve() {
+                this.generation++;
+                
+                // Remove creatures with no energy
+                this.creatures = this.creatures.filter(c => c.energy > 0);
+
+                // Reproduce surviving creatures
+                const newCreatures = [];
+                const prey = this.creatures.filter(c => c.type === 'prey');
+                const predators = this.creatures.filter(c => c.type === 'predator');
+
+                // Reproduce prey
+                while (newCreatures.filter(c => c.type === 'prey').length < parseInt(document.getElementById('preyCount').value)) {
+                    if (prey.length >= 2) {
+                        const parent1 = prey[Math.floor(Math.random() * prey.length)];
+                        const parent2 = prey[Math.floor(Math.random() * prey.length)];
+                        
+                        const child = new Creature(
+                            Math.random() * this.canvas.width,
+                            Math.random() * this.canvas.height,
+                            'prey'
+                        );
+
+                        // Inherit average of parent genes
+                        child.genes.maxSpeed = (parent1.genes.maxSpeed + parent2.genes.maxSpeed) / 2;
+                        child.genes.senseRadius = (parent1.genes.senseRadius + parent2.genes.senseRadius) / 2;
+                        child.genes.size = (parent1.genes.size + parent2.genes.size) / 2;
+
+                        // Apply mutation
+                        const mutationRate = parseFloat(document.getElementById('mutationRate').value);
+                        child.mutate(mutationRate);
+
+                        newCreatures.push(child);
+                    } else {
+                        // Add new random prey if population is too low
+                        newCreatures.push(new Creature(
+                            Math.random() * this.canvas.width,
+                            Math.random() * this.canvas.height,
+                            'prey'
+                        ));
+                    }
+                }
+
+                // Reproduce predators
+                while (newCreatures.filter(c => c.type === 'predator').length < parseInt(document.getElementById('predatorCount').value)) {
+                    if (predators.length >= 2) {
+                        const parent1 = predators[Math.floor(Math.random() * predators.length)];
+                        const parent2 = predators[Math.floor(Math.random() * predators.length)];
+                        
+                        const child = new Creature(
+                            Math.random() * this.canvas.width,
+                            Math.random() * this.canvas.height,
+                            'predator'
+                        );
+
+                        child.genes.maxSpeed = (parent1.genes.maxSpeed + parent2.genes.maxSpeed) / 2;
+                        child.genes.senseRadius = (parent1.genes.senseRadius + parent2.genes.senseRadius) / 2;
+                        child.genes.size = (parent1.genes.size + parent2.genes.size) / 2;
+
+                        const mutationRate = parseFloat(document.getElementById('mutationRate').value);
+                        child.mutate(mutationRate);
+
+                        newCreatures.push(child);
+                    } else {
+                        // Add new random predator if population is too low
+                        newCreatures.push(new Creature(
+                            Math.random() * this.canvas.width,
+                            Math.random() * this.canvas.height,
+                            'predator'
+                        ));
+                    }
+                }
+
+                this.creatures = newCreatures;
+                
+                // Replenish food
+                const foodAmount = parseInt(document.getElementById('foodAmount').value);
+                this.generateFood(foodAmount - this.food.length);
+                
+                this.updateStats();
+            }
+
+            updateStats() {
+                document.getElementById('generation').textContent = this.generation;
+                document.getElementById('preyPopulation').textContent = this.creatures.filter(c => c.type === 'prey').length;
+                document.getElementById('predatorPopulation').textContent = this.creatures.filter(c => c.type === 'predator').length;
+                
+                const prey = this.creatures.filter(c => c.type === 'prey');
+                const predators = this.creatures.filter(c => c.type === 'predator');
+                
+                const avgPreySpeed = prey.length > 0 
+                    ? prey.reduce((sum, c) => sum + c.genes.maxSpeed, 0) / prey.length 
+                    : 0;
+                const avgPredatorSpeed = predators.length > 0
+                    ? predators.reduce((sum, c) => sum + c.genes.maxSpeed, 0) / predators.length
+                    : 0;
+                
+                document.getElementById('avgPreySpeed').textContent = avgPreySpeed.toFixed(2);
+                document.getElementById('avgPredatorSpeed').textContent = avgPredatorSpeed.toFixed(2);
+            }
+
+            animate() {
+                if (!this.isRunning) return;
+
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw grid
+                this.ctx.strokeStyle = '#1a1a1a';
+                this.ctx.lineWidth = 1;
+                const gridSize = 40;
+                
+                for (let x = 0; x < this.canvas.width; x += gridSize) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x, 0);
+                    this.ctx.lineTo(x, this.canvas.height);
+                    this.ctx.stroke();
+                }
+                
+                for (let y = 0; y < this.canvas.height; y += gridSize) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, y);
+                    this.ctx.lineTo(this.canvas.width, y);
+                    this.ctx.stroke();
+                }
+
+                // Draw food
+                for (const food of this.food) {
+                    food.draw(this.ctx);
+                }
+
+                // Update and draw creatures
+                for (const creature of this.creatures) {
+                    creature.update(this.canvas.width, this.canvas.height, this.creatures, this.food);
+                    creature.checkCollisions(this.creatures, this.food);
+                    creature.draw(this.ctx);
+                }
+
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+
+        // Initialize the simulator
+        const simulator = new EvolutionSimulator();
+    </script>
+</body>
+</html>

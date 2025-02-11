@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolution Simulator with Live Graphs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+        #canvas {
+            border: 1px solid #000;
+            background: #e6e6e6;
+        }
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .controls label, .controls input {
+            display: block;
+            margin-bottom: 5px;
+        }
+        #generation {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        .graph {
+            width: 400px;
+            height: 200px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div class="controls">
+        <label for="population">Population:</label>
+        <input type="number" id="population" value="50" min="10" max="200">
+        <label for="mutationRate">Mutation Rate:</label>
+        <input type="range" id="mutationRate" min="0" max="1" step="0.01" value="0.05">
+    </div>
+    <div id="generation">Generation: 0</div>
+    <canvas id="sizeGraph" class="graph"></canvas>
+    <canvas id="speedGraph" class="graph"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const sizeGraph = document.getElementById('sizeGraph').getContext('2d');
+        const speedGraph = document.getElementById('speedGraph').getContext('2d');
+        let generation = 0;
+        let populationSize = parseInt(document.getElementById('population').value);
+        let mutationRate = parseFloat(document.getElementById('mutationRate').value);
+        let sizeData = [], speedData = [];
+
+        class Creature {
+            constructor(x, y, size, speed) {
+                this.x = x;
+                this.y = y;
+                this.size = size; 
+                this.speed = speed; 
+                this.color = `rgb(${Math.random()*255},${Math.random()*255},${Math.random()*255})`;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            move() {
+                this.x += (Math.random() - 0.5) * this.speed;
+                this.y += (Math.random() - 0.5) * this.speed;
+                this.x = Math.max(0, Math.min(canvas.width, this.x));
+                this.y = Math.max(0, Math.min(canvas.height, this.y));
+            }
+        }
+
+        function createPopulation() {
+            return Array.from({length: populationSize}, () => 
+                new Creature(
+                    Math.random() * canvas.width, 
+                    Math.random() * canvas.height, 
+                    Math.random() * 10 + 5, 
+                    Math.random() * 2 + 1  
+                )
+            );
+        }
+
+        function evolve(population) {
+            population.sort((a, b) => b.size - a.size);
+            let survivors = population.slice(0, population.length / 2);
+            
+            let newPopulation = [];
+            while (newPopulation.length < populationSize) {
+                let parent1 = survivors[Math.floor(Math.random() * survivors.length)];
+                let parent2 = survivors[Math.floor(Math.random() * survivors.length)];
+                let child = new Creature(
+                    parent1.x, 
+                    parent1.y, 
+                    (parent1.size + parent2.size) / 2 + (Math.random() - 0.5) * mutationRate * 10,
+                    (parent1.speed + parent2.speed) / 2 + (Math.random() - 0.5) * mutationRate * 2
+                );
+                newPopulation.push(child);
+            }
+            return newPopulation;
+        }
+
+        let population = createPopulation();
+
+        function drawGraph(ctx, data, maxY, color, label) {
+            ctx.clearRect(0, 0, 400, 200);
+            ctx.beginPath();
+            ctx.moveTo(0, 200 - (data[0] / maxY) * 200);
+            for (let i = 1; i < data.length; i++) {
+                ctx.lineTo(i * 400 / 100, 200 - (data[i] / maxY) * 200);
+            }
+            ctx.strokeStyle = color;
+            ctx.stroke();
+            ctx.fillText(label, 10, 20);
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            population.forEach(c => {
+                c.move();
+                c.draw();
+            });
+
+            document.getElementById('generation').innerText = `Generation: ${generation}`;
+
+            // Update and draw graphs
+            const avgSize = population.reduce((sum, c) => sum + c.size, 0) / population.length;
+            const avgSpeed = population.reduce((sum, c) => sum + c.speed, 0) / population.length;
+            sizeData.push(avgSize);
+            speedData.push(avgSpeed);
+
+            if (sizeData.length > 100) {
+                sizeData.shift();
+                speedData.shift();
+            }
+
+            drawGraph(sizeGraph, sizeData, 25, 'red', 'Average Size');
+            drawGraph(speedGraph, speedData, 5, 'blue', 'Average Speed');
+
+            if(generation % 10 === 0) {
+                population = evolve(population);
+            }
+
+            generation++;
+            requestAnimationFrame(animate);
+        }
+
+        document.getElementById('population').addEventListener('change', () => {
+            populationSize = parseInt(document.getElementById('population').value);
+            population = createPopulation();
+            sizeData = []; speedData = [];
+        });
+
+        document.getElementById('mutationRate').addEventListener('input', () => {
+            mutationRate = parseFloat(document.getElementById('mutationRate').value);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
