@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural 3D Planet with Controls</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #sliders {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <p>Controls:</p>
+        <p>Rotate: Drag mouse</p>
+        <p>Zoom: Scroll wheel</p>
+        <p>Toggle Rotation: Spacebar</p>
+        <p>Reset Camera: R</p>
+    </div>
+    <div id="sliders">
+        <label for="noiseScale">Noise Scale: </label>
+        <input type="range" id="noiseScale" min="0.01" max="0.5" step="0.01" value="0.1"><br>
+        <label for="noiseAmplitude">Noise Amplitude: </label>
+        <input type="range" id="noiseAmplitude" min="1" max="10" step="0.1" value="5"><br>
+        <label for="biomeDistribution">Biome Distribution: </label>
+        <input type="range" id="biomeDistribution" min="0" max="1" step="0.01" value="0.5"><br>
+    </div>
+
+    <!-- Three.js and Simplex Noise Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+
+    <script>
+        // Scene Setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Planet Parameters
+        const planetRadius = 50;
+        const planetSegments = 128; // Higher resolution for detailed terrain
+
+        // Sliders
+        const noiseScaleSlider = document.getElementById('noiseScale');
+        const noiseAmplitudeSlider = document.getElementById('noiseAmplitude');
+        const biomeDistributionSlider = document.getElementById('biomeDistribution');
+
+        // Planet Geometry with Terrain
+        const planetGeometry = new THREE.SphereGeometry(planetRadius, planetSegments, planetSegments);
+        const simplex = new SimplexNoise();
+
+        function generateTerrain(noiseScale, noiseAmplitude) {
+            const vertices = planetGeometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                const x = vertices[i];
+                const y = vertices[i + 1];
+                const z = vertices[i + 2];
+                const noiseValue = ridgedNoise(x, y, z, noiseScale);
+                const displacement = noiseValue * noiseAmplitude;
+                const length = Math.sqrt(x * x + y * y + z * z);
+                vertices[i] += (x / length) * displacement;
+                vertices[i + 1] += (y / length) * displacement;
+                vertices[i + 2] += (z / length) * displacement;
+            }
+            planetGeometry.attributes.position.needsUpdate = true;
+            planetGeometry.computeVertexNormals();
+        }
+
+        function ridgedNoise(x, y, z, scale) {
+            let noise = 0;
+            let amplitude = 1;
+            let frequency = 1;
+            for (let i = 0; i < 5; i++) { // 5 octaves for detailed terrain
+                let n = simplex.noise3D(x * scale * frequency, y * scale * frequency, z * scale * frequency);
+                n = 1 - Math.abs(n); // Ridged noise for sharper peaks
+                noise += n * amplitude;
+                amplitude *= 0.5;
+                frequency *= 2;
+            }
+            return noise;
+        }
+
+        // Initial terrain generation
+        generateTerrain(parseFloat(noiseScaleSlider.value), parseFloat(noiseAmplitudeSlider.value));
+
+        // Planet Shaders for Biomes and Water
+        const planetVertexShader = `
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            varying float vElevation;
+            varying float vLatitude;
+
+            void main() {
+                vPosition = position;
+                vNormal = normal;
+                vElevation = length(position) - ${planetRadius.toFixed(1)};
+                vLatitude = asin(position.y / length(position));
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const planetFragmentShader = `
+            uniform vec3 lightDirection;
+            uniform vec3 lightColor;
+            uniform vec3 ambientColor;
+            uniform float biomeDistribution;
+
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            varying float vElevation;
+            varying float vLatitude;
+
+            void main() {
+                vec3 normal = normalize(vNormal);
+                vec3 lightDir = normalize(lightDirection);
+                vec3 viewDir = normalize(cameraPosition - vPosition);
+
+                vec3 color;
+                float elevationFactor = vElevation / 5.0; // Normalize elevation
+                float latitudeFactor = (vLatitude + 1.5708) / 3.1416; // Normalize latitude
+
+                // Biome system based on elevation and latitude
+                if (elevationFactor < 0.0) {
+                    color = vec3(0.0, 0.0, 1.0); // Ocean
+                } else if (elevationFactor < 0.1 + biomeDistribution * 0.1) {
+                    color = mix(vec3(1.0, 1.0, 0.0), vec3(0.5, 0.25, 0.0), latitudeFactor); // Beach/Desert
+                } else if (elevationFactor < 0.3 + biomeDistribution * 0.2) {
+                    color = mix(vec3(0.0, 1.0, 0.0), vec3(0.0, 0.5, 0.0), latitudeFactor); // Forest
+                } else {
+                    color = mix(vec3(0.5, 0.5, 0.5), vec3(1.0, 1.0, 1.0), elevationFactor); // Mountain
+                }
+
+                float diffuse = max(dot(normal, lightDir), 0.0);
+                vec3 diffuseColor = diffuse * lightColor * color;
+
+                vec3 reflectDir = reflect(-lightDir, normal);
+                float specular = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+                vec3 specularColor = specular * lightColor;
+                if (elevationFactor < 0.0) {
+                    specularColor *= 2.0; // Shinier water
+                }
+
+                vec3 ambient = ambientColor * color;
+                gl_FragColor = vec4(ambient + diffuseColor + specularColor, elevationFactor < 0.0 ? 0.9 : 1.0);
+            }
+        `;
+
+        // Lighting
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+        sunLight.position.set(100, 100, 100);
+        scene.add(sunLight);
+
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        // Planet Material
+        const planetMaterial = new THREE.ShaderMaterial({
+            vertexShader: planetVertexShader,
+            fragmentShader: planetFragmentShader,
+            uniforms: {
+                lightDirection: { value: sunLight.position.clone().normalize() },
+                lightColor: { value: new THREE.Color(0xffffff) },
+                ambientColor: { value: new THREE.Color(0x404040) },
+                biomeDistribution: { value: parseFloat(biomeDistributionSlider.value) }
+            }
+        });
+
+        const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+        scene.add(planet);
+
+        // Atmosphere
+        const atmosphereRadius = planetRadius * 1.05;
+        const atmosphereGeometry = new THREE.SphereGeometry(atmosphereRadius, planetSegments, planetSegments);
+
+        const atmosphereVertexShader = `
+            varying vec3 vPosition;
+
+            void main() {
+                vPosition = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const atmosphereFragmentShader = `
+            varying vec3 vPosition;
+
+            void main() {
+                vec3 normal = normalize(vPosition);
+                vec3 viewDir = normalize(cameraPosition - vPosition);
+                float intensity = pow(1.0 - dot(normal, viewDir), 2.0);
+                vec3 atmosphereColor = vec3(0.3, 0.6, 1.0); // Light blue glow
+                gl_FragColor = vec4(atmosphereColor, intensity * 0.5);
+            }
+        `;
+
+        const atmosphereMaterial = new THREE.ShaderMaterial({
+            vertexShader: atmosphereVertexShader,
+            fragmentShader: atmosphereFragmentShader,
+            transparent: true,
+            side: THREE.BackSide
+        });
+
+        const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+        scene.add(atmosphere);
+
+        // Clouds
+        const cloudRadius = planetRadius * 1.03; // Above terrain
+        const cloudGeometry = new THREE.SphereGeometry(cloudRadius, planetSegments, planetSegments);
+
+        const cloudVertexShader = `
+            varying vec3 vPosition;
+
+            void main() {
+                vPosition = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const cloudFragmentShader = `
+            varying vec3 vPosition;
+
+            float random(vec3 p) {
+                return fract(sin(dot(p, vec3(12.9898, 78.233, 54.53))) * 43758.5453);
+            }
+
+            float noise(vec3 p) {
+                vec3 i = floor(p);
+                vec3 f = fract(p);
+                vec3 u = f * f * (3.0 - 2.0 * f);
+                return mix(
+                    mix(
+                        mix(random(i + vec3(0,0,0)), random(i + vec3(1,0,0)), u.x),
+                        mix(random(i + vec3(0,1,0)), random(i + vec3(1,1,0)), u.x),
+                        u.y
+                    ),
+                    mix(
+                        mix(random(i + vec3(0,0,1)), random(i + vec3(1,0,1)), u.x),
+                        mix(random(i + vec3(0,1,1)), random(i + vec3(1,1,1)), u.x),
+                        u.y
+                    ),
+                    u.z
+                );
+            }
+
+            float fbm(vec3 p) {
+                float value = 0.0;
+                float amplitude = 0.5;
+                for (int i = 0; i < 5; i++) {
+                    value += amplitude * noise(p);
+                    p *= 2.0;
+                    amplitude *= 0.5;
+                }
+                return value;
+            }
+
+            void main() {
+                vec3 p = vPosition / 10.0;
+                float cloudDensity = fbm(p);
+                cloudDensity = smoothstep(0.4, 0.6, cloudDensity);
+                vec3 cloudColor = vec3(1.0, 1.0, 1.0);
+                gl_FragColor = vec4(cloudColor, cloudDensity * 0.8);
+            }
+        `;
+
+        const cloudMaterial = new THREE.ShaderMaterial({
+            vertexShader: cloudVertexShader,
+            fragmentShader: cloudFragmentShader,
+            transparent: true
+        });
+
+        const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+        scene.add(clouds);
+
+        // Camera Setup
+        camera.position.z = 100;
+        const defaultCameraPos = new THREE.Vector3(0, 0, 100);
+        let theta = 0;
+        let phi = Math.PI / 2;
+        const minDistance = 60;
+        const maxDistance = 200;
+        let radius = camera.position.distanceTo(new THREE.Vector3(0, 0, 0));
+
+        // Custom Camera Controls
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        renderer.domElement.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                theta -= deltaX * 0.005;
+                phi = Math.max(0.1, Math.min(Math.PI - 0.1, phi + deltaY * 0.005));
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+                updateCameraPosition();
+            }
+        });
+
+        renderer.domElement.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        renderer.domElement.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            radius = Math.max(minDistance, Math.min(maxDistance, radius + e.deltaY * 0.1));
+            updateCameraPosition();
+        });
+
+        function updateCameraPosition() {
+            camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
+            camera.position.y = radius * Math.cos(phi);
+            camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
+            camera.lookAt(0, 0, 0);
+        }
+
+        // Reset Camera
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                camera.position.copy(defaultCameraPos);
+                theta = 0;
+                phi = Math.PI / 2;
+                radius = defaultCameraPos.distanceTo(new THREE.Vector3(0, 0, 0));
+                updateCameraPosition();
+            }
+        });
+
+        // Rotation Control
+        let rotationSpeed = 0.001;
+        let isRotating = true;
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ') {
+                isRotating = !isRotating;
+            }
+        });
+
+        // Slider Controls
+        noiseScaleSlider.addEventListener('input', () => {
+            generateTerrain(parseFloat(noiseScaleSlider.value), parseFloat(noiseAmplitudeSlider.value));
+        });
+
+        noiseAmplitudeSlider.addEventListener('input', () => {
+            generateTerrain(parseFloat(noiseScaleSlider.value), parseFloat(noiseAmplitudeSlider.value));
+        });
+
+        biomeDistributionSlider.addEventListener('input', () => {
+            planetMaterial.uniforms.biomeDistribution.value = parseFloat(biomeDistributionSlider.value);
+        });
+
+        // Resize Handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isRotating) {
+                planet.rotation.y += rotationSpeed;
+                clouds.rotation.y += rotationSpeed * 1.2; // Clouds move slightly faster
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minecraft-Style Procedural Planet</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+        }
+        button, input { margin: 5px; }
+        label { display: block; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="toggleRotation">Pause Rotation</button>
+        <button id="resetCamera">Reset Camera</button>
+        <button id="regenerate">Regenerate Planet</button>
+        <label>Terrain Height: <input type="range" id="terrainHeight" min="0" max="20" value="10"></label>
+        <label>Biome Scale: <input type="range" id="biomeScale" min="0.005" max="0.05" step="0.005" value="0.02"></label>
+        <label>Erosion: <input type="range" id="erosion" min="0" max="2" step="0.1" value="0.5"></label>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Planet parameters
+        const planetRadius = 50;
+        const noise = new SimplexNoise();
+        let rotationSpeed = 0.001;
+        let isRotating = true;
+        let planet, water, atmosphere, clouds;
+
+        // Terrain generation parameters
+        let terrainHeight = 10;
+        let biomeScale = 0.02;
+        let erosion = 0.5;
+
+        function createPlanet() {
+            if (planet) scene.remove(planet);
+            const geometry = new THREE.SphereGeometry(planetRadius, 128, 128);
+            const vertices = geometry.attributes.position.array;
+
+            // Minecraft-style terrain generation
+            for (let i = 0; i < vertices.length; i += 3) {
+                const x = vertices[i];
+                const y = vertices[i + 1];
+                const z = vertices[i + 2];
+                
+                const vertex = new THREE.Vector3(x, y, z).normalize();
+                
+                // Biome determination
+                const biomeNoise = noise.noise3D(vertex.x * biomeScale, vertex.y * biomeScale, vertex.z * biomeScale);
+                const temp = noise.noise3D(vertex.x * 0.01 + 1000, vertex.y * 0.01 + 1000, vertex.z * 0.01 + 1000);
+                const moist = noise.noise3D(vertex.x * 0.01 + 2000, vertex.y * 0.01 + 2000, vertex.z * 0.01 + 2000);
+
+                // Base height with multiple octaves
+                let height = 0;
+                let scale = 0.05;
+                let amplitude = terrainHeight;
+                for (let octave = 0; octave < 3; octave++) {
+                    height += noise.noise3D(vertex.x * scale, vertex.y * scale, vertex.z * scale) * amplitude;
+                    scale *= 2;
+                    amplitude *= 0.5;
+                }
+
+                // Apply biome-specific modifications
+                let biomeHeight;
+                if (biomeNoise < -0.3) { // Plains
+                    biomeHeight = height * 0.5;
+                } else if (biomeNoise < 0) { // Hills
+                    biomeHeight = height * 1.2 + Math.pow(Math.max(0, height), 1.5) * 0.5;
+                } else if (biomeNoise < 0.3) { // Mountains
+                    biomeHeight = height * 1.5 + Math.pow(Math.max(0, height), 2) * 0.8;
+                } else { // Extreme Hills
+                    biomeHeight = height * 2 + Math.pow(Math.max(0, height), 2.5) * 1.2;
+                }
+
+                // Apply erosion effect
+                const erosionFactor = noise.noise3D(vertex.x * 0.1, vertex.y * 0.1, vertex.z * 0.1);
+                biomeHeight *= (1 - erosion * Math.abs(erosionFactor));
+
+                // Apply to vertex
+                vertex.multiplyScalar(planetRadius + Math.max(-planetRadius * 0.1, biomeHeight));
+                
+                vertices[i] = vertex.x;
+                vertices[i + 1] = vertex.y;
+                vertices[i + 2] = vertex.z;
+            }
+            geometry.computeVertexNormals();
+
+            // Planet material with biome coloring
+            const material = new THREE.MeshPhongMaterial({
+                vertexColors: true,
+                shininess: 10
+            });
+
+            const colors = new Float32Array(vertices.length);
+            for (let i = 0; i < vertices.length; i += 3) {
+                const height = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]).length() - planetRadius;
+                const vertex = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]).normalize();
+                
+                const biomeNoise = noise.noise3D(vertex.x * biomeScale, vertex.y * biomeScale, vertex.z * biomeScale);
+                const temp = noise.noise3D(vertex.x * 0.01 + 1000, vertex.y * 0.01 + 1000, vertex.z * 0.01 + 1000);
+                const moist = noise.noise3D(vertex.x * 0.01 + 2000, vertex.y * 0.01 + 2000, vertex.z * 0.01 + 2000);
+
+                let color;
+                if (height < 0) { // Ocean
+                    color = new THREE.Color(0x0066cc);
+                } else if (biomeNoise < -0.3) { // Plains
+                    color = new THREE.Color(0x55aa55);
+                } else if (biomeNoise < 0) { // Hills
+                    color = new THREE.Color(0x448844);
+                } else if (biomeNoise < 0.3) { // Mountains
+                    color = new THREE.Color(0x808080).lerp(new THREE.Color(0xffffff), height / terrainHeight);
+                } else { // Extreme Hills
+                    color = new THREE.Color(0x606060).lerp(new THREE.Color(0xdddddd), height / (terrainHeight * 2));
+                }
+
+                // Temperature and moisture effects
+                if (temp > 0.5 && height > 0) color.lerp(new THREE.Color(0xccaa55), (temp - 0.5) * 0.5); // Desert
+                if (moist > 0.5 && height > 0) color.lerp(new THREE.Color(0x228822), (moist - 0.5) * 0.5); // Forest
+
+                colors[i] = color.r;
+                colors[i + 1] = color.g;
+                colors[i + 2] = color.b;
+            }
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            planet = new THREE.Mesh(geometry, material);
+            scene.add(planet);
+            return planet;
+        }
+
+        // Create water layer
+        function createWater() {
+            if (water) scene.remove(water);
+            const geometry = new THREE.SphereGeometry(planetRadius + 0.1, 128, 128);
+            const material = new THREE.MeshPhongMaterial({
+                color: 0x0066cc,
+                transparent: true,
+                opacity: 0.7,
+                shininess: 100,
+                specular: 0xffffff
+            });
+            water = new THREE.Mesh(geometry, material);
+            scene.add(water);
+            return water;
+        }
+
+        // Create atmosphere
+        function createAtmosphere() {
+            if (atmosphere) scene.remove(atmosphere);
+            const vertexShader = `
+                varying vec3 vNormal;
+                varying vec3 vPosition;
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    vPosition = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `;
+            const fragmentShader = `
+                varying vec3 vNormal;
+                varying vec3 vPosition;
+                void main() {
+                    float intensity = pow(0.8 - dot(vNormal, vec3(0, 0, 1.0)), 2.0);
+                    vec3 atmosphereColor = vec3(0.3, 0.6, 1.0);
+                    float heightFade = clamp(length(vPosition) / ${planetRadius * 1.05}, 0.0, 1.0);
+                    gl_FragColor = vec4(atmosphereColor, intensity * (1.0 - heightFade));
+                }
+            `;
+            const material = new THREE.ShaderMaterial({
+                vertexShader,
+                fragmentShader,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                side: THREE.BackSide
+            });
+            atmosphere = new THREE.Mesh(
+                new THREE.SphereGeometry(planetRadius * 1.05, 128, 128),
+                material
+            );
+            scene.add(atmosphere);
+            return atmosphere;
+        }
+
+        // Create clouds
+        function createClouds() {
+            if (clouds) scene.remove(clouds);
+            const geometry = new THREE.SphereGeometry(planetRadius * 1.02, 128, 128);
+            const material = new THREE.MeshPhongMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.4,
+                map: createCloudTexture()
+            });
+            clouds = new THREE.Mesh(geometry, material);
+            scene.add(clouds);
+            return clouds;
+        }
+
+        function createCloudTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            
+            for (let x = 0; x < canvas.width; x++) {
+                for (let y = 0; y < canvas.height; y++) {
+                    const value = noise.noise2D(x * 0.01, y * 0.01);
+                    const alpha = Math.max(0, value) * 255;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha / 255})`;
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // Lighting
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+        sunLight.position.set(150, 150, 150);
+        sunLight.castShadow = true;
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(sunLight, ambientLight);
+
+        // Initial generation
+        createPlanet();
+        createWater();
+        createAtmosphere();
+        createClouds();
+
+        // Camera setup
+        camera.position.z = planetRadius * 2;
+
+        // Mouse controls
+        let isDragging = false;
+        let previousMouse = { x: 0, y: 0 };
+        const rotation = { x: 0, y: 0 };
+
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMouse = { x: e.clientX, y: e.clientY };
+        });
+
+        renderer.domElement.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaX = e.clientX - previousMouse.x;
+                const deltaY = e.clientY - previousMouse.y;
+                rotation.y += deltaX * 0.005;
+                rotation.x += deltaY * 0.005;
+                rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotation.x));
+                previousMouse = { x: e.clientX, y: e.clientY };
+            }
+        });
+
+        renderer.domElement.addEventListener('mouseup', () => isDragging = false);
+
+        renderer.domElement.addEventListener('wheel', (e) => {
+            camera.position.z += e.deltaY * 0.1;
+            camera.position.z = Math.max(planetRadius * 1.2, Math.min(planetRadius * 5, camera.position.z));
+        });
+
+        // Controls
+        document.getElementById('toggleRotation').addEventListener('click', () => {
+            isRotating = !isRotating;
+            this.textContent = isRotating ? 'Pause Rotation' : 'Resume Rotation';
+        });
+
+        document.getElementById('resetCamera').addEventListener('click', () => {
+            camera.position.set(0, 0, planetRadius * 2);
+            rotation.x = 0;
+            rotation.y = 0;
+        });
+
+        document.getElementById('regenerate').addEventListener('click', () => {
+            createPlanet();
+            createWater();
+            createAtmosphere();
+            createClouds();
+        });
+
+        document.getElementById('terrainHeight').addEventListener('input', (e) => {
+            terrainHeight = parseFloat(e.target.value);
+            createPlanet();
+        });
+
+        document.getElementById('biomeScale').addEventListener('input', (e) => {
+            biomeScale = parseFloat(e.target.value);
+            createPlanet();
+        });
+
+        document.getElementById('erosion').addEventListener('input', (e) => {
+            erosion = parseFloat(e.target.value);
+            createPlanet();
+        });
+
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isRotating) {
+                planet.rotation.y += rotationSpeed;
+                water.rotation.y += rotationSpeed;
+                clouds.rotation.y += rotationSpeed * 1.1;
+                atmosphere.rotation.y += rotationSpeed;
+            }
+
+            camera.position.x = Math.sin(rotation.y) * Math.cos(rotation.x);
+            camera.position.y = Math.sin(rotation.x);
+            camera.position.z = Math.cos(rotation.y) * Math.cos(rotation.x);
+            camera.position.multiplyScalar(planetRadius * 2);
+            camera.lookAt(scene.position);
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
