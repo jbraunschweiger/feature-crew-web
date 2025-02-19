@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Doge: The Government Efficiency Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            font-family: 'Comic Sans MS', cursive, Arial, sans-serif;
+            background: linear-gradient(to bottom, #87ceeb, #ffebcd);
+            color: #2f2f2f;
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            background: rgba(255, 255, 255, 0.9);
+            border: 3px dashed #ff4500;
+            padding: 10px;
+        }
+        #header {
+            flex: 0 0 15%;
+            text-align: center;
+            padding: 10px;
+            background: #fffacd;
+            border-bottom: 2px solid #ffd700;
+        }
+        #main-dashboard {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        #left-panel, #right-panel {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background: #fffacd;
+            border: 2px solid #ffd700;
+        }
+        #left-panel {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 10px;
+        }
+        #right-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .section {
+            padding: 10px;
+            background: #f0e68c;
+            border-radius: 8px;
+            border: 1px solid #ffa500;
+        }
+        #graph-section { flex: 0 0 auto; }
+        .department {
+            padding: 8px;
+            background: #f0e68c;
+            border-radius: 8px;
+            border: 1px solid #ffa500;
+            font-size: 0.9em;
+        }
+        .department button {
+            padding: 5px 10px;
+            font-size: 0.8em;
+        }
+        button {
+            padding: 8px 15px;
+            background: linear-gradient(#ff4500, #ff8c00);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 4px #d2691e;
+        }
+        button:hover {
+            background: #ff8c00;
+            transform: translateY(-2px);
+        }
+        button:active { transform: translateY(2px); box-shadow: none; }
+        #doge-meter {
+            font-size: 1.5em;
+            color: #32cd32;
+            text-shadow: 2px 2px #000;
+            animation: bounce 2s infinite;
+        }
+        #news { font-style: italic; color: #ff00ff; font-size: 1em; }
+        #advisor { color: #ff0000; font-weight: bold; font-size: 1.1em; }
+        #directive-text { font-size: 1.2em; color: #0000ff; }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="header">
+            <h1>Doge: The Government Efficiency Simulator</h1>
+            <p>Wow such cuts, much chaos, very epic!</p>
+            <p id="doge-meter">Doge Efficiency: Much Wow</p>
+        </div>
+        <div id="main-dashboard">
+            <div id="left-panel">
+                <div class="section" id="graph-section">
+                    <canvas id="stats-graph" width="300" height="150"></canvas>
+                </div>
+                <div class="section" id="stats">
+                    <p>💰 Savings: $<span id="savings">0</span>M</p>
+                    <p>👍 Approval: <span id="approval">50</span>%</p>
+                    <p>⏳ Turn: <span id="turn">1</span></p>
+                </div>
+                <div class="section" id="directive">
+                    <h3>Directive from The Algorithm</h3>
+                    <p id="directive-text">Loading meme directive...</p>
+                    <p id="advisor">Advisor yells: "..."</p>
+                </div>
+                <div class="section" id="upgrades">
+                    <h3>Efficiency Hacks</h3>
+                    <div id="upgrade-list"></div>
+                </div>
+                <div class="section" id="consequences">
+                    <h3>Consequences</h3>
+                    <p id="consequence-text">Do stuff, watch world burn!</p>
+                    <p id="news">News: "Government still exists, lol."</p>
+                </div>
+            </div>
+            <div id="right-panel" id="departments">
+                <div id="dept-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game State with Graph Data
+        let gameState = {
+            savings: 0,
+            approval: 50,
+            turn: 1,
+            upgrades: [],
+            departments: [
+                { name: 'IRS', budget: 12000, efficiency: 60, importance: 80, chaos: 0 },
+                { name: 'NASA', budget: 19000, efficiency: 75, importance: 60, chaos: 0 },
+                { name: 'Education', budget: 68000, efficiency: 45, importance: 70, chaos: 0 },
+                { name: 'FEMA', budget: 8000, efficiency: 55, importance: 65, chaos: 0 },
+                { name: 'Defense', budget: 700000, efficiency: 70, importance: 95, chaos: 0 },
+                { name: 'USPS', budget: 9000, efficiency: 50, importance: 55, chaos: 0 },
+                { name: 'DMV', budget: 5000, efficiency: 30, importance: 40, chaos: 0 },
+                { name: 'NOAA', budget: 4000, efficiency: 65, importance: 50, chaos: 0 },
+                { name: 'EPA', budget: 7000, efficiency: 55, importance: 60, chaos: 0 }
+            ],
+            graphData: {
+                savings: [0],
+                approval: [50],
+                efficiency: [55] // Initial avg efficiency
+            }
+        };
+
+        // Data
+        const directives = [
+            "Cut {X}% of {DEPT} budget - who needs cash when u got memes?",
+            "Replace {DEPT} with {THING} - very futuristic wow!",
+            "Sell {DEPT} to {BILLIONAIRE} - profit go brrr!",
+            "Turn {DEPT} into NFT - blockchain fixes all, duh!",
+            "Fire {DEPT} staff, hire {THING} - much savings!"
+        ];
+        const billionaires = ["Elon Musk", "Jeff Bezos", "Zuck", "Crypto Chad", "Disney"];
+        const things = ["AI", "Tesla Bots", "Dogecoin Miners", "TikTok Teens", "Drones"];
+        const consequences = [
+            "{DEPT} implodes, {ISSUE} now handled by {THING}!",
+            "{DEPT} sold to {BILLIONAIRE}, now a {BIZ} scam!",
+            "{THING} in {DEPT} goes rogue, declares {TITLE}!",
+            "{DEPT} budget gone, public yeets {ITEM} at u!"
+        ];
+        const issues = ["taxes", "weather", "schools", "mail", "wars", "air"];
+        const titles = ["Chaos Lord", "Meme King", "Space Pope", "NFT Overlord"];
+        const items = ["pitchforks", "memes", "old Nokias", "crypto wallets"];
+        const headlines = [
+            "Fox: '{DEPT} Cut = Freedom!'",
+            "CNN: '{ACTION} = Apocalypse!'",
+            "Onion: '{DEPT} Now {THING}-Powered!'",
+            "X: '{BILLIONAIRE} yeeted {DEPT} to moon!'"
+        ];
+        const advisors = [
+            { name: "Tech Bro", advice: "Bruh, just app-ify it, vibes!" },
+            { name: "Crypto Guru", advice: "NFT that sh*t, moon soon!" },
+            { name: "Boomer Bureaucrat", advice: "MOAR PAPERWORK PLZ!" },
+            { name: "Elon’s Clone", advice: "To mars or bust, lol!" }
+        ];
+        const upgrades = [
+            { name: "Slack Meetings", cost: 5000, effect: "efficiency +10 all", unlocked: false },
+            { name: "Crypto Congress", cost: 15000, effect: "approval -30, efficiency +25", unlocked: false },
+            { name: "Drone Overlords", cost: 50000, effect: "Defense +40 eff, chaos +20", unlocked: false },
+            { name: "Meme Propaganda", cost: 20000, effect: "approval +20, chaos +10", unlocked: false },
+            { name: "AI President", cost: 100000, effect: "efficiency +50, approval -50", unlocked: false }
+        ];
+        const events = [
+            "Crypto crash! Savings -50%, chaos +20!",
+            "Twitter poll runs {DEPT}! Approval -10, chaos +15!",
+            "{BILLIONAIRE} buys Congress! Efficiency +20, approval -30!",
+            "AI coup in {DEPT}! Chaos +30, efficiency +40!"
+        ];
+
+        // Helpers
+        function getRandomItem(array) {
+            return array[Math.floor(Math.random() * array.length)];
+        }
+
+        // Graph Drawing
+        function drawGraph() {
+            const canvas = document.getElementById('stats-graph');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const maxTurns = 25; // Cap for x-axis
+            const data = gameState.graphData;
+            const maxY = Math.max(
+                Math.max(...data.savings, 100000),
+                Math.max(...data.approval, 100),
+                Math.max(...data.efficiency, 100)
+            );
+
+            // Grid and labels
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, i * canvas.height / 5);
+                ctx.lineTo(canvas.width, i * canvas.height / 5);
+                ctx.stroke();
+            }
+
+            // Lines: Savings (green), Approval (blue), Efficiency (red)
+            const plotLine = (dataArray, color) => {
+                ctx.strokeStyle = color;
+                ctx.beginPath();
+                dataArray.forEach((value, i) => {
+                    const x = (i / (dataArray.length - 1 || 1)) * canvas.width;
+                    const y = canvas.height - (value / maxY) * canvas.height;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            };
+
+            plotLine(data.savings, '#32cd32'); // Green
+            plotLine(data.approval, '#0000ff'); // Blue
+            plotLine(data.efficiency, '#ff0000'); // Red
+        }
+
+        // UI Updates
+        function updateUI() {
+            document.getElementById('savings').textContent = gameState.savings;
+            document.getElementById('approval').textContent = gameState.approval;
+            document.getElementById('turn').textContent = gameState.turn;
+            const avgEff = gameState.departments.reduce((sum, dept) => sum + dept.efficiency, 0) / gameState.departments.length || 0;
+            gameState.graphData.savings.push(gameState.savings);
+            gameState.graphData.approval.push(gameState.approval);
+            gameState.graphData.efficiency.push(avgEff);
+            if (gameState.graphData.savings.length > 25) {
+                gameState.graphData.savings.shift();
+                gameState.graphData.approval.shift();
+                gameState.graphData.efficiency.shift();
+            }
+            updateDirective();
+            updateDepartments();
+            updateUpgrades();
+            updateDogeMeter();
+            drawGraph();
+            if (Math.random() > 0.8) triggerRandomEvent();
+        }
+
+        function updateDirective() {
+            let directive = getRandomItem(directives)
+                .replace("{X}", Math.floor(Math.random() * 70) + 30)
+                .replace("{DEPT}", getRandomItem(gameState.departments).name)
+                .replace("{BILLIONAIRE}", getRandomItem(billionaires))
+                .replace("{THING}", getRandomItem(things));
+            document.getElementById('directive-text').textContent = directive;
+            let advisor = getRandomItem(advisors);
+            document.getElementById('advisor').textContent = `${advisor.name} yells: "${advisor.advice}"`;
+        }
+
+        function updateDepartments() {
+            const deptList = document.getElementById('dept-list');
+            deptList.innerHTML = '';
+            gameState.departments.forEach((dept, index) => {
+                const div = document.createElement('div');
+                div.className = 'department';
+                div.innerHTML = `
+                    <strong>${dept.name}</strong><br>
+                    💰 $${dept.budget}M | ⚙️ ${dept.efficiency}% | 🌩️ ${dept.chaos}<br>
+                    Importance: ${dept.importance}%<br>
+                    <button onclick="cutBudget(${index})">Cut ${Math.floor(Math.random() * 50) + 20}%</button>
+                    <button onclick="automate(${index})">AI-ify</button>
+                    <button onclick="sell(${index})">Sell to ${getRandomItem(billionaires)}</button>
+                    <button onclick="crypto(${index})">NFT-ify</button>
+                    <button onclick="meme(${index})">Meme It</button>
+                `;
+                deptList.appendChild(div);
+            });
+        }
+
+        function updateUpgrades() {
+            const upgradeList = document.getElementById('upgrade-list');
+            upgradeList.innerHTML = '';
+            upgrades.forEach((upgrade, index) => {
+                if (!upgrade.unlocked && gameState.savings >= upgrade.cost) {
+                    const button = document.createElement('button');
+                    button.textContent = `${upgrade.name} ($${upgrade.cost}M)`;
+                    button.onclick = () => buyUpgrade(index);
+                    upgradeList.appendChild(button);
+                }
+            });
+        }
+
+        function updateDogeMeter() {
+            const avgEff = gameState.departments.reduce((sum, dept) => sum + dept.efficiency, 0) / gameState.departments.length || 0;
+            const avgChaos = gameState.departments.reduce((sum, dept) => sum + dept.chaos, 0) / gameState.departments.length || 0;
+            document.getElementById('doge-meter').textContent = `Doge Efficiency: ${avgEff > 80 ? 'Very Wow' : avgEff > 50 ? 'Much Good' : 'So Sad'} | Chaos: ${avgChaos > 50 ? 'To Moon!' : 'Such Calm'}`;
+        }
+
+        function updateConsequences(text) {
+            document.getElementById('consequence-text').textContent = text;
+            let headline = getRandomItem(headlines)
+                .replace("{DEPT}", getRandomItem(gameState.departments)?.name || "Gov")
+                .replace("{ACTION}", text.split(" ")[0])
+                .replace("{THING}", getRandomItem(things))
+                .replace("{BILLIONAIRE}", getRandomItem(billionaires));
+            document.getElementById('news').textContent = headline;
+            gameState.turn++;
+            updateUI();
+        }
+
+        // Actions
+        function cutBudget(index) {
+            const dept = gameState.departments[index];
+            const cutPercent = Math.floor(Math.random() * 50) + 20;
+            const cut = dept.budget * (cutPercent / 100);
+            dept.budget -= cut;
+            gameState.savings += cut;
+            dept.efficiency -= 25;
+            dept.chaos += 15;
+            gameState.approval -= dept.importance * 0.2;
+            updateConsequences(`${dept.name} slashed by ${cutPercent}%! ${getRandomItem(consequences).replace("{DEPT}", dept.name).replace("{ISSUE}", getRandomItem(issues)).replace("{THING}", getRandomItem(things)).replace("{BILLIONAIRE}", getRandomItem(billionaires)).replace("{TITLE}", getRandomItem(titles)).replace("{BIZ}", "TikTok")}`);
+            checkGameOver();
+        }
+
+        function automate(index) {
+            const dept = gameState.departments[index];
+            dept.efficiency += 35;
+            dept.budget -= dept.budget * 0.4;
+            gameState.savings += dept.budget * 0.4;
+            dept.chaos += Math.random() > 0.7 ? 30 : 10;
+            gameState.approval -= dept.importance * 0.15;
+            updateConsequences(`AI yeets ${dept.name}! ${Math.random() > 0.85 ? "AI goes Skynet!" : "Beep boop efficiency!"}`);
+            checkGameOver();
+        }
+
+        function sell(index) {
+            const dept = gameState.departments[index];
+            const buyer = getRandomItem(billionaires);
+            gameState.savings += dept.budget * 1.5;
+            gameState.approval -= dept.importance * 0.35;
+            dept.chaos += 20;
+            updateConsequences(`${dept.name} sold to ${buyer}! ${buyer === "Disney" ? "Now a theme park!" : "Prices go brrr!"}`);
+            gameState.departments.splice(index, 1);
+            checkGameOver();
+        }
+
+        function crypto(index) {
+            const dept = gameState.departments[index];
+            dept.efficiency += 25;
+            dept.budget -= dept.budget * 0.3;
+            gameState.savings += dept.budget * 0.3;
+            dept.chaos += Math.random() > 0.6 ? 40 : 15;
+            gameState.approval -= dept.importance * 0.25;
+            updateConsequences(`${dept.name} now an NFT! ${Math.random() > 0.65 ? "Crypto bros bankrupt it!" : "To the moon!"}`);
+            checkGameOver();
+        }
+
+        function meme(index) {
+            const dept = gameState.departments[index];
+            dept.efficiency += 15;
+            dept.chaos += 25;
+            gameState.approval += Math.random() > 0.5 ? 10 : -10;
+            updateConsequences(`${dept.name} memed hard! ${getRandomItem(["Doge approves!", "Public confused!", "Viral chaos!"])}`);
+            checkGameOver();
+        }
+
+        function buyUpgrade(index) {
+            const upgrade = upgrades[index];
+            gameState.savings -= upgrade.cost;
+            upgrade.unlocked = true;
+            if (upgrade.name === "Slack Meetings") {
+                gameState.departments.forEach(dept => dept.efficiency += 10);
+            } else if (upgrade.name === "Crypto Congress") {
+                gameState.approval -= 30;
+                gameState.departments.forEach(dept => dept.efficiency += 25);
+            } else if (upgrade.name === "Drone Overlords") {
+                const defense = gameState.departments.find(d => d.name === "Defense");
+                if (defense) { defense.efficiency += 40; defense.chaos += 20; }
+            } else if (upgrade.name === "Meme Propaganda") {
+                gameState.approval += 20;
+                gameState.departments.forEach(dept => dept.chaos += 10);
+            } else if (upgrade.name === "AI President") {
+                gameState.departments.forEach(dept => dept.efficiency += 50);
+                gameState.approval -= 50;
+            }
+            updateConsequences(`Unlocked ${upgrade.name}! ${upgrade.effect}`);
+            checkGameOver();
+        }
+
+        function triggerRandomEvent() {
+            const event = getRandomItem(events)
+                .replace("{DEPT}", getRandomItem(gameState.departments).name)
+                .replace("{BILLIONAIRE}", getRandomItem(billionaires));
+            if (event.includes("Crypto crash")) {
+                gameState.savings *= 0.5;
+                gameState.departments.forEach(dept => dept.chaos += 20);
+            } else if (event.includes("Twitter poll")) {
+                gameState.approval -= 10;
+                gameState.departments.forEach(dept => dept.chaos += 15);
+            } else if (event.includes("buys Congress")) {
+                gameState.efficiency += 20;
+                gameState.approval -= 30;
+            } else if (event.includes("AI coup")) {
+                gameState.departments.forEach(dept => { dept.chaos += 30; dept.efficiency += 40; });
+            }
+            updateConsequences(`EVENT: ${event}`);
+        }
+
+        // Game Over
+        function checkGameOver() {
+            const avgChaos = gameState.departments.reduce((sum, dept) => sum + dept.chaos, 0) / gameState.departments.length || 0;
+            if (gameState.approval <= 0) {
+                alert("Game Over: Public yeets u into orbit! Much revolt!");
+                resetGame();
+            } else if (gameState.departments.length === 0) {
+                alert("Victory: Government gone, billionaires rule! Wow privatize!");
+                resetGame();
+            } else if (gameState.departments.every(dept => dept.efficiency >= 95)) {
+                alert("Utopia: Efficiency too good, everyone bored! Such win!");
+                resetGame();
+            } else if (avgChaos > 80) {
+                alert("Chaos Victory: World burns, Doge laughs! Very epic!");
+                resetGame();
+            } else if (gameState.turn > 25 && Math.random() > 0.7) {
+                alert("AI Takeover: Beep boop, humans lose! Much sad!");
+                resetGame();
+            }
+        }
+
+        function resetGame() {
+            gameState = {
+                savings: 0,
+                approval: 50,
+                turn: 1,
+                upgrades: [],
+                departments: [
+                    { name: 'IRS', budget: 12000, efficiency: 60, importance: 80, chaos: 0 },
+                    { name: 'NASA', budget: 19000, efficiency: 75, importance: 60, chaos: 0 },
+                    { name: 'Education', budget: 68000, efficiency: 45, importance: 70, chaos: 0 },
+                    { name: 'FEMA', budget: 8000, efficiency: 55, importance: 65, chaos: 0 },
+                    { name: 'Defense', budget: 700000, efficiency: 70, importance: 95, chaos: 0 },
+                    { name: 'USPS', budget: 9000, efficiency: 50, importance: 55, chaos: 0 },
+                    { name: 'DMV', budget: 5000, efficiency: 30, importance: 40, chaos: 0 },
+                    { name: 'NOAA', budget: 4000, efficiency: 65, importance: 50, chaos: 0 },
+                    { name: 'EPA', budget: 7000, efficiency: 55, importance: 60, chaos: 0 }
+                ],
+                graphData: {
+                    savings: [0],
+                    approval: [50],
+                    efficiency: [55]
+                }
+            };
+            upgrades.forEach(u => u.unlocked = false);
+            updateUI();
+        }
+
+        // Init
+        updateUI();
+    </script>
+</body>
+</html>
