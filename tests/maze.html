@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Maze Generator with AI Plan Evaluation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      margin: 0;
+    }
+    #controls, #planControls {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #controls label, #controls input, #controls button,
+    #planControls button {
+      font-size: 16px;
+    }
+    canvas {
+      background: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border: 1px solid #ddd;
+    }
+    textarea {
+      width: 90%;
+      height: 100px;
+      font-size: 16px;
+      padding: 5px;
+    }
+    #planFeedback {
+      margin-top: 10px;
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label for="mazeSize">Maze Size:</label>
+    <input type="number" id="mazeSize" value="20" min="5" max="50">
+    <button id="generateBtn">Generate Maze</button>
+    <button id="solutionBtn">Show Best Solution</button>
+    <label>
+      <input type="checkbox" id="challengeMode"> Challenge Mode (with coins)
+    </label>
+    <button id="copyPromptBtn">Copy Prompt</button>
+  </div>
+  <canvas id="mazeCanvas"></canvas>
+  
+  <div id="planControls">
+    <textarea id="planInput" placeholder="Enter AI plan here (e.g., A1, A2, B2, ...)" ></textarea>
+    <button id="renderPlanBtn">Render AI Path</button>
+    <div id="planFeedback"></div>
+  </div>
+
+  <script>
+    // Global variables and element references
+    const canvas = document.getElementById('mazeCanvas');
+    const ctx = canvas.getContext('2d');
+    const generateBtn = document.getElementById('generateBtn');
+    const solutionBtn = document.getElementById('solutionBtn');
+    const mazeSizeInput = document.getElementById('mazeSize');
+    const challengeModeCheckbox = document.getElementById('challengeMode');
+    const copyPromptBtn = document.getElementById('copyPromptBtn');
+    const planInput = document.getElementById('planInput');
+    const renderPlanBtn = document.getElementById('renderPlanBtn');
+    const planFeedback = document.getElementById('planFeedback');
+
+    let maze = [];
+    let mazeSize = 20;
+    let cellSize = 25; // pixel size per cell
+    let solutionPath = [];
+    let showSolution = false;
+    let coins = [];
+    let aiPath = [];       // Array of { cell, label, error? }
+    let aiPlanErrors = []; // Holds error messages for illegal moves
+
+    // Directions for maze generation and movement
+    const directions = [
+      { dx: 0, dy: -1, wall: 'top',    opposite: 'bottom' },
+      { dx: 1, dy:  0, wall: 'right',  opposite: 'left' },
+      { dx: 0, dy:  1, wall: 'bottom', opposite: 'top' },
+      { dx: -1, dy: 0, wall: 'left',   opposite: 'right' }
+    ];
+
+    // Initialize maze grid
+    function initMaze(size) {
+      maze = [];
+      for (let y = 0; y < size; y++) {
+        const row = [];
+        for (let x = 0; x < size; x++) {
+          row.push({
+            x, y,
+            walls: { top: true, right: true, bottom: true, left: true },
+            visited: false
+          });
+        }
+        maze.push(row);
+      }
+    }
+
+    // Retrieve cell at (x,y)
+    function getCell(x, y) {
+      if (x < 0 || y < 0 || x >= mazeSize || y >= mazeSize) return undefined;
+      return maze[y][x];
+    }
+
+    // Maze generation using recursive backtracking (depth-first search)
+    function generateMaze() {
+      initMaze(mazeSize);
+      let stack = [];
+      let current = maze[0][0];
+      current.visited = true;
+      while (true) {
+        const neighbors = [];
+        for (let d of directions) {
+          const next = getCell(current.x + d.dx, current.y + d.dy);
+          if (next && !next.visited) {
+            neighbors.push({ cell: next, direction: d });
+          }
+        }
+        if (neighbors.length > 0) {
+          const rnd = neighbors[Math.floor(Math.random() * neighbors.length)];
+          current.walls[rnd.direction.wall] = false;
+          rnd.cell.walls[rnd.direction.opposite] = false;
+          stack.push(current);
+          current = rnd.cell;
+          current.visited = true;
+        } else if (stack.length > 0) {
+          current = stack.pop();
+        } else {
+          break;
+        }
+      }
+      // Add extra openings to create loops (multiple valid solutions)
+      const extraChance = 0.1;
+      for (let y = 0; y < mazeSize; y++) {
+        for (let x = 0; x < mazeSize; x++) {
+          for (let d of directions) {
+            const nx = x + d.dx, ny = y + d.dy;
+            const neighbor = getCell(nx, ny);
+            if (neighbor && maze[y][x].walls[d.wall] && Math.random() < extraChance) {
+              maze[y][x].walls[d.wall] = false;
+              neighbor.walls[d.opposite] = false;
+            }
+          }
+        }
+      }
+    }
+
+    // Breadth‑first search to compute the best (shortest) solution path
+    function findSolution() {
+      const start = maze[0][0];
+      const goal = maze[mazeSize - 1][mazeSize - 1];
+      const queue = [];
+      const cameFrom = Array.from({ length: mazeSize }, () => Array(mazeSize).fill(null));
+      const visited = Array.from({ length: mazeSize }, () => Array(mazeSize).fill(false));
+      queue.push(start);
+      visited[start.y][start.x] = true;
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (current === goal) break;
+        for (let d of directions) {
+          if (!current.walls[d.wall]) {
+            const nx = current.x + d.dx, ny = current.y + d.dy;
+            const neighbor = getCell(nx, ny);
+            if (neighbor && !visited[ny][nx]) {
+              visited[ny][nx] = true;
+              cameFrom[ny][nx] = current;
+              queue.push(neighbor);
+            }
+          }
+        }
+      }
+      let path = [];
+      let current = goal;
+      while (current !== start) {
+        path.push(current);
+        current = cameFrom[current.y][current.x];
+        if (!current) break;
+      }
+      path.push(start);
+      path.reverse();
+      return path;
+    }
+
+    // In challenge mode, add coins randomly (except start and goal)
+    function addCoins() {
+      coins = [];
+      const coinChance = 0.15;
+      for (let y = 0; y < mazeSize; y++) {
+        for (let x = 0; x < mazeSize; x++) {
+          if ((x === 0 && y === 0) || (x === mazeSize - 1 && y === mazeSize - 1)) continue;
+          if (Math.random() < coinChance) {
+            coins.push({ x, y });
+          }
+        }
+      }
+    }
+
+    // Draw the maze, sector labels, and any overlaid paths
+    function drawMaze() {
+      // Extra space for labels (offset)
+      const offsetX = 40;
+      const offsetY = 40;
+      canvas.width = mazeSize * cellSize + offsetX;
+      canvas.height = mazeSize * cellSize + offsetY;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 2;
+      
+      // Draw maze walls
+      for (let y = 0; y < mazeSize; y++) {
+        for (let x = 0; x < mazeSize; x++) {
+          const cell = maze[y][x];
+          const xPos = offsetX + x * cellSize;
+          const yPos = offsetY + y * cellSize;
+          if (cell.walls.top) {
+            ctx.beginPath();
+            ctx.moveTo(xPos, yPos);
+            ctx.lineTo(xPos + cellSize, yPos);
+            ctx.stroke();
+          }
+          if (cell.walls.right) {
+            ctx.beginPath();
+            ctx.moveTo(xPos + cellSize, yPos);
+            ctx.lineTo(xPos + cellSize, yPos + cellSize);
+            ctx.stroke();
+          }
+          if (cell.walls.bottom) {
+            ctx.beginPath();
+            ctx.moveTo(xPos + cellSize, yPos + cellSize);
+            ctx.lineTo(xPos, yPos + cellSize);
+            ctx.stroke();
+          }
+          if (cell.walls.left) {
+            ctx.beginPath();
+            ctx.moveTo(xPos, yPos + cellSize);
+            ctx.lineTo(xPos, yPos);
+            ctx.stroke();
+          }
+        }
+      }
+      
+      // Draw sector indicators (chess-like labels)
+      ctx.fillStyle = "#000";
+      ctx.font = "16px Arial";
+      // Column letters (top)
+      for (let x = 0; x < mazeSize; x++) {
+        const label = getColumnLabel(x);
+        const xPos = offsetX + x * cellSize + cellSize/2;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, xPos, offsetY - 20);
+      }
+      // Row numbers (left)
+      for (let y = 0; y < mazeSize; y++) {
+        const label = (y + 1).toString();
+        const yPos = offsetY + y * cellSize + cellSize/2;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, offsetX - 20, yPos);
+      }
+      
+      // Mark start (green) and goal (red)
+      ctx.fillStyle = "#4caf50";
+      ctx.fillRect(offsetX + 2, offsetY + 2, cellSize - 4, cellSize - 4);
+      ctx.fillStyle = "#f44336";
+      ctx.fillRect(offsetX + (mazeSize - 1) * cellSize + 2, offsetY + (mazeSize - 1) * cellSize + 2, cellSize - 4, cellSize - 4);
+      
+      // Draw coins (challenge mode)
+      if (challengeModeCheckbox.checked) {
+        for (let coin of coins) {
+          const cx = offsetX + coin.x * cellSize + cellSize/2;
+          const cy = offsetY + coin.y * cellSize + cellSize/2;
+          ctx.fillStyle = "gold";
+          ctx.beginPath();
+          ctx.arc(cx, cy, cellSize/6, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+      
+      // Draw computed solution (if toggled on)
+      if (showSolution && solutionPath.length > 0) {
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        const first = solutionPath[0];
+        ctx.moveTo(offsetX + first.x * cellSize + cellSize/2, offsetY + first.y * cellSize + cellSize/2);
+        for (let i = 1; i < solutionPath.length; i++) {
+          const cell = solutionPath[i];
+          ctx.lineTo(offsetX + cell.x * cellSize + cellSize/2, offsetY + cell.y * cellSize + cellSize/2);
+        }
+        ctx.stroke();
+      }
+      
+      // Draw the AI plan path (if provided)
+      if (aiPath.length > 0) {
+        ctx.strokeStyle = "purple";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const first = aiPath[0].cell;
+        ctx.moveTo(offsetX + first.x * cellSize + cellSize/2, offsetY + first.y * cellSize + cellSize/2);
+        for (let step of aiPath) {
+          ctx.lineTo(offsetX + step.cell.x * cellSize + cellSize/2, offsetY + step.cell.y * cellSize + cellSize/2);
+        }
+        ctx.stroke();
+        // Mark illegal moves with red circles
+        for (let step of aiPath) {
+          if (step.error) {
+            const cx = offsetX + step.cell.x * cellSize + cellSize/2;
+            const cy = offsetY + step.cell.y * cellSize + cellSize/2;
+            ctx.fillStyle = "red";
+            ctx.beginPath();
+            ctx.arc(cx, cy, cellSize/6, 0, Math.PI*2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+
+    // Convert a zero-indexed column number into Excel-style label (A, B, …, AA, etc.)
+    function getColumnLabel(index) {
+      let label = "";
+      index++;
+      while (index > 0) {
+        const mod = (index - 1) % 26;
+        label = String.fromCharCode(65 + mod) + label;
+        index = Math.floor((index - mod) / 26);
+      }
+      return label;
+    }
+
+    // Generate an ASCII representation of the maze with sector indicators.
+    function generateMazeText() {
+      let text = "";
+      // Column header
+      text += "    ";
+      for (let x = 0; x < mazeSize; x++) {
+        text += "   " + getColumnLabel(x) + "   ";
+      }
+      text += "\n";
+      // Top border (using first row's top walls)
+      text += "    ";
+      for (let x = 0; x < mazeSize; x++) {
+        text += maze[0][x].walls.top ? "+---" : "+   ";
+      }
+      text += "+\n";
+      // For each row, print the interior and bottom wall
+      for (let y = 0; y < mazeSize; y++) {
+        let rowLine = (y+1).toString().padStart(3, " ") + " ";
+        for (let x = 0; x < mazeSize; x++) {
+          rowLine += maze[y][x].walls.left ? "|   " : "    ";
+        }
+        rowLine += "|\n";
+        text += rowLine;
+        let wallLine = "    ";
+        for (let x = 0; x < mazeSize; x++) {
+          wallLine += maze[y][x].walls.bottom ? "+---" : "+   ";
+        }
+        wallLine += "+\n";
+        text += wallLine;
+      }
+      return text;
+    }
+
+    // Generate the prompt text containing the maze ASCII, AI instructions, and the start/end locations.
+    function generatePrompt() {
+      let promptText = "Maze Description:\n";
+      promptText += generateMazeText();
+      promptText += "\n";
+      // Add starting and ending locations explicitly
+      promptText += "Starting Location: A1\n";
+      promptText += "Ending Location: " + getColumnLabel(mazeSize - 1) + mazeSize + "\n\n";
+      promptText += "Instructions:\n";
+      promptText += "1. The maze uses chess-like coordinates. The top-left cell is A1 and the bottom-right cell is " 
+                    + getColumnLabel(mazeSize - 1) + mazeSize + ".\n";
+      promptText += "2. Provide your move plan as a comma-separated list of cell coordinates (e.g., A1, A2, B2, B3, ...).\n";
+      promptText += "3. Each move must go to an adjacent cell with no wall between. Moves that are not adjacent or cross walls will be flagged as illegal.\n";
+      promptText += "4. Your plan will be evaluated against the current maze structure.\n";
+      return promptText;
+    }
+
+    // Copy the prompt text to clipboard
+    copyPromptBtn.addEventListener('click', () => {
+      const promptText = generatePrompt();
+      navigator.clipboard.writeText(promptText).then(() => {
+        alert("Prompt copied to clipboard!");
+      }).catch(err => {
+        alert("Failed to copy prompt: " + err);
+      });
+    });
+
+    // Parse the plan input (expects tokens like A1, B2, etc.)
+    function parsePlan(input) {
+      const tokens = input.match(/[A-Za-z]+\d+/g);
+      if (!tokens) return [];
+      const plan = tokens.map(token => {
+        const match = token.match(/^([A-Za-z]+)(\d+)$/);
+        if (!match) return null;
+        let colStr = match[1].toUpperCase();
+        let rowStr = match[2];
+        let col = 0;
+        for (let i = 0; i < colStr.length; i++) {
+          col = col * 26 + (colStr.charCodeAt(i) - 64);
+        }
+        col--; // convert to 0-indexed
+        let row = parseInt(rowStr) - 1;
+        return { label: token.toUpperCase(), x: col, y: row };
+      });
+      return plan.filter(p => p !== null);
+    }
+
+    // Validate the plan by checking adjacency and wall collisions.
+    function validatePlan(plan) {
+      const validated = [];
+      aiPlanErrors = [];
+      if (plan.length === 0) {
+        aiPlanErrors.push("No valid moves found in the plan.");
+        return validated;
+      }
+      // Check starting point is A1.
+      if (plan[0].x !== 0 || plan[0].y !== 0) {
+        aiPlanErrors.push("Plan must start at A1.");
+      }
+      // Check ending point is bottom-right.
+      if (plan[plan.length - 1].x !== mazeSize - 1 || plan[plan.length - 1].y !== mazeSize - 1) {
+        aiPlanErrors.push("Plan must end at " + getColumnLabel(mazeSize - 1) + mazeSize + ".");
+      }
+      // Validate each move step
+      for (let i = 0; i < plan.length; i++) {
+        const pos = plan[i];
+        const cell = getCell(pos.x, pos.y);
+        let error = null;
+        if (!cell) {
+          error = "Cell " + pos.label + " is out of maze bounds.";
+        }
+        if (i > 0 && !error) {
+          const prev = plan[i - 1];
+          const dx = pos.x - prev.x;
+          const dy = pos.y - prev.y;
+          if (Math.abs(dx) + Math.abs(dy) !== 1) {
+            error = "Move from " + prev.label + " to " + pos.label + " is not adjacent.";
+          } else {
+            const prevCell = getCell(prev.x, prev.y);
+            if (dx === 1 && prevCell.walls.right) error = "Wall between " + prev.label + " and " + pos.label + ".";
+            if (dx === -1 && prevCell.walls.left) error = "Wall between " + prev.label + " and " + pos.label + ".";
+            if (dy === 1 && prevCell.walls.bottom) error = "Wall between " + prev.label + " and " + pos.label + ".";
+            if (dy === -1 && prevCell.walls.top) error = "Wall between " + prev.label + " and " + pos.label + ".";
+          }
+        }
+        validated.push({ cell: cell || { x: pos.x, y: pos.y }, label: pos.label, error });
+        if (error) {
+          aiPlanErrors.push("At " + pos.label + ": " + error);
+        }
+      }
+      return validated;
+    }
+
+    // Render the AI path based on the plan entered.
+    function renderAIPath() {
+      const input = planInput.value;
+      const plan = parsePlan(input);
+      aiPath = validatePlan(plan);
+      if (aiPlanErrors.length > 0) {
+        planFeedback.textContent = aiPlanErrors.join(" ");
+      } else {
+        planFeedback.textContent = "Plan is valid.";
+      }
+      drawMaze();
+    }
+
+    // Main setup: generate a maze, compute the solution, and reset AI plan input.
+    function setupMaze() {
+      mazeSize = parseInt(mazeSizeInput.value);
+      generateMaze();
+      if (challengeModeCheckbox.checked) {
+        addCoins();
+      } else {
+        coins = [];
+      }
+      solutionPath = findSolution();
+      showSolution = false;
+      solutionBtn.textContent = "Show Best Solution";
+      aiPath = []; // Clear any AI path from previous maze
+      planFeedback.textContent = "";
+      planInput.value = "";
+      drawMaze();
+    }
+
+    generateBtn.addEventListener('click', setupMaze);
+    solutionBtn.addEventListener('click', () => {
+      showSolution = !showSolution;
+      solutionBtn.textContent = showSolution ? "Hide Solution" : "Show Best Solution";
+      drawMaze();
+    });
+    renderPlanBtn.addEventListener('click', renderAIPath);
+
+    window.onload = setupMaze;
+  </script>
+</body>
+</html>
