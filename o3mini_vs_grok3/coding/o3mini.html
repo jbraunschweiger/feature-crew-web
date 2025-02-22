@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gravity Simulator with Player Rocket</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1;
+      color: white;
+      font-family: sans-serif;
+    }
+    #ui button, #ui input {
+      margin: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <button id="resetButton">Reset</button>
+    <button id="launchButton">Launch Mode: Off</button>
+    <button id="staticMassButton">Static Mass Mode: Off</button>
+    <label for="massSlider">Mass/Size:</label>
+    <input type="range" id="massSlider" min="1" max="50" value="10">
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Global variables and constants
+    let scene, camera, renderer;
+    let bodies = [];             // Array to hold all masses (planets, player, projectiles)
+    let explosionEffects = [];   // Active explosion effects
+    const G = 0.1;               // Gravitational constant
+    const dt = 0.1;              // Time step for simulation
+    const maxTrailPoints = 100;  // Maximum points for each trail
+
+    // Modes for placing new bodies (via mouse)
+    let launchMode = false;    // Launch a mass by click-drag-release
+    let staticMode = false;    // Place a new "static" mass with a click
+    let isDragging = false;
+    let launchStart = null;
+    let projectionLine = null;
+
+    // For player rocket (controlled with arrow keys)
+    let player = null;
+    let keys = {};             // Track key presses for player controls
+
+    // For rocket firing cooldown (space bar)
+    let rocketCooldown = 500;  // milliseconds
+    let lastRocketTime = 0;
+
+    init();
+    animate();
+
+    function init() {
+      // Set up scene, camera, renderer
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 100);
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.sortObjects = true; // Enable proper z-depth sorting
+      document.body.appendChild(renderer.domElement);
+
+      // Add lighting
+      scene.add(new THREE.AmbientLight(0xaaaaaa));
+      const pointLight = new THREE.PointLight(0xffffff, 1);
+      pointLight.position.set(50, 50, 50);
+      scene.add(pointLight);
+
+      // Add a background star field
+      addStars();
+
+      // Initialize simulation (clear objects and add preset masses & the player rocket)
+      resetSimulation();
+
+      // UI event listeners
+      window.addEventListener('resize', onWindowResize, false);
+      document.getElementById('resetButton').addEventListener('click', resetSimulation);
+      document.getElementById('launchButton').addEventListener('click', toggleLaunchMode);
+      document.getElementById('staticMassButton').addEventListener('click', toggleStaticMode);
+
+      // Mouse events for launch/static modes
+      renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+      renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+      renderer.domElement.addEventListener('mouseup', onMouseUp, false);
+
+      // Keyboard events for player control and rocket firing
+      window.addEventListener("keydown", onKeyDown, false);
+      window.addEventListener("keyup", onKeyUp, false);
+    }
+
+    // Create a starry background
+    function addStars() {
+      const starGeometry = new THREE.BufferGeometry();
+      const starCount = 1000;
+      const starVertices = [];
+      for (let i = 0; i < starCount; i++) {
+        starVertices.push(
+          THREE.MathUtils.randFloatSpread(600),
+          THREE.MathUtils.randFloatSpread(600),
+          THREE.MathUtils.randFloatSpread(600)
+        );
+      }
+      starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+      const starMaterial = new THREE.PointsMaterial({ color: 0xffffff });
+      const starField = new THREE.Points(starGeometry, starMaterial);
+      scene.add(starField);
+    }
+
+    // Reset simulation: clear bodies, explosions, projection line, add preset masses & player rocket
+    function resetSimulation() {
+      // Remove existing bodies and their trails
+      bodies.forEach(body => {
+        scene.remove(body.mesh);
+        scene.remove(body.trailLine);
+      });
+      bodies = [];
+
+      // Remove any active explosion effects
+      explosionEffects.forEach(exp => scene.remove(exp.mesh));
+      explosionEffects = [];
+
+      // Remove projection line if exists
+      if (projectionLine) {
+        scene.remove(projectionLine);
+        projectionLine = null;
+      }
+
+      // Add preset planetary masses (now dynamic so gravity acts on them)
+      bodies.push(createBody({
+        position: new THREE.Vector3(0, 0, 0),
+        velocity: new THREE.Vector3(0, 0, 0),
+        mass: 1000,
+        radius: 10,
+        isStatic: false
+      }));
+      bodies.push(createBody({
+        position: new THREE.Vector3(50, 0, 0),
+        velocity: new THREE.Vector3(0, 0, 0),
+        mass: 500,
+        radius: 7,
+        isStatic: false
+      }));
+
+      // Add the player-controlled rocket (colored blue)
+      player = createBody({
+        position: new THREE.Vector3(-80, 0, 0),
+        velocity: new THREE.Vector3(0, 0, 0),
+        mass: 20,
+        radius: 3,
+        isStatic: false
+      });
+      player.isPlayer = true;
+      player.angle = 0; // In radians; 0 = facing right
+      player.mesh.material.color.set(0x0000ff);
+      player.mesh.rotation.z = player.angle;
+      bodies.push(player);
+    }
+
+    // Create a mass body with a sphere mesh and an initially empty trail.
+    // The "isStatic" property is kept only for UI purposes.
+    function createBody({ position, velocity, mass, radius, isStatic }) {
+      // Sphere mesh
+      const geometry = new THREE.SphereGeometry(radius, 16, 16);
+      // Color: red for preset masses, green for user-launched ones
+      let color = isStatic ? 0xff0000 : 0x00ff00;
+      const material = new THREE.MeshPhongMaterial({ color: color, emissive: 0x111111 });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(position);
+      scene.add(mesh);
+
+      // Create an empty trail line
+      const trailGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(maxTrailPoints * 3);
+      trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const trailMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+      const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+      scene.add(trailLine);
+
+      return {
+        mesh: mesh,
+        velocity: velocity.clone(),
+        mass: mass,
+        radius: radius,
+        isStatic: isStatic,
+        trailPositions: [],
+        trailLine: trailLine,
+      };
+    }
+
+    // Handle window resize
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Toggle launch mode for mouse-based launching of masses.
+    function toggleLaunchMode() {
+      launchMode = !launchMode;
+      if (launchMode && staticMode) {
+        staticMode = false;
+        document.getElementById('staticMassButton').innerText = "Static Mass Mode: Off";
+      }
+      document.getElementById('launchButton').innerText = launchMode ? "Launch Mode: On" : "Launch Mode: Off";
+    }
+
+    // Toggle static mass placement mode.
+    function toggleStaticMode() {
+      staticMode = !staticMode;
+      if (staticMode && launchMode) {
+        launchMode = false;
+        document.getElementById('launchButton').innerText = "Launch Mode: Off";
+      }
+      document.getElementById('staticMassButton').innerText = staticMode ? "Static Mass Mode: On" : "Static Mass Mode: Off";
+    }
+
+    // Main animation loop: update physics (gravity, player control), explosions, then render.
+    function animate() {
+      requestAnimationFrame(animate);
+      updatePhysics();
+      updateExplosions();
+      renderer.render(scene, camera);
+    }
+
+    // Update gravitational physics for all bodies, add player control forces,
+    // update positions and trails, and then check for collisions.
+    function updatePhysics() {
+      bodies.forEach((body, index) => {
+        let acceleration = new THREE.Vector3();
+        // Calculate gravitational acceleration from every other body
+        bodies.forEach((other, j) => {
+          if (index === j) return;
+          let diff = new THREE.Vector3().subVectors(other.mesh.position, body.mesh.position);
+          const distanceSq = diff.lengthSq();
+          if (distanceSq < 1) return; // Avoid singularity
+          acceleration.add(diff.normalize().multiplyScalar(G * other.mass / distanceSq));
+        });
+        // If this is the player, add extra control acceleration and update rotation.
+        if (body.isPlayer) {
+          if (keys["ArrowLeft"]) {
+            body.angle -= 0.05;
+          }
+          if (keys["ArrowRight"]) {
+            body.angle += 0.05;
+          }
+          body.mesh.rotation.z = body.angle;
+          if (keys["ArrowUp"]) {
+            const controlAcc = new THREE.Vector3(Math.cos(body.angle), Math.sin(body.angle), 0).multiplyScalar(0.1);
+            acceleration.add(controlAcc);
+          }
+        }
+        // Update velocity with the total acceleration.
+        body.velocity.add(acceleration.multiplyScalar(dt));
+      });
+
+      // Update positions and trails for all bodies.
+      bodies.forEach(body => {
+        body.mesh.position.add(body.velocity.clone().multiplyScalar(dt));
+        body.trailPositions.push(body.mesh.position.clone());
+        if (body.trailPositions.length > maxTrailPoints) body.trailPositions.shift();
+        const positions = body.trailLine.geometry.attributes.position.array;
+        for (let k = 0; k < body.trailPositions.length; k++) {
+          positions[3 * k]     = body.trailPositions[k].x;
+          positions[3 * k + 1] = body.trailPositions[k].y;
+          positions[3 * k + 2] = body.trailPositions[k].z;
+        }
+        body.trailLine.geometry.setDrawRange(0, body.trailPositions.length);
+        body.trailLine.geometry.attributes.position.needsUpdate = true;
+      });
+
+      // Check for collisions among bodies.
+      checkCollisions();
+    }
+
+    // Check for collisions between every pair of bodies.
+    // When two bodies get close enough (distance < sum of radii), create an explosion and remove them.
+    function checkCollisions() {
+      const collidedIndices = new Set();
+      for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+          const posA = bodies[i].mesh.position;
+          const posB = bodies[j].mesh.position;
+          if (posA.distanceTo(posB) < (bodies[i].radius + bodies[j].radius)) {
+            // Compute collision point as midpoint.
+            const collisionPoint = posA.clone().add(posB).multiplyScalar(0.5);
+            createExplosionEffect(collisionPoint);
+            collidedIndices.add(i);
+            collidedIndices.add(j);
+          }
+        }
+      }
+      // Remove collided bodies.
+      bodies = bodies.filter((body, idx) => {
+        if (collidedIndices.has(idx)) {
+          scene.remove(body.mesh);
+          scene.remove(body.trailLine);
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Update explosion effects (expand and fade them out over time).
+    function updateExplosions() {
+      const currentTime = performance.now();
+      for (let i = explosionEffects.length - 1; i >= 0; i--) {
+        const exp = explosionEffects[i];
+        const elapsed = currentTime - exp.startTime;
+        const t = elapsed / exp.lifeTime;
+        if (t >= 1) {
+          scene.remove(exp.mesh);
+          explosionEffects.splice(i, 1);
+        } else {
+          exp.mesh.scale.setScalar(1 + 2 * t);
+          exp.mesh.material.opacity = 1 - t;
+        }
+      }
+    }
+
+    // Create an explosion effect (expanding, fading sphere) at the given position.
+    function createExplosionEffect(position) {
+      const geometry = new THREE.SphereGeometry(5, 16, 16);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 1 });
+      const explosionMesh = new THREE.Mesh(geometry, material);
+      explosionMesh.position.copy(position);
+      scene.add(explosionMesh);
+      explosionEffects.push({
+        mesh: explosionMesh,
+        startTime: performance.now(),
+        lifeTime: 1000 // 1 second lifetime
+      });
+    }
+
+    // --- Mouse Event Handlers ---
+    // For launch mode (click-drag-release) or static mass placement.
+    function onMouseDown(event) {
+      const pos = getMousePosition(event);
+      if (staticMode) {
+        // Place a new mass at the clicked location.
+        const massSize = parseFloat(document.getElementById('massSlider').value);
+        const newStatic = createBody({
+          position: pos.clone(),
+          velocity: new THREE.Vector3(0, 0, 0),
+          mass: massSize,
+          radius: massSize * 0.5,
+          isStatic: true
+        });
+        bodies.push(newStatic);
+      } else if (launchMode) {
+        isDragging = true;
+        launchStart = pos.clone();
+      }
+    }
+
+    function onMouseMove(event) {
+      if (!launchMode || !isDragging) return;
+      const currentPos = getMousePosition(event);
+      const launchVector = new THREE.Vector3().subVectors(launchStart, currentPos).multiplyScalar(0.2);
+      const projPoints = computeProjection(launchStart, launchVector);
+      if (projectionLine) scene.remove(projectionLine);
+      const projGeometry = new THREE.BufferGeometry().setFromPoints(projPoints);
+      const projMaterial = new THREE.LineDashedMaterial({ color: 0xffff00, dashSize: 1, gapSize: 1 });
+      projectionLine = new THREE.Line(projGeometry, projMaterial);
+      projectionLine.computeLineDistances();
+      scene.add(projectionLine);
+    }
+
+    function onMouseUp(event) {
+      if (!launchMode || !isDragging) return;
+      isDragging = false;
+      const endPos = getMousePosition(event);
+      const launchVector = new THREE.Vector3().subVectors(launchStart, endPos).multiplyScalar(0.2);
+      const massSize = parseFloat(document.getElementById('massSlider').value);
+      const newBody = createBody({
+        position: launchStart.clone(),
+        velocity: launchVector.clone(),
+        mass: massSize,
+        radius: massSize * 0.5,
+        isStatic: false
+      });
+      bodies.push(newBody);
+      createLaunchEffect(launchStart);
+      if (projectionLine) {
+        scene.remove(projectionLine);
+        projectionLine = null;
+      }
+    }
+
+    // Convert mouse event coordinates to a world position on the z=0 plane.
+    function getMousePosition(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
+      vector.unproject(camera);
+      const dir = vector.sub(camera.position).normalize();
+      const distance = -camera.position.z / dir.z;
+      return camera.position.clone().add(dir.multiplyScalar(distance));
+    }
+
+    // Compute a predicted trajectory for a mass (only using preset masses for simplicity).
+    function computeProjection(start, velocity) {
+      const projPoints = [];
+      let tempPos = start.clone();
+      let tempVel = velocity.clone();
+      for (let i = 0; i < 100; i++) {
+        let acc = new THREE.Vector3();
+        bodies.forEach(body => {
+          if (!body.isStatic) return; // Only use "static" bodies for a simple projection.
+          const diff = new THREE.Vector3().subVectors(body.mesh.position, tempPos);
+          const distSq = diff.lengthSq();
+          if (distSq < 1) return;
+          acc.add(diff.normalize().multiplyScalar(G * body.mass / distSq));
+        });
+        tempVel.add(acc.multiplyScalar(dt));
+        tempPos.add(tempVel.clone().multiplyScalar(dt));
+        projPoints.push(tempPos.clone());
+      }
+      return projPoints;
+    }
+
+    // Create a quick flash effect at the given position.
+    function createLaunchEffect(position) {
+      const geometry = new THREE.SphereGeometry(2, 8, 8);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+      const flash = new THREE.Mesh(geometry, material);
+      flash.position.copy(position);
+      scene.add(flash);
+      setTimeout(() => scene.remove(flash), 200);
+    }
+
+    // --- Keyboard Event Handlers for Player Rocket ---
+    function onKeyDown(e) {
+      keys[e.key] = true;
+      // Fire a rocket projectile when the space bar is pressed.
+      if (e.code === "Space") {
+        const now = performance.now();
+        if (now - lastRocketTime > rocketCooldown) {
+          fireRocket();
+          lastRocketTime = now;
+        }
+      }
+    }
+
+    function onKeyUp(e) {
+      keys[e.key] = false;
+    }
+
+    // Create a rocket projectile fired from the player's current position and facing direction.
+    function fireRocket() {
+      if (!player) return;
+      // Determine the firing direction from the player's current angle.
+      const direction = new THREE.Vector3(Math.cos(player.angle), Math.sin(player.angle), 0);
+      // Rocket's initial velocity: player's velocity plus extra forward speed.
+      const rocketVelocity = direction.clone().multiplyScalar(5).add(player.velocity);
+      // Start position slightly ahead of the player.
+      const rocketPos = player.mesh.position.clone().add(direction.clone().multiplyScalar(player.radius + 2));
+      const rocketBody = createBody({
+        position: rocketPos,
+        velocity: rocketVelocity,
+        mass: 2,
+        radius: 1,
+        isStatic: false
+      });
+      // Color the projectile orange.
+      rocketBody.mesh.material.color.set(0xffa500);
+      rocketBody.rocket = true;
+      bodies.push(rocketBody);
+    }
+  </script>
+</body>
+</html>
