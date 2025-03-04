@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>City Generator & Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            color: #333;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        canvas {
+            display: block;
+            background-color: #87CEEB;
+        }
+        #ui-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 5px;
+            padding: 15px;
+            width: 250px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        #stats-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 5px;
+            padding: 15px;
+            width: 250px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .slider-value {
+            display: inline-block;
+            width: 30px;
+            text-align: right;
+        }
+        .toggle-button {
+            background-color: #2196F3;
+        }
+        .toggle-button:hover {
+            background-color: #0b7dda;
+        }
+        .time-controls {
+            display: flex;
+            justify-content: space-between;
+        }
+        .time-controls button {
+            flex: 1;
+            margin: 0 2px;
+        }
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            flex-direction: column;
+        }
+        .loader {
+            border: 16px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 16px solid #3498db;
+            width: 120px;
+            height: 120px;
+            animation: spin 2s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <h2>Generating City...</h2>
+        <p id="loading-message">Initializing terrain</p>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="cityCanvas"></canvas>
+        
+        <div id="ui-panel">
+            <h3>City Generator Controls</h3>
+            
+            <div class="control-group">
+                <button id="new-city-btn">Generate New City</button>
+                <button id="toggle-simulation-btn" class="toggle-button">Pause Simulation</button>
+            </div>
+            
+            <div class="control-group">
+                <label for="city-size">City Size: <span id="city-size-value" class="slider-value">50</span></label>
+                <input type="range" id="city-size" min="20" max="100" value="50">
+            </div>
+            
+            <div class="control-group">
+                <label for="population-density">Population Density: <span id="density-value" class="slider-value">5</span></label>
+                <input type="range" id="population-density" min="1" max="10" value="5">
+            </div>
+            
+            <div class="control-group">
+                <label for="commercial-ratio">Commercial/Residential Ratio: <span id="commercial-value" class="slider-value">3</span></label>
+                <input type="range" id="commercial-ratio" min="1" max="5" value="3">
+            </div>
+            
+            <div class="control-group">
+                <label for="road-complexity">Road Complexity: <span id="road-value" class="slider-value">5</span></label>
+                <input type="range" id="road-complexity" min="1" max="10" value="5">
+            </div>
+            
+            <div class="control-group">
+                <label for="simulation-speed">Simulation Speed: <span id="speed-value" class="slider-value">1</span>x</label>
+                <input type="range" id="simulation-speed" min="0" max="5" value="1" step="0.5">
+            </div>
+            
+            <div class="control-group">
+                <label>View Mode:</label>
+                <select id="view-mode">
+                    <option value="normal">Normal</option>
+                    <option value="traffic">Traffic Density</option>
+                    <option value="property">Property Value</option>
+                    <option value="district">District View</option>
+                </select>
+            </div>
+            
+            <div class="control-group time-controls">
+                <button id="time-day">Day</button>
+                <button id="time-night">Night</button>
+                <button id="time-cycle">Cycle</button>
+            </div>
+            
+            <div class="control-group">
+                <label><input type="checkbox" id="toggle-weather"> Enable Weather Effects</label>
+            </div>
+        </div>
+        
+        <div id="stats-panel">
+            <h3>City Statistics</h3>
+            <div id="population-stat">Population: 0</div>
+            <div id="buildings-stat">Buildings: 0</div>
+            <div id="vehicles-stat">Vehicles: 0</div>
+            <div id="happiness-stat">Happiness: 75%</div>
+            <div id="economy-stat">Economy: Stable</div>
+            <div id="time-stat">Time: Day 1, 12:00</div>
+        </div>
+    </div>
+
+    <script>
+        // Main classes and variables
+        class City {
+            constructor(size, populationDensity, commercialRatio, roadComplexity) {
+                this.size = size;
+                this.populationDensity = populationDensity;
+                this.commercialRatio = commercialRatio;
+                this.roadComplexity = roadComplexity;
+                
+                this.grid = [];
+                this.buildings = [];
+                this.roads = [];
+                this.vehicles = [];
+                
+                this.population = 0;
+                this.time = {
+                    day: 1,
+                    hour: 12,
+                    minute: 0,
+                    cycle: true,
+                    isNight: false
+                };
+                
+                this.weather = {
+                    type: 'clear', // clear, rain, fog, snow
+                    intensity: 0,
+                    particles: []
+                };
+                
+                this.districts = {
+                    residential: { color: '#90EE90', buildings: [] },
+                    commercial: { color: '#ADD8E6', buildings: [] },
+                    industrial: { color: '#D3D3D3', buildings: [] },
+                    downtown: { color: '#FFD700', buildings: [] },
+                    park: { color: '#228B22', buildings: [] }
+                };
+                
+                this.initialize();
+            }
+            
+            initialize() {
+                // Initialize grid
+                for (let x = 0; x < this.size; x++) {
+                    this.grid[x] = [];
+                    for (let y = 0; y < this.size; y++) {
+                        this.grid[x][y] = {
+                            type: 'empty',
+                            building: null,
+                            road: null,
+                            propertyValue: Math.random() * 50 + 50
+                        };
+                    }
+                }
+                
+                // Generate city layout
+                this.generateDistricts();
+                this.generateRoadNetwork();
+                this.populateBuildings();
+                this.initializeVehicles();
+                
+                // Calculate initial population based on buildings
+                this.calculatePopulation();
+            }
+            
+            generateDistricts() {
+                // Simple district generation based on distance from center
+                const center = Math.floor(this.size / 2);
+                
+                for (let x = 0; x < this.size; x++) {
+                    for (let y = 0; y < this.size; y++) {
+                        const distFromCenter = Math.sqrt(Math.pow(x - center, 2) + Math.pow(y - center, 2));
+                        const normalizedDist = distFromCenter / (this.size / 2);
+                        
+                        // Determine district type based on distance and some randomness
+                        if (normalizedDist < 0.2) {
+                            // Downtown
+                            this.grid[x][y].district = 'downtown';
+                        } else if (normalizedDist < 0.4) {
+                            // Commercial with some residential
+                            this.grid[x][y].district = Math.random() < 0.8 ? 'commercial' : 'residential';
+                        } else if (normalizedDist < 0.7) {
+                            // Mostly residential with some commercial
+                            this.grid[x][y].district = Math.random() < 0.3 ? 'commercial' : 'residential';
+                        } else {
+                            // Outer areas are industrial or residential suburbs
+                            this.grid[x][y].district = Math.random() < 0.4 ? 'industrial' : 'residential';
+                        }
+                        
+                        // Randomly place parks
+                        if (Math.random() < 0.03) {
+                            this.grid[x][y].district = 'park';
+                        }
+                    }
+                }
+                
+                // Create some district clusters to make more coherent neighborhoods
+                this.smoothDistricts();
+            }
+            
+            smoothDistricts() {
+                // Simple cellular automaton to make districts more coherent
+                const tempGrid = JSON.parse(JSON.stringify(this.grid));
+                
+                for (let x = 1; x < this.size - 1; x++) {
+                    for (let y = 1; y < this.size - 1; y++) {
+                        const neighbors = [
+                            this.grid[x-1][y].district,
+                            this.grid[x+1][y].district,
+                            this.grid[x][y-1].district,
+                            this.grid[x][y+1].district
+                        ];
+                        
+                        // Count occurrences of each district type
+                        const counts = {};
+                        neighbors.forEach(d => {
+                            counts[d] = (counts[d] || 0) + 1;
+                        });
+                        
+                        // Find most common district type among neighbors
+                        let maxCount = 0;
+                        let mostCommon = this.grid[x][y].district;
+                        
+                        for (const [district, count] of Object.entries(counts)) {
+                            if (count > maxCount) {
+                                maxCount = count;
+                                mostCommon = district;
+                            }
+                        }
+                        
+                        // Apply district smoothing with some probability
+                        if (maxCount >= 3 || (maxCount >= 2 && Math.random() < 0.7)) {
+                            tempGrid[x][y].district = mostCommon;
+                        }
+                    }
+                }
+                
+                // Update grid with smoothed districts
+                this.grid = tempGrid;
+            }
+            
+            generateRoadNetwork() {
+                // Generate main roads
+                this.generateMainRoads();
+                
+                // Generate secondary roads based on complexity
+                const secondaryRoadCount = Math.floor(this.roadComplexity * this.size / 10);
+                for (let i = 0; i < secondaryRoadCount; i++) {
+                    this.generateSecondaryRoad();
+                }
+            }
+            
+            generateMainRoads() {
+                // Create grid-like main roads
+                const spacing = Math.floor(this.size / (4 + this.roadComplexity / 3));
+                
+                // Horizontal main roads
+                for (let y = spacing; y < this.size; y += spacing) {
+                    for (let x = 0; x < this.size; x++) {
+                        this.grid[x][y].type = 'road';
+                        this.grid[x][y].roadType = 'main';
+                        this.roads.push({x, y, type: 'main'});
+                    }
+                }
+                
+                // Vertical main roads
+                for (let x = spacing; x < this.size; x += spacing) {
+                    for (let y = 0; y < this.size; y++) {
+                        this.grid[x][y].type = 'road';
+                        this.grid[x][y].roadType = 'main';
+                        this.roads.push({x, y, type: 'main'});
+                    }
+                }
+            }
+            
+            generateSecondaryRoad() {
+                // Choose random starting point at an existing road
+                const startRoad = this.roads[Math.floor(Math.random() * this.roads.length)];
+                let x = startRoad.x;
+                let y = startRoad.y;
+                
+                // Determine direction (horizontal or vertical)
+                const isHorizontal = Math.random() < 0.5;
+                
+                // Length of the road
+                const length = Math.floor(Math.random() * (this.size / 3) + (this.size / 6));
+                
+                // Place road
+                for (let i = 0; i < length; i++) {
+                    // Move in the chosen direction
+                    if (isHorizontal) {
+                        x = (x + 1) % this.size;
+                    } else {
+                        y = (y + 1) % this.size;
+                    }
+                    
+                    // Add road if the cell is empty
+                    if (this.grid[x][y].type !== 'road') {
+                        this.grid[x][y].type = 'road';
+                        this.grid[x][y].roadType = 'secondary';
+                        this.roads.push({x, y, type: 'secondary'});
+                    }
+                }
+            }
+            
+            populateBuildings() {
+                // Place buildings based on districts
+                for (let x = 0; x < this.size; x++) {
+                    for (let y = 0; y < this.size; y++) {
+                        // Skip road cells
+                        if (this.grid[x][y].type === 'road') continue;
+                        
+                        // Only place buildings near roads (for realism)
+                        const hasNearbyRoad = this.checkForNearbyRoad(x, y, 3);
+                        
+                        if (hasNearbyRoad && Math.random() < 0.7) { // 70% chance to place building near roads
+                            const district = this.grid[x][y].district;
+                            let buildingType, height;
+                            
+                            switch (district) {
+                                case 'downtown':
+                                    buildingType = 'skyscraper';
+                                    height = Math.floor(Math.random() * 10) + 10; // 10-20 stories
+                                    break;
+                                case 'commercial':
+                                    buildingType = Math.random() < 0.7 ? 'office' : 'shop';
+                                    height = Math.floor(Math.random() * 5) + 3; // 3-8 stories
+                                    break;
+                                case 'residential':
+                                    buildingType = Math.random() < 0.3 ? 'apartment' : 'house';
+                                    height = buildingType === 'apartment' ? 
+                                        Math.floor(Math.random() * 4) + 2 : // 2-6 stories for apartments
+                                        1 + (Math.random() < 0.3); // 1-2 stories for houses
+                                    break;
+                                case 'industrial':
+                                    buildingType = Math.random() < 0.6 ? 'factory' : 'warehouse';
+                                    height = Math.floor(Math.random() * 2) + 1; // 1-3 stories
+                                    break;
+                                case 'park':
+                                    buildingType = 'park';
+                                    height = 0;
+                                    break;
+                                default:
+                                    buildingType = 'empty';
+                                    height = 0;
+                            }
+                            
+                            // Create building
+                            const building = {
+                                x, y, 
+                                type: buildingType,
+                                height,
+                                district,
+                                residents: 0,
+                                workers: 0,
+                                value: this.grid[x][y].propertyValue * (height || 1)
+                            };
+                            
+                            // Add residents/workers based on building type
+                            if (buildingType === 'house') {
+                                building.residents = Math.floor(Math.random() * 3) + 1; // 1-4 residents
+                            } else if (buildingType === 'apartment') {
+                                building.residents = height * (Math.floor(Math.random() * 3) + 2); // 2-5 per floor
+                            } else if (buildingType === 'office' || buildingType === 'shop') {
+                                building.workers = height * (Math.floor(Math.random() * 5) + 5); // 5-10 workers per floor
+                            } else if (buildingType === 'factory' || buildingType === 'warehouse') {
+                                building.workers = Math.floor(Math.random() * 20) + 10; // 10-30 workers
+                            } else if (buildingType === 'skyscraper') {
+                                building.workers = height * (Math.floor(Math.random() * 10) + 15); // 15-25 workers per floor
+                            }
+                            
+                            // Add building to city
+                            this.buildings.push(building);
+                            this.grid[x][y].type = 'building';
+                            this.grid[x][y].building = building;
+                            
+                            // Add to district collection
+                            if (this.districts[district]) {
+                                this.districts[district].buildings.push(building);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            checkForNearbyRoad(x, y, radius) {
+                // Check if there's a road within the specified radius
+                for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        const nx = x + dx;
+                        const ny = y + dy;
+                        
+                        // Check if within bounds
+                        if (nx >= 0 && nx < this.size && ny >= 0 && ny < this.size) {
+                            if (this.grid[nx][ny].type === 'road') {
+                                // Calculate Manhattan distance
+                                const distance = Math.abs(dx) + Math.abs(dy);
+                                if (distance <= radius) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+            
+            initializeVehicles() {
+                // Add vehicles based on population density
+                const vehicleCount = Math.floor(this.size * this.populationDensity / 2);
+                
+                for (let i = 0; i < vehicleCount; i++) {
+                    // Find a random road segment
+                    const randomRoad = this.roads[Math.floor(Math.random() * this.roads.length)];
+                    
+                    const vehicle = {
+                        x: randomRoad.x,
+                        y: randomRoad.y,
+                        speed: Math.random() * 0.1 + 0.05,
+                        direction: Math.floor(Math.random() * 4), // 0-3: north, east, south, west
+                        type: Math.random() < 0.8 ? 'car' : 'truck',
+                        dest: null,
+                        route: []
+                    };
+                    
+                    this.vehicles.push(vehicle);
+                }
+            }
+            
+            calculatePopulation() {
+                // Calculate total population based on building residents
+                let totalPop = 0;
+                
+                this.buildings.forEach(building => {
+                    totalPop += building.residents;
+                });
+                
+                this.population = totalPop;
+                return totalPop;
+            }
+            
+            update(deltaTime, simulationSpeed) {
+                // Update time
+                if (this.time.cycle) {
+                    this.updateTime(deltaTime * simulationSpeed);
+                }
+                
+                // Update vehicles
+                this.updateVehicles(deltaTime * simulationSpeed);
+                
+                // Update buildings (property values, etc.)
+                this.updateBuildings(deltaTime * simulationSpeed);
+                
+                // Update weather if enabled
+                if (document.getElementById('toggle-weather').checked) {
+                    this.updateWeather(deltaTime * simulationSpeed);
+                }
+            }
+            
+            updateTime(deltaTime) {
+                // Advance time (1 real second = 10 minutes game time at normal speed)
+                const minutesPerSecond = 10;
+                
+                this.time.minute += deltaTime * minutesPerSecond;
+                
+                if (this.time.minute >= 60) {
+                    this.time.hour += Math.floor(this.time.minute / 60);
+                    this.time.minute %= 60;
+                    
+                    if (this.time.hour >= 24) {
+                        this.time.day += Math.floor(this.time.hour / 24);
+                        this.time.hour %= 24;
+                    }
+                }
+                
+                // Update day/night status
+                this.time.isNight = this.time.hour < 6 || this.time.hour >= 18;
+            }
+            
+            updateVehicles(deltaTime) {
+                for (let i = 0; i < this.vehicles.length; i++) {
+                    const vehicle = this.vehicles[i];
+                    
+                    // Move vehicle
+                    switch (vehicle.direction) {
+                        case 0: // North
+                            vehicle.y -= vehicle.speed;
+                            break;
+                        case 1: // East
+                            vehicle.x += vehicle.speed;
+                            break;
+                        case 2: // South
+                            vehicle.y += vehicle.speed;
+                            break;
+                        case 3: // West
+                            vehicle.x -= vehicle.speed;
+                            break;
+                    }
+                    
+                    // Check if reached end of road or intersection
+                    const gridX = Math.floor(vehicle.x);
+                    const gridY = Math.floor(vehicle.y);
+                    
+                    // Check if out of bounds, if so, wrap around to other side
+                    if (gridX < 0) vehicle.x = this.size - 0.01;
+                    if (gridX >= this.size) vehicle.x = 0;
+                    if (gridY < 0) vehicle.y = this.size - 0.01;
+                    if (gridY >= this.size) vehicle.y = 0;
+                    
+                    // Randomly change direction at intersections (with low probability)
+                    if (Math.random() < 0.01) {
+                        vehicle.direction = Math.floor(Math.random() * 4);
+                    }
+                }
+            }
+            
+            updateBuildings(deltaTime) {
+                // Simple property value fluctuations
+                for (let i = 0; i < this.buildings.length; i++) {
+                    const building = this.buildings[i];
+                    
+                    // Small random changes to property value
+                    const change = (Math.random() - 0.5) * deltaTime;
+                    building.value = Math.max(10, building.value + change);
+                }
+            }
+            
+            updateWeather(deltaTime) {
+                // Simple weather system
+                if (Math.random() < 0.0005 * deltaTime) {
+                    // Change weather
+                    const weatherTypes = ['clear', 'rain', 'fog', 'snow'];
+                    const newWeather = weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
+                    
+                    this.weather.type = newWeather;
+                    this.weather.intensity = Math.random() * 0.8 + 0.2; // 0.2-1.0
+                    
+                    if (newWeather !== 'clear') {
+                        // Initialize weather particles
+                        this.weather.particles = [];
+                        const particleCount = Math.floor(this.weather.intensity * 200);
+                        
+                        for (let i = 0; i < particleCount; i++) {
+                            this.weather.particles.push({
+                                x: Math.random() * canvas.width,
+                                y: Math.random() * canvas.height,
+                                speed: Math.random() * 5 + 2,
+                                size: Math.random() * 3 + 1
+                            });
+                        }
+                    }
+                }
+                
+                // Update weather particles
+                if (this.weather.type !== 'clear') {
+                    for (let i = 0; i < this.weather.particles.length; i++) {
+                        const particle = this.weather.particles[i];
+                        
+                        if (this.weather.type === 'rain') {
+                            particle.y += particle.speed * deltaTime;
+                            particle.x -= particle.speed * 0.2 * deltaTime; // slight sideways movement
+                        } else if (this.weather.type === 'snow') {
+                            particle.y += particle.speed * 0.3 * deltaTime;
+                            particle.x += Math.sin(Date.now() * 0.001 + i) * 0.5 * deltaTime; // swaying movement
+                        } else if (this.weather.type === 'fog') {
+                            particle.x += (Math.random() - 0.5) * deltaTime;
+                            particle.y += (Math.random() - 0.5) * deltaTime;
+                        }
+                        
+                        // Reset particles that go off-screen
+                        if (particle.y > canvas.height) {
+                            particle.y = 0;
+                            particle.x = Math.random() * canvas.width;
+                        }
+                        if (particle.x < 0) particle.x = canvas.width;
+                        if (particle.x > canvas.width) particle.x = 0;
+                    }
+                }
+            }
+        }
+        
+        class Renderer {
+            constructor(canvas, city) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.city = city;
+                
+                this.camera = {
+                    x: 0,
+                    y: 0,
+                    zoom: 10,
+                    isDragging: false,
+                    lastMouseX: 0,
+                    lastMouseY: 0
+                };
+                
+                this.viewMode = 'normal'; // normal, traffic, property, district
+                this.shouldRenderShadows = true;
+                
+                this.setupEventListeners();
+            }
+            
+            setupEventListeners() {
+                // Mouse events for camera control
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.camera.isDragging = true;
+                    this.camera.lastMouseX = e.clientX;
+                    this.camera.lastMouseY = e.clientY;
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    this.camera.isDragging = false;
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (this.camera.isDragging) {
+                        const dx = e.clientX - this.camera.lastMouseX;
+                        const dy = e.clientY - this.camera.lastMouseY;
+                        
+                        this.camera.x -= dx / this.camera.zoom;
+                        this.camera.y -= dy / this.camera.zoom;
+                        
+                        this.camera.lastMouseX = e.clientX;
+                        this.camera.lastMouseY = e.clientY;
+                    }
+                });
+                
+                // Zoom with mouse wheel
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+                    this.camera.zoom *= zoom;
+                    this.camera.zoom = Math.max(5, Math.min(50, this.camera.zoom));
+                });
+                
+                // Update view mode from UI
+                document.getElementById('view-mode').addEventListener('change', (e) => {
+                    this.viewMode = e.target.value;
+                });
+            }
+            
+            render() {
+                const ctx = this.ctx;
+                const width = this.canvas.width;
+                const height = this.canvas.height;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, width, height);
+                
+                // Set background color based on time of day
+                if (this.city.time.isNight) {
+                    ctx.fillStyle = '#001429'; // Night sky
+                } else {
+                    ctx.fillStyle = '#87CEEB'; // Day sky
+                }
+                ctx.fillRect(0, 0, width, height);
+                
+                // Apply camera transformation
+                ctx.save();
+                ctx.translate(width / 2, height / 2);
+                ctx.scale(this.camera.zoom, this.camera.zoom);
+                ctx.translate(-this.camera.x, -this.camera.y);
+                
+                // Render city grid
+                this.renderGrid();
+                
+                // Render roads
+                this.renderRoads();
+                
+                // Render buildings
+                this.renderBuildings();
+                
+                // Render vehicles
+                this.renderVehicles();
+                
+                // Render weather effects
+                if (document.getElementById('toggle-weather').checked) {
+                    this.renderWeather();
+                }
+                
+                ctx.restore();
+            }
+            
+            renderGrid() {
+                const ctx = this.ctx;
+                const cellSize = 1;
+                
+                // Calculate visible grid bounds based on camera
+                const visibleWidth = this.canvas.width / this.camera.zoom;
+                const visibleHeight = this.canvas.height / this.camera.zoom;
+                
+                const startX = Math.max(0, Math.floor(this.camera.x - visibleWidth / 2));
+                const startY = Math.max(0, Math.floor(this.camera.y - visibleHeight / 2));
+                const endX = Math.min(this.city.size - 1, Math.ceil(this.camera.x + visibleWidth / 2));
+                const endY = Math.min(this.city.size - 1, Math.ceil(this.camera.y + visibleHeight / 2));
+                
+                // Render grid cells
+                for (let x = startX; x <= endX; x++) {
+                    for (let y = startY; y <= endY; y++) {
+                        const cell = this.city.grid[x][y];
+                        
+                        // Skip road and building cells (rendered separately)
+                        if (cell.type === 'road' || cell.type === 'building') continue;
+                        
+                        // Get cell color based on view mode
+                        let cellColor;
+                        
+                        if (this.viewMode === 'district') {
+                            // Color by district
+                            const district = cell.district;
+                            cellColor = this.city.districts[district]?.color || '#FFFFFF';
+                        } else if (this.viewMode === 'property') {
+                            // Color by property value
+                            const value = cell.propertyValue;
+                            const normalized = Math.min(1, value / 200);
+                            cellColor = this.getHeatMapColor(normalized, 0, 1, [
+                                {pos: 0, color: '#FF0000'},
+                                {pos: 0.5, color: '#FFFF00'},
+                                {pos: 1, color: '#00FF00'}
+                            ]);
+                        } else {
+                            // Normal view
+                            cellColor = '#D2B48C'; // Tan color for empty land
+                        }
+                        
+                        // Draw cell
+                        ctx.fillStyle = cellColor;
+                        ctx.fillRect(x, y, cellSize, cellSize);
+                    }
+                }
+            }
+            
+            renderRoads() {
+                const ctx = this.ctx;
+                const cellSize = 1;
+                
+                // Calculate visible grid bounds
+                const visibleWidth = this.canvas.width / this.camera.zoom;
+                const visibleHeight = this.canvas.height / this.camera.zoom;
+                
+                const startX = Math.max(0, Math.floor(this.camera.x - visibleWidth / 2));
+                const startY = Math.max(0, Math.floor(this.camera.y - visibleHeight / 2));
+                const endX = Math.min(this.city.size - 1, Math.ceil(this.camera.x + visibleWidth / 2));
+                const endY = Math.min(this.city.size - 1, Math.ceil(this.camera.y + visibleHeight / 2));
+                
+                // Render roads
+                for (let x = startX; x <= endX; x++) {
+                    for (let y = startY; y <= endY; y++) {
+                        const cell = this.city.grid[x][y];
+                        
+                        if (cell.type === 'road') {
+                            // Road color based on type
+                            let roadColor;
+                            if (this.viewMode === 'traffic') {
+                                // In traffic view, color based on traffic density (simulated)
+                                const trafficDensity = Math.random(); // Replace with actual traffic data
+                                roadColor = this.getHeatMapColor(trafficDensity, 0, 1, [
+                                    {pos: 0, color: '#00FF00'},
+                                    {pos: 0.5, color: '#FFFF00'},
+                                    {pos: 1, color: '#FF0000'}
+                                ]);
+                            } else {
+                                // Normal view
+                                roadColor = cell.roadType === 'main' ? '#555555' : '#777777';
+                                
+                                // Darker roads at night
+                                if (this.city.time.isNight) {
+                                    roadColor = cell.roadType === 'main' ? '#333333' : '#555555';
+                                }
+                            }
+                            
+                            // Draw road
+                            ctx.fillStyle = roadColor;
+                            ctx.fillRect(x, y, cellSize, cellSize);
+                            
+                            // Add road markings on main roads
+                            if (cell.roadType === 'main' && this.camera.zoom > 15) {
+                                ctx.fillStyle = '#FFFF00';
+                                
+                                // Check if horizontal or vertical road
+                                const hasRoadAbove = y > 0 && this.city.grid[x][y-1].type === 'road';
+                                const hasRoadBelow = y < this.city.size - 1 && this.city.grid[x][y+1].type === 'road';
+                                
+                                if (hasRoadAbove || hasRoadBelow) {
+                                    // Vertical road - horizontal markings
+                                    ctx.fillRect(x + 0.45, y + 0.25, 0.1, 0.1);
+                                    ctx.fillRect(x + 0.45, y + 0.65, 0.1, 0.1);
+                                } else {
+                                    // Horizontal road - vertical markings
+                                    ctx.fillRect(x + 0.25, y + 0.45, 0.1, 0.1);
+                                    ctx.fillRect(x + 0.65, y + 0.45, 0.1, 0.1);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            renderBuildings() {
+                const ctx = this.ctx;
+                const cellSize = 1;
+                
+                // Calculate visible bounds
+                const visibleWidth = this.canvas.width / this.camera.zoom;
+                const visibleHeight = this.canvas.height / this.camera.zoom;
+                
+                const startX = Math.max(0, Math.floor(this.camera.x - visibleWidth / 2));
+                const startY = Math.max(0, Math.floor(this.camera.y - visibleHeight / 2));
+                const endX = Math.min(this.city.size - 1, Math.ceil(this.camera.x + visibleWidth / 2));
+                const endY = Math.min(this.city.size - 1, Math.ceil(this.camera.y + visibleHeight / 2));
+                
+                // First pass: draw building shadows if enabled
+                if (this.shouldRenderShadows && !this.city.time.isNight) {
+                    for (let x = startX; x <= endX; x++) {
+                        for (let y = startY; y <= endY; y++) {
+                            const cell = this.city.grid[x][y];
+                            
+                            if (cell.type === 'building' && cell.building) {
+                                const building = cell.building;
+                                
+                                // Skip parks
+                                if (building.type === 'park') continue;
+                                
+                                // Draw shadow based on building height
+                                const shadowLength = building.height * 0.2;
+                                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                                ctx.beginPath();
+                                ctx.moveTo(x + cellSize, y);
+                                ctx.lineTo(x + cellSize + shadowLength, y + shadowLength);
+                                ctx.lineTo(x + cellSize + shadowLength, y + cellSize + shadowLength);
+                                ctx.lineTo(x + cellSize, y + cellSize);
+                                ctx.closePath();
+                                ctx.fill();
+                            }
+                        }
+                    }
+                }
+                
+                // Second pass: draw buildings
+                for (let x = startX; x <= endX; x++) {
+                    for (let y = startY; y <= endY; y++) {
+                        const cell = this.city.grid[x][y];
+                        
+                        if (cell.type === 'building' && cell.building) {
+                            const building = cell.building;
+                            
+                            // Get building color based on view mode
+                            let buildingColor;
+                            
+                            if (this.viewMode === 'district') {
+                                // Color by district
+                                const district = building.district;
+                                buildingColor = this.city.districts[district]?.color || '#FFFFFF';
+                            } else if (this.viewMode === 'property') {
+                                // Color by property value
+                                const value = building.value;
+                                const normalized = Math.min(1, value / 200);
+                                buildingColor = this.getHeatMapColor(normalized, 0, 1, [
+                                    {pos: 0, color: '#FF0000'},
+                                    {pos: 0.5, color: '#FFFF00'},
+                                    {pos: 1, color: '#00FF00'}
+                                ]);
+                            } else {
+                                // Normal view - color by building type
+                                switch (building.type) {
+                                    case 'skyscraper':
+                                        buildingColor = '#708090'; // Steel blue-gray
+                                        break;
+                                    case 'office':
+                                        buildingColor = '#4682B4'; // Steel blue
+                                        break;
+                                    case 'shop':
+                                        buildingColor = '#4169E1'; // Royal blue
+                                        break;
+                                    case 'apartment':
+                                        buildingColor = '#CD853F'; // Peru/brown
+                                        break;
+                                    case 'house':
+                                        buildingColor = '#BC8F8F'; // Rosy brown
+                                        break;
+                                    case 'factory':
+                                        buildingColor = '#696969'; // Dim gray
+                                        break;
+                                    case 'warehouse':
+                                        buildingColor = '#A9A9A9'; // Dark gray
+                                        break;
+                                    case 'park':
+                                        buildingColor = '#228B22'; // Forest green
+                                        break;
+                                    default:
+                                        buildingColor = '#FFFFFF'; // White
+                                }
+                            }
+                            
+                            // Adjust color based on time of day
+                            if (this.city.time.isNight) {
+                                buildingColor = this.darkenColor(buildingColor, 0.6);
+                            }
+                            
+                            // Draw building base
+                            ctx.fillStyle = buildingColor;
+                            ctx.fillRect(x, y, cellSize, cellSize);
+                            
+                            // For buildings with height, draw the top and side
+                            if (building.height > 0 && building.type !== 'park') {
+                                // Draw building height (side)
+                                const heightColor = this.darkenColor(buildingColor, 0.7);
+                                ctx.fillStyle = heightColor;
+                                ctx.beginPath();
+                                ctx.moveTo(x + cellSize, y);
+                                ctx.lineTo(x + cellSize, y - building.height * 0.1);
+                                ctx.lineTo(x + cellSize, y + cellSize - building.height * 0.1);
+                                ctx.lineTo(x + cellSize, y + cellSize);
+                                ctx.closePath();
+                                ctx.fill();
+                                
+                                // Draw building top
+                                const topColor = this.lightenColor(buildingColor, 1.2);
+                                ctx.fillStyle = topColor;
+                                ctx.beginPath();
+                                ctx.moveTo(x, y - building.height * 0.1);
+                                ctx.lineTo(x + cellSize, y - building.height * 0.1);
+                                ctx.lineTo(x + cellSize, y + cellSize - building.height * 0.1);
+                                ctx.lineTo(x, y + cellSize - building.height * 0.1);
+                                ctx.closePath();
+                                ctx.fill();
+                                
+                                // Add windows at night
+                                if (this.city.time.isNight && this.camera.zoom > 15) {
+                                    ctx.fillStyle = 'rgba(255, 255, 190, 0.8)';
+                                    
+                                    // Number of windows based on building height
+                                    const windowsX = Math.max(1, Math.ceil(cellSize * 5));
+                                    const windowsY = Math.max(1, Math.ceil(building.height * 0.5));
+                                    
+                                    const windowSize = 0.1;
+                                    const windowSpacing = cellSize / windowsX;
+                                    
+                                    for (let wx = 0; wx < windowsX; wx++) {
+                                        for (let wy = 0; wy < windowsY; wy++) {
+                                            // Only light some windows
+                                            if (Math.random() < 0.7) {
+                                                const windowX = x + wx * windowSpacing + windowSpacing/2 - windowSize/2;
+                                                const windowY = y - wy * 0.2 - 0.1;
+                                                ctx.fillRect(windowX, windowY, windowSize, windowSize);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // For parks, add trees
+                            if (building.type === 'park' && this.camera.zoom > 12) {
+                                const treesCount = Math.floor(Math.random() * 3) + 2;
+                                
+                                for (let t = 0; t < treesCount; t++) {
+                                    const treeX = x + Math.random() * 0.8 + 0.1;
+                                    const treeY = y + Math.random() * 0.8 + 0.1;
+                                    const treeSize = Math.random() * 0.15 + 0.1;
+                                    
+                                    // Tree trunk
+                                    ctx.fillStyle = '#8B4513'; // Saddle brown
+                                    ctx.fillRect(treeX - treeSize/6, treeY, treeSize/3, treeSize * 0.7);
+                                    
+                                    // Tree foliage
+                                    ctx.fillStyle = '#006400'; // Dark green
+                                    ctx.beginPath();
+                                    ctx.arc(treeX, treeY - treeSize * 0.5, treeSize, 0, Math.PI * 2);
+                                    ctx.fill();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            renderVehicles() {
+                const ctx = this.ctx;
+                
+                // Only render vehicles if zoomed in enough
+                if (this.camera.zoom < 10) return;
+                
+                for (let i = 0; i < this.city.vehicles.length; i++) {
+                    const vehicle = this.city.vehicles[i];
+                    
+                    // Check if vehicle is in view
+                    if (
+                        vehicle.x < this.camera.x - this.canvas.width / (2 * this.camera.zoom) - 1 ||
+                        vehicle.x > this.camera.x + this.canvas.width / (2 * this.camera.zoom) + 1 ||
+                        vehicle.y < this.camera.y - this.canvas.height / (2 * this.camera.zoom) - 1 ||
+                        vehicle.y > this.camera.y + this.canvas.height / (2 * this.camera.zoom) + 1
+                    ) {
+                        continue;
+                    }
+                    
+                    // Vehicle color and size based on type
+                    const vehicleColor = vehicle.type === 'car' ? 
+                        ['#FF0000', '#0000FF', '#FFFF00', '#00FF00', '#FF00FF'][Math.floor(i % 5)] : 
+                        '#808080';
+                    
+                    const vehicleWidth = vehicle.type === 'car' ? 0.3 : 0.4;
+                    const vehicleHeight = vehicle.type === 'car' ? 0.2 : 0.3;
+                    
+                    // Adjust vehicle position based on direction
+                    let x = vehicle.x;
+                    let y = vehicle.y;
+                    let width = vehicleWidth;
+                    let height = vehicleHeight;
+                    
+                    // Rotate vehicle based on direction
+                    if (vehicle.direction % 2 === 1) {
+                        // Swap width and height for east/west directions
+                        width = vehicleHeight;
+                        height = vehicleWidth;
+                    }
+                    
+                    // Draw vehicle
+                    ctx.fillStyle = vehicleColor;
+                    ctx.fillRect(x - width/2, y - height/2, width, height);
+                    
+                    // Add headlights at night
+                    if (this.city.time.isNight) {
+                        ctx.fillStyle = 'rgba(255, 255, 200, 0.8)';
+                        
+                        switch(vehicle.direction) {
+                            case 0: // North
+                                ctx.fillRect(x - 0.1, y - height/2 - 0.1, 0.07, 0.07);
+                                ctx.fillRect(x + 0.1 - 0.07, y - height/2 - 0.1, 0.07, 0.07);
+                                break;
+                            case 1: // East
+                                ctx.fillRect(x + width/2, y - 0.1, 0.07, 0.07);
+                                ctx.fillRect(x + width/2, y + 0.1 - 0.07, 0.07, 0.07);
+                                break;
+                            case 2: // South
+                                ctx.fillRect(x - 0.1, y + height/2, 0.07, 0.07);
+                                ctx.fillRect(x + 0.1 - 0.07, y + height/2, 0.07, 0.07);
+                                break;
+                            case 3: // West
+                                ctx.fillRect(x - width/2 - 0.07, y - 0.1, 0.07, 0.07);
+                                ctx.fillRect(x - width/2 - 0.07, y + 0.1 - 0.07, 0.07, 0.07);
+                                break;
+                        }
+                    }
+                }
+            }
+            
+            renderWeather() {
+                const ctx = this.ctx;
+                
+                if (this.city.weather.type === 'clear') return;
+                
+                // Reset to screen coordinates for weather
+                ctx.save();
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                
+                // Draw weather particles
+                for (let i = 0; i < this.city.weather.particles.length; i++) {
+                    const particle = this.city.weather.particles[i];
+                    
+                    if (this.city.weather.type === 'rain') {
+                        ctx.strokeStyle = 'rgba(180, 200, 255, 0.7)';
+                        ctx.beginPath();
+                        ctx.moveTo(particle.x, particle.y);
+                        ctx.lineTo(particle.x - particle.size, particle.y + particle.size * 3);
+                        ctx.stroke();
+                    } else if (this.city.weather.type === 'snow') {
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                        ctx.beginPath();
+                        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (this.city.weather.type === 'fog') {
+                        ctx.fillStyle = `rgba(200, 200, 200, ${this.city.weather.intensity * 0.01})`;
+                        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    }
+                }
+                
+                // Add fog overlay if foggy
+                if (this.city.weather.type === 'fog') {
+                    ctx.fillStyle = `rgba(200, 200, 200, ${this.city.weather.intensity * 0.3})`;
+                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
+                
+                ctx.restore();
+            }
+            
+            getHeatMapColor(value, min, max, colors) {
+                // Normalize value
+                const normalized = (value - min) / (max - min);
+                
+                // Find the color stops that the value falls between
+                for (let i = 1; i < colors.length; i++) {
+                    const prevColor = colors[i - 1];
+                    const nextColor = colors[i];
+                    
+                    if (normalized <= nextColor.pos) {
+                        // Calculate the interpolation factor between the two color stops
+                        const factor = (normalized - prevColor.pos) / (nextColor.pos - prevColor.pos);
+                        
+                        // Parse colors
+                        const c1 = this.parseColor(prevColor.color);
+                        const c2 = this.parseColor(nextColor.color);
+                        
+                        // Interpolate RGB components
+                        const r = Math.round(c1.r + factor * (c2.r - c1.r));
+                        const g = Math.round(c1.g + factor * (c2.g - c1.g));
+                        const b = Math.round(c1.b + factor * (c2.b - c1.b));
+                        
+                        return `rgb(${r}, ${g}, ${b})`;
+                    }
+                }
+                
+                // If value exceeds max, return the last color
+                return colors[colors.length - 1].color;
+            }
+            
+            parseColor(color) {
+                // Parse CSS color in format #RRGGBB
+                const hex = color.replace('#', '');
+                return {
+                    r: parseInt(hex.substring(0, 2), 16),
+                    g: parseInt(hex.substring(2, 4), 16),
+                    b: parseInt(hex.substring(4, 6), 16)
+                };
+            }
+            
+            darkenColor(color, factor) {
+                const parsed = this.parseColor(color);
+                return `rgb(${Math.floor(parsed.r * factor)}, ${Math.floor(parsed.g * factor)}, ${Math.floor(parsed.b * factor)})`;
+            }
+            
+            lightenColor(color, factor) {
+                const parsed = this.parseColor(color);
+                return `rgb(${Math.min(255, Math.floor(parsed.r * factor))}, ${Math.min(255, Math.floor(parsed.g * factor))}, ${Math.min(255, Math.floor(parsed.b * factor))})`;
+            }
+        }
+        
+        // Main application code
+        let canvas, ctx, city, renderer;
+        let lastFrameTime = 0;
+        let simulationSpeed = 1;
+        let simulationRunning = true;
+        
+        function init() {
+            // Set up canvas
+            canvas = document.getElementById('cityCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // Resize canvas to fill window
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Create city with initial parameters
+            createCity();
+            
+            // Set up UI controls
+            setupUIControls();
+            
+            // Start animation loop
+            requestAnimationFrame(gameLoop);
+            
+            // Hide loading screen
+            setTimeout(() => {
+                document.getElementById('loading-screen').style.display = 'none';
+            }, 2000);
+        }
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        function createCity() {
+            // Get parameters from UI
+            const citySize = parseInt(document.getElementById('city-size').value);
+            const populationDensity = parseInt(document.getElementById('population-density').value);
+            const commercialRatio = parseInt(document.getElementById('commercial-ratio').value);
+            const roadComplexity = parseInt(document.getElementById('road-complexity').value);
+            
+            // Show loading screen
+            document.getElementById('loading-screen').style.display = 'flex';
+            
+            // Create city in a timeout to allow UI to update
+            setTimeout(() => {
+                document.getElementById('loading-message').textContent = 'Generating terrain...';
+                setTimeout(() => {
+                    // Create city
+                    city = new City(citySize, populationDensity, commercialRatio, roadComplexity);
+                    
+                    document.getElementById('loading-message').textContent = 'Creating road network...';
+                    setTimeout(() => {
+                        document.getElementById('loading-message').textContent = 'Building structures...';
+                        setTimeout(() => {
+                            document.getElementById('loading-message').textContent = 'Adding vehicles...';
+                            setTimeout(() => {
+                                // Create renderer
+                                renderer = new Renderer(canvas, city);
+                                
+                                // Set camera to center of city
+                                renderer.camera.x = city.size / 2;
+                                renderer.camera.y = city.size / 2;
+                                
+                                // Update stats display
+                                updateStatsDisplay();
+                                
+                                // Hide loading screen
+                                document.getElementById('loading-screen').style.display = 'none';
+                            }, 500);
+                        }, 500);
+                    }, 500);
+                }, 500);
+            }, 100);
+        }
+        
+        function setupUIControls() {
+            // Generate new city button
+            document.getElementById('new-city-btn').addEventListener('click', createCity);
+            
+            // Toggle simulation button
+            document.getElementById('toggle-simulation-btn').addEventListener('click', function() {
+                simulationRunning = !simulationRunning;
+                this.textContent = simulationRunning ? 'Pause Simulation' : 'Resume Simulation';
+            });
+            
+            // Simulation speed slider
+            document.getElementById('simulation-speed').addEventListener('input', function() {
+                simulationSpeed = parseFloat(this.value);
+                document.getElementById('speed-value').textContent = simulationSpeed;
+            });
+            
+            // City parameter sliders
+            const paramSliders = ['city-size', 'population-density', 'commercial-ratio', 'road-complexity'];
+            paramSliders.forEach(id => {
+                const slider = document.getElementById(id);
+                const valueDisplay = document.getElementById(id + '-value');
+                
+                slider.addEventListener('input', function() {
+                    valueDisplay.textContent = this.value;
+                });
+            });
+            
+            // Time controls
+            document.getElementById('time-day').addEventListener('click', function() {
+                city.time.cycle = false;
+                city.time.hour = 12;
+                city.time.isNight = false;
+            });
+            
+            document.getElementById('time-night').addEventListener('click', function() {
+                city.time.cycle = false;
+                city.time.hour = 22;
+                city.time.isNight = true;
+            });
+            
+            document.getElementById('time-cycle').addEventListener('click', function() {
+                city.time.cycle = true;
+            });
+        }
+        
+        function updateStatsDisplay() {
+            if (!city) return;
+            
+            // Update population display
+            document.getElementById('population-stat').textContent = `Population: ${city.population.toLocaleString()}`;
+            
+            // Update buildings count
+            document.getElementById('buildings-stat').textContent = `Buildings: ${city.buildings.length.toLocaleString()}`;
+            
+            // Update vehicles count
+            document.getElementById('vehicles-stat').textContent = `Vehicles: ${city.vehicles.length.toLocaleString()}`;
+            
+            // Update time display
+            let timeString = `Day ${city.time.day}, `;
+            timeString += `${city.time.hour.toString().padStart(2, '0')}:${Math.floor(city.time.minute).toString().padStart(2, '0')}`;
+            timeString += city.time.isNight ? ' (Night)' : ' (Day)';
+            document.getElementById('time-stat').textContent = `Time: ${timeString}`;
+            
+            // Update economy (simulated)
+            const economyStatus = ['Declining', 'Struggling', 'Stable', 'Growing', 'Booming'];
+            const economyIndex = Math.floor(Math.random() * 5);
+            document.getElementById('economy-stat').textContent = `Economy: ${economyStatus[economyIndex]}`;
+            
+            // Update happiness (simulated)
+            const happiness = Math.floor(Math.random() * 20) + 60; // 60-80%
+            document.getElementById('happiness-stat').textContent = `Happiness: ${happiness}%`;
+        }
+        
+        function gameLoop(timestamp) {
+            // Calculate delta time
+            if (!lastFrameTime) lastFrameTime = timestamp;
+            const deltaTime = (timestamp - lastFrameTime) / 1000; // Convert to seconds
+            lastFrameTime = timestamp;
+            
+            // Update city if simulation is running
+            if (simulationRunning && city) {
+                city.update(deltaTime, simulationSpeed);
+            }
+            
+            // Render city
+            if (renderer) {
+                renderer.render();
+            }
+            
+            // Update stats occasionally (not every frame to save performance)
+            if (timestamp % 30 < 16) {
+                updateStatsDisplay();
+            }
+            
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

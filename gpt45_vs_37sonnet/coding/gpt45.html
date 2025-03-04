@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Realistic Procedural City Simulator</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            color: white;
+            font-family: Arial;
+            border-radius: 8px;
+            z-index: 10;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+</head>
+<body>
+<div id="controls">
+    <button onclick="generateCity()">Regenerate City</button>
+    <label>Density: <input id="density" type="range" min="0.2" max="2" step="0.1" value="1"></label>
+</div>
+
+<script>
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(150, 150, 150);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.background = new THREE.Color(0x87CEFA);
+
+scene.add(new THREE.DirectionalLight(0xffffff, 1));
+scene.add(new THREE.AmbientLight(0x606060));
+
+let cityGroup = new THREE.Group();
+scene.add(cityGroup);
+
+function generateBuilding(height, type) {
+    let geometry;
+    switch(type) {
+        case 'residential': geometry = new THREE.BoxGeometry(4, height, 4); break;
+        case 'commercial': geometry = new THREE.CylinderGeometry(2.5, 4, height, 6); break;
+        case 'industrial': geometry = new THREE.BoxGeometry(6, height * 0.6, 6); break;
+        case 'skyscraper': geometry = new THREE.BoxGeometry(3, height * 1.5, 3); break;
+        default: geometry = new THREE.BoxGeometry(3, height, 3);
+    }
+    const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(Math.random(), Math.random(), Math.random()), flatShading: true });
+    return new THREE.Mesh(geometry, material);
+}
+
+function generateCity() {
+    cityGroup.clear();
+
+    const noise = new SimplexNoise();
+    const size = 80;
+    const density = parseFloat(document.getElementById('density').value);
+
+    for (let x = -size; x <= size; x += 5) {
+        for (let z = -size; z <= size; z += 5) {
+            const n = noise.noise2D(x / 50, z / 50);
+            let height = Math.floor((n + 1) * density * 10);
+
+            let type;
+            if (height < 4) {
+                type = 'park';
+            } else if (height < 7) {
+                type = 'residential';
+            } else if (height < 10) {
+                type = 'commercial';
+            } else {
+                type = 'skyscraper';
+            }
+
+            if (x % 10 === 0 || z % 10 === 0) {
+                const roadGeometry = new THREE.PlaneGeometry(8, 8);
+                const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
+                const road = new THREE.Mesh(roadGeometry, roadMaterial);
+                road.rotation.x = -Math.PI / 2;
+                road.position.set(x, 0.01, z);
+                cityGroup.add(road);
+            } else if (height < 4) {
+                const parkGeometry = new THREE.PlaneGeometry(5, 5);
+                const parkMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+                const park = new THREE.Mesh(parkGeometry, parkMaterial);
+                park.rotation.x = -Math.PI / 2;
+                park.position.set(x, 0.02, z);
+                cityGroup.add(park);
+            } else {
+                const building = generateBuilding(height, type);
+                building.position.set(x, height / 2, z);
+                cityGroup.add(building);
+            }
+        }
+    }
+}
+
+generateCity();
+
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
