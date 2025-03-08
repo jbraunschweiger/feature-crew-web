@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Space Miner</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { width: 100vw; height: 100vh; display: block; }
+    </style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+<script>
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Setup
+    const simplex = new SimplexNoise();
+    let moveForward = false, moveBackward = false;
+    let strafeLeft = false, strafeRight = false;
+    let mouseX = 0, mouseY = 0;
+    let playerVelocity = new THREE.Vector3();
+    const projectiles = [];
+    const asteroids = [];
+    
+    // Cockpit
+    const cockpitGeometry = new THREE.BoxGeometry(2, 1.5, 1);
+    const cockpitMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x444444,
+        wireframe: true
+    });
+    const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
+    cockpit.position.z = -1;
+    camera.add(cockpit);
+    
+    // Lighting
+    const light = new THREE.PointLight(0xffffff, 1, 500);
+    light.position.set(0, 0, 0);
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x404040));
+
+    // Player setup
+    camera.position.z = 0;
+    scene.add(camera);
+
+    // Generate asteroid field
+    function createAsteroid() {
+        const geometry = new THREE.IcosahedronGeometry(2, 1);
+        const positions = geometry.attributes.position.array;
+        const noise = simplex;
+        
+        for (let i = 0; i < positions.length; i += 3) {
+            const x = positions[i];
+            const y = positions[i + 1];
+            const z = positions[i + 2];
+            const scale = 0.3 + Math.random() * 0.7;
+            positions[i] = x + noise.noise3D(x, y, z) * scale;
+            positions[i + 1] = y + noise.noise3D(y, z, x) * scale;
+            positions[i + 2] = z + noise.noise3D(z, x, y) * scale;
+        }
+        
+        geometry.computeVertexNormals();
+        const material = new THREE.MeshPhongMaterial({
+            color: 0x808080,
+            shininess: 5
+        });
+        const asteroid = new THREE.Mesh(geometry, material);
+        
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 50 + Math.random() * 100;
+        asteroid.position.set(
+            Math.cos(angle) * radius,
+            Math.random() * 20 - 10,
+            Math.sin(angle) * radius
+        );
+        
+        asteroid.velocity = new THREE.Vector3(
+            Math.random() - 0.5,
+            Math.random() - 0.5,
+            Math.random() - 0.5
+        ).multiplyScalar(0.1);
+        
+        asteroid.size = 2;
+        return asteroid;
+    }
+
+    // Generate initial asteroids
+    for (let i = 0; i < 50; i++) {
+        const asteroid = createAsteroid();
+        scene.add(asteroid);
+        asteroids.push(asteroid);
+    }
+
+    // Controls
+    document.addEventListener('keydown', (e) => {
+        switch(e.key.toLowerCase()) {
+            case 'w': moveForward = true; break;
+            case 's': moveBackward = true; break;
+            case 'a': strafeLeft = true; break;
+            case 'd': strafeRight = true; break;
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        switch(e.key.toLowerCase()) {
+            case 'w': moveForward = false; break;
+            case 's': moveBackward = false; break;
+            case 'a': strafeLeft = false; break;
+            case 'd': strafeRight = false; break;
+        }
+    });
+
+    document.addEventListener('mousedown', () => {
+        document.body.requestPointerLock();
+        fireProjectile();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if(document.pointerLockElement === document.body) {
+            camera.rotation.y -= e.movementX * 0.002;
+            camera.rotation.x -= e.movementY * 0.002;
+            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+        }
+    });
+
+    function fireProjectile() {
+        const projectileGeometry = new THREE.SphereGeometry(0.1);
+        const projectileMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
+        
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        projectile.position.copy(camera.position);
+        projectile.velocity = direction.multiplyScalar(0.5);
+        projectile.lifetime = 0;
+        
+        scene.add(projectile);
+        projectiles.push(projectile);
+    }
+
+    // Collision detection
+    function checkCollisions() {
+        projectiles.forEach((projectile, pIndex) => {
+            asteroids.forEach((asteroid, aIndex) => {
+                const distance = projectile.position.distanceTo(asteroid.position);
+                if (distance < asteroid.size) {
+                    // Explosion effect
+                    const explosionGeometry = new THREE.BufferGeometry();
+                    const particles = 100;
+                    const positions = new Float32Array(particles * 3);
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        positions[i] = asteroid.position.x;
+                        positions[i + 1] = asteroid.position.y;
+                        positions[i + 2] = asteroid.position.z;
+                    }
+                    
+                    explosionGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    const explosionMaterial = new THREE.PointsMaterial({
+                        color: 0xff4500,
+                        size: 0.1
+                    });
+                    const explosion = new THREE.Points(explosionGeometry, explosionMaterial);
+                    scene.add(explosion);
+                    
+                    // Remove asteroid and projectile
+                    scene.remove(asteroid);
+                    scene.remove(projectile);
+                    asteroids.splice(aIndex, 1);
+                    projectiles.splice(pIndex, 1);
+                    
+                    // Split asteroid
+                    if(asteroid.size > 0.5) {
+                        for(let i = 0; i < 2; i++) {
+                            const fragment = createAsteroid();
+                            fragment.position.copy(asteroid.position);
+                            fragment.size = asteroid.size * 0.5;
+                            fragment.velocity.addScaledVector(
+                                new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5),
+                                0.2
+                            );
+                            scene.add(fragment);
+                            asteroids.push(fragment);
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    // Game loop
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // Player movement
+        const speed = 0.1;
+        const direction = new THREE.Vector3();
+        const rotation = camera.rotation.clone();
+        
+        if(moveForward) direction.z -= speed;
+        if(moveBackward) direction.z += speed;
+        if(strafeLeft) direction.x -= speed;
+        if(strafeRight) direction.x += speed;
+        
+        direction.applyEuler(rotation);
+        playerVelocity.add(direction);
+        playerVelocity.multiplyScalar(0.95);
+        camera.position.add(playerVelocity);
+
+        // Asteroid movement
+        asteroids.forEach(asteroid => {
+            asteroid.position.add(asteroid.velocity);
+            asteroid.rotation.x += 0.01;
+            asteroid.rotation.y += 0.01;
+        });
+
+        // Projectile movement
+        projectiles.forEach((projectile, index) => {
+            projectile.position.add(projectile.velocity);
+            projectile.lifetime++;
+            
+            if(projectile.lifetime > 100) {
+                scene.remove(projectile);
+                projectiles.splice(index, 1);
+            }
+        });
+
+        checkCollisions();
+        renderer.render(scene, camera);
+    }
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+</script>
+</body>
+</html>
