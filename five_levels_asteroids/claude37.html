@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D First-Person Asteroids</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 18px;
+            color: #fff;
+            text-shadow: 0 0 5px #000;
+            z-index: 10;
+        }
+        #health-display {
+            position: absolute;
+            top: 50px;
+            left: 20px;
+            font-size: 18px;
+            color: #fff;
+            text-shadow: 0 0 5px #000;
+            z-index: 10;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            pointer-events: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: "";
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.7);
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        #crosshair::after {
+            width: 20px;
+            height: 2px;
+            left: 0;
+            top: 9px;
+        }
+        #cockpit {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 25%;
+            background-image: radial-gradient(
+                circle at bottom,
+                transparent 65%,
+                rgba(30, 30, 50, 0.7) 70%,
+                rgba(20, 20, 40, 0.9) 100%
+            );
+            pointer-events: none;
+            z-index: 5;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+            z-index: 20;
+        }
+        #restart-button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+    <div id="score-display">Score: 0</div>
+    <div id="health-display">Health: 100%</div>
+    <div id="crosshair"></div>
+    <div id="cockpit"></div>
+    <div id="game-over">
+        <h1>Game Over</h1>
+        <p>Your final score: <span id="final-score">0</span></p>
+        <button id="restart-button">Play Again</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script>
+        // Game state variables
+        let score = 0;
+        let health = 100;
+        let isGameOver = false;
+        
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            canvas: document.getElementById('game-canvas')
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000011);
+        
+        // Add some ambient stars to the background
+        const starGeometry = new THREE.BufferGeometry();
+        const starMaterial = new THREE.PointsMaterial({
+            color: 0xFFFFFF,
+            size: 0.1,
+            sizeAttenuation: true
+        });
+        
+        const starVertices = [];
+        for (let i = 0; i < 10000; i++) {
+            const x = (Math.random() - 0.5) * 2000;
+            const y = (Math.random() - 0.5) * 2000;
+            const z = (Math.random() - 0.5) * 2000;
+            starVertices.push(x, y, z);
+        }
+        
+        starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+        
+        // Add a distant nebula for atmospheric effect
+        const nebulaGeometry = new THREE.SphereGeometry(500, 32, 32);
+        const nebulaMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4400aa,
+            transparent: true,
+            opacity: 0.1,
+            side: THREE.BackSide
+        });
+        const nebula = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
+        scene.add(nebula);
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x333333);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 3, 5);
+        scene.add(directionalLight);
+        
+        // Player ship setup
+        const player = {
+            velocity: new THREE.Vector3(0, 0, 0),
+            rotationVelocity: new THREE.Vector2(0, 0),
+            speed: 0.1,
+            rotationSpeed: 0.02,
+            maxSpeed: 0.5,
+            friction: 0.98,
+            projectiles: [],
+            lastFired: 0,
+            fireRate: 300 // milliseconds between shots
+        };
+        
+        // Camera represents the player's position
+        camera.position.set(0, 0, 0);
+        camera.lookAt(0, 0, -1);
+        
+        // Create Simplex Noise instance for asteroid generation
+        const simplex = new SimplexNoise();
+        
+        // Asteroid field
+        const asteroids = [];
+        const asteroidCount = 100;
+        const asteroidField = 200; // Field size
+        
+        // Explosion pool for reusing particle systems
+        const explosionPool = [];
+        const maxExplosions = 10;
+        
+        // Input handling
+        const keys = {};
+        
+        document.addEventListener('keydown', (event) => {
+            keys[event.code] = true;
+        });
+        
+        document.addEventListener('keyup', (event) => {
+            keys[event.code] = false;
+        });
+        
+        // Mouse handling for looking around
+        const mouse = {
+            x: 0,
+            y: 0,
+            locked: false
+        };
+        
+        document.addEventListener('mousemove', (event) => {
+            if (mouse.locked) {
+                mouse.x = event.movementX || 0;
+                mouse.y = event.movementY || 0;
+                
+                // Apply rotation based on mouse movement
+                player.rotationVelocity.x -= mouse.y * 0.002;
+                player.rotationVelocity.y -= mouse.x * 0.002;
+                
+                // Limit vertical rotation to prevent flipping
+                player.rotationVelocity.x = Math.max(-1.5, Math.min(1.5, player.rotationVelocity.x));
+            }
+        });
+        
+        document.addEventListener('click', () => {
+            if (!mouse.locked) {
+                document.getElementById('game-canvas').requestPointerLock();
+            }
+        });
+        
+        document.addEventListener('pointerlockchange', () => {
+            mouse.locked = document.pointerLockElement === document.getElementById('game-canvas');
+        });
+        
+        // Shooting with mouse
+        document.addEventListener('mousedown', (event) => {
+            if (mouse.locked && event.button === 0) {
+                fireProjectile();
+            }
+        });
+        
+        // Window resize handling
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Create a procedural asteroid using simplex noise
+        function createAsteroid(size = 1, position = null) {
+            // Random position if not specified
+            if (!position) {
+                let x, y, z;
+                do {
+                    x = (Math.random() - 0.5) * asteroidField * 2;
+                    y = (Math.random() - 0.5) * asteroidField * 2;
+                    z = (Math.random() - 0.5) * asteroidField * 2;
+                } while (Math.sqrt(x*x + y*y + z*z) < 20); // Ensure asteroids aren't too close to player
+                
+                position = new THREE.Vector3(x, y, z);
+            }
+            
+            // Base geometry
+            const geometry = new THREE.IcosahedronGeometry(size, 1);
+            const vertices = geometry.getAttribute('position');
+            
+            // Apply noise to vertices
+            const noiseScale = 0.5;
+            const noiseOffsetX = Math.random() * 100;
+            const noiseOffsetY = Math.random() * 100;
+            const noiseOffsetZ = Math.random() * 100;
+            
+            const newPositions = new Float32Array(vertices.count * 3);
+            
+            for (let i = 0; i < vertices.count; i++) {
+                const x = vertices.getX(i);
+                const y = vertices.getY(i);
+                const z = vertices.getZ(i);
+                
+                // Vector length
+                const length = Math.sqrt(x*x + y*y + z*z);
+                
+                // Normalized direction
+                const nx = x / length;
+                const ny = y / length;
+                const nz = z / length;
+                
+                // Apply noise
+                const noise = simplex.noise3D(
+                    nx * noiseScale + noiseOffsetX,
+                    ny * noiseScale + noiseOffsetY,
+                    nz * noiseScale + noiseOffsetZ
+                );
+                
+                // Adjust vertex position with noise
+                const distort = 0.5 * size;
+                newPositions[i * 3] = x + nx * noise * distort;
+                newPositions[i * 3 + 1] = y + ny * noise * distort;
+                newPositions[i * 3 + 2] = z + nz * noise * distort;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
+            geometry.computeVertexNormals();
+            
+            // Material with random dark color
+            const hue = Math.random() * 0.1 + 0.05; // Grey to light brown
+            const saturation = Math.random() * 0.3 + 0.2;
+            const lightness = Math.random() * 0.1 + 0.2;
+            
+            const material = new THREE.MeshStandardMaterial({
+                color: new THREE.Color().setHSL(hue, saturation, lightness),
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            
+            const asteroid = new THREE.Mesh(geometry, material);
+            asteroid.position.copy(position);
+            
+            // Random rotation and velocity
+            asteroid.rotation.set(
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2
+            );
+            
+            const rotationSpeed = Math.random() * 0.01 + 0.005;
+            asteroid.userData = {
+                size: size,
+                velocity: new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.05,
+                    (Math.random() - 0.5) * 0.05,
+                    (Math.random() - 0.5) * 0.05
+                ),
+                rotationAxis: new THREE.Vector3(
+                    Math.random() - 0.5,
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                ).normalize(),
+                rotationSpeed: rotationSpeed,
+                health: size * 10
+            };
+            
+            scene.add(asteroid);
+            asteroids.push(asteroid);
+            
+            return asteroid;
+        }
+        
+        // Create a projectile
+        function fireProjectile() {
+            const now = Date.now();
+            if (now - player.lastFired < player.fireRate || isGameOver) return;
+            
+            player.lastFired = now;
+            
+            const geometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const material = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+            const projectile = new THREE.Mesh(geometry, material);
+            
+            // Set position slightly in front of camera
+            const direction = new THREE.Vector3(0, 0, -1);
+            direction.applyQuaternion(camera.quaternion);
+            
+            projectile.position.copy(camera.position);
+            projectile.position.add(direction.multiplyScalar(1)); // Offset from camera
+            
+            // Store direction in userData
+            projectile.userData = {
+                velocity: direction.multiplyScalar(1.5), // Projectile speed
+                createdAt: now
+            };
+            
+            scene.add(projectile);
+            player.projectiles.push(projectile);
+            
+            // Add muzzle flash effect
+            createMuzzleFlash();
+        }
+        
+        function createMuzzleFlash() {
+            const flashGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+            const flashMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffaa33,
+                transparent: true,
+                opacity: 1
+            });
+            const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+            
+            // Position the flash at the muzzle
+            const direction = new THREE.Vector3(0, 0, -1);
+            direction.applyQuaternion(camera.quaternion);
+            
+            flash.position.copy(camera.position);
+            flash.position.add(direction.multiplyScalar(1.5));
+            
+            scene.add(flash);
+            
+            // Animate the flash
+            let opacity = 1;
+            const fadeOut = setInterval(() => {
+                opacity -= 0.1;
+                flashMaterial.opacity = opacity;
+                
+                if (opacity <= 0) {
+                    clearInterval(fadeOut);
+                    scene.remove(flash);
+                    flash.geometry.dispose();
+                    flashMaterial.dispose();
+                }
+            }, 20);
+        }
+        
+        // Create explosion particle system
+        function createExplosion(position, size) {
+            // Reuse an explosion from the pool if available
+            let explosion = explosionPool.pop();
+            
+            if (!explosion) {
+                const particles = 50 * size;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(particles * 3);
+                const velocities = new Float32Array(particles * 3);
+                const colors = new Float32Array(particles * 3);
+                
+                // Initialize particle system
+                for (let i = 0; i < particles; i++) {
+                    // Random position within a sphere
+                    const angle1 = Math.random() * Math.PI * 2;
+                    const angle2 = Math.random() * Math.PI;
+                    const radius = Math.random() * 0.1;
+                    
+                    positions[i * 3] = 0;
+                    positions[i * 3 + 1] = 0;
+                    positions[i * 3 + 2] = 0;
+                    
+                    // Random velocity in all directions
+                    velocities[i * 3] = Math.sin(angle1) * Math.sin(angle2) * (0.5 + Math.random() * 0.5) * size;
+                    velocities[i * 3 + 1] = Math.cos(angle2) * (0.5 + Math.random() * 0.5) * size;
+                    velocities[i * 3 + 2] = Math.cos(angle1) * Math.sin(angle2) * (0.5 + Math.random() * 0.5) * size;
+                    
+                    // Color gradient from yellow to red
+                    const r = 1;
+                    const g = Math.random() * 0.5 + 0.5; // 0.5 to 1.0
+                    const b = Math.random() * 0.1;
+                    
+                    colors[i * 3] = r;
+                    colors[i * 3 + 1] = g;
+                    colors[i * 3 + 2] = b;
+                }
+                
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
+                
+                const material = new THREE.PointsMaterial({
+                    size: 0.2,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 1
+                });
+                
+                explosion = new THREE.Points(geometry, material);
+                explosion.userData = {
+                    velocities: velocities,
+                    age: 0,
+                    maxAge: 60,
+                    size: size
+                };
+            } else {
+                // Reset the explosion
+                const positions = explosion.geometry.attributes.position.array;
+                const velocities = explosion.userData.velocities;
+                
+                for (let i = 0; i < positions.length / 3; i++) {
+                    positions[i * 3] = 0;
+                    positions[i * 3 + 1] = 0;
+                    positions[i * 3 + 2] = 0;
+                }
+                
+                explosion.geometry.attributes.position.needsUpdate = true;
+                explosion.material.opacity = 1;
+                explosion.userData.age = 0;
+                explosion.userData.size = size;
+            }
+            
+            explosion.position.copy(position);
+            scene.add(explosion);
+            
+            return explosion;
+        }
+        
+        // Update explosion particles
+        function updateExplosions() {
+            const toRemove = [];
+            
+            scene.children.forEach(child => {
+                if (child instanceof THREE.Points && child.userData.hasOwnProperty('age')) {
+                    const positions = child.geometry.attributes.position.array;
+                    const velocities = child.userData.velocities;
+                    
+                    // Update particles
+                    for (let i = 0; i < positions.length / 3; i++) {
+                        positions[i * 3] += velocities[i * 3] * 0.1;
+                        positions[i * 3 + 1] += velocities[i * 3 + 1] * 0.1;
+                        positions[i * 3 + 2] += velocities[i * 3 + 2] * 0.1;
+                        
+                        // Apply gravity (optional)
+                        velocities[i * 3 + 1] -= 0.01;
+                        
+                        // Apply drag
+                        velocities[i * 3] *= 0.99;
+                        velocities[i * 3 + 1] *= 0.99;
+                        velocities[i * 3 + 2] *= 0.99;
+                    }
+                    
+                    child.geometry.attributes.position.needsUpdate = true;
+                    
+                    // Fade out
+                    child.userData.age++;
+                    child.material.opacity = 1 - (child.userData.age / child.userData.maxAge);
+                    
+                    if (child.userData.age >= child.userData.maxAge) {
+                        toRemove.push(child);
+                    }
+                }
+            });
+            
+            // Remove expired explosions and add to pool
+            toRemove.forEach(explosion => {
+                scene.remove(explosion);
+                if (explosionPool.length < maxExplosions) {
+                    explosionPool.push(explosion);
+                }
+            });
+        }
+        
+        // Split asteroid into smaller pieces
+        function splitAsteroid(asteroid, impactDirection) {
+            const position = asteroid.position.clone();
+            const size = asteroid.userData.size;
+            
+            // Create an explosion
+            createExplosion(position, size);
+            
+            // If asteroid is large enough, split it
+            if (size >= 0.5) {
+                const pieces = Math.floor(Math.random() * 2) + 2; // 2-3 pieces
+                const newSize = size * 0.5;
+                
+                for (let i = 0; i < pieces; i++) {
+                    // Offset position slightly
+                    const offset = new THREE.Vector3(
+                        (Math.random() - 0.5) * size,
+                        (Math.random() - 0.5) * size,
+                        (Math.random() - 0.5) * size
+                    );
+                    
+                    const newPosition = position.clone().add(offset);
+                    const newAsteroid = createAsteroid(newSize, newPosition);
+                    
+                    // Add explosion impulse to velocity
+                    newAsteroid.userData.velocity.add(
+                        impactDirection.clone().multiplyScalar(0.1).add(offset.normalize().multiplyScalar(0.05))
+                    );
+                }
+            }
+            
+            // Remove the original asteroid
+            removeAsteroid(asteroid);
+            
+            // Add score
+            score += Math.floor(size * 10);
+            document.getElementById('score-display').textContent = `Score: ${score}`;
+        }
+        
+        function removeAsteroid(asteroid) {
+            scene.remove(asteroid);
+            const index = asteroids.indexOf(asteroid);
+            if (index !== -1) {
+                asteroids.splice(index, 1);
+            }
+            
+            // Dispose of geometries and materials
+            asteroid.geometry.dispose();
+            asteroid.material.dispose();
+        }
+        
+        // Initialize the game
+        function initGame() {
+            // Create asteroids
+            for (let i = 0; i < asteroidCount; i++) {
+                const size = Math.random() * 2 + 1; // Size between 1 and 3
+                createAsteroid(size);
+            }
+            
+            // Reset game variables
+            score = 0;
+            health = 100;
+            isGameOver = false;
+            
+            document.getElementById('score-display').textContent = `Score: ${score}`;
+            document.getElementById('health-display').textContent = `Health: ${health}%`;
+            document.getElementById('game-over').style.display = 'none';
+            
+            // Clear any remaining projectiles
+            player.projectiles.forEach(projectile => {
+                scene.remove(projectile);
+                projectile.geometry.dispose();
+                projectile.material.dispose();
+            });
+            player.projectiles = [];
+            
+            // Reset player position and velocity
+            camera.position.set(0, 0, 0);
+            camera.lookAt(0, 0, -1);
+            player.velocity.set(0, 0, 0);
+            player.rotationVelocity.set(0, 0);
+        }
+        
+        // Handle game over
+        function gameOver() {
+            isGameOver = true;
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('game-over').style.display = 'block';
+            document.exitPointerLock();
+        }
+        
+        // Handle player taking damage
+        function playerDamage(amount) {
+            health -= amount;
+            document.getElementById('health-display').textContent = `Health: ${health}%`;
+            
+            if (health <= 0) {
+                gameOver();
+            }
+        }
+        
+        // Update game
+        function update() {
+            if (!isGameOver) {
+                // Handle player movement
+                updatePlayerMovement();
+                
+                // Update projectiles
+                updateProjectiles();
+                
+                // Update asteroids
+                updateAsteroids();
+                
+                // Update explosions
+                updateExplosions();
+                
+                // Check for out of bounds
+                checkBounds();
+                
+                // Check for new asteroids needed
+                ensureAsteroidCount();
+            }
+        }
+        
+        function updatePlayerMovement() {
+            // Apply rotation velocity
+            camera.rotation.x += player.rotationVelocity.x;
+            camera.rotation.y += player.rotationVelocity.y;
+            
+            // Clamp vertical rotation to prevent flipping
+            camera.rotation.x = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, camera.rotation.x));
+            
+            // Apply rotation damping
+            player.rotationVelocity.x *= 0.9;
+            player.rotationVelocity.y *= 0.9;
+            
+            // Get forward direction
+            const forward = new THREE.Vector3(0, 0, -1);
+            forward.applyQuaternion(camera.quaternion);
+            
+            // Get right direction
+            const right = new THREE.Vector3(1, 0, 0);
+            right.applyQuaternion(camera.quaternion);
+            
+            // Get up direction
+            const up = new THREE.Vector3(0, 1, 0);
+            
+            // Handle keyboard input
+            if (keys['KeyW']) {
+                player.velocity.add(forward.clone().multiplyScalar(player.speed));
+            }
+            if (keys['KeyS']) {
+                player.velocity.add(forward.clone().multiplyScalar(-player.speed * 0.5));
+            }
+            if (keys['KeyA']) {
+                player.velocity.add(right.clone().multiplyScalar(-player.speed));
+            }
+            if (keys['KeyD']) {
+                player.velocity.add(right.clone().multiplyScalar(player.speed));
+            }
+            if (keys['Space']) {
+                player.velocity.add(up.clone().multiplyScalar(player.speed));
+            }
+            if (keys['ShiftLeft']) {
+                player.velocity.add(up.clone().multiplyScalar(-player.speed));
+            }
+            
+            // Limit max speed
+            const speed = player.velocity.length();
+            if (speed > player.maxSpeed) {
+                player.velocity.multiplyScalar(player.maxSpeed / speed);
+            }
+            
+            // Apply velocity
+            camera.position.add(player.velocity);
+            
+            // Apply friction
+            player.velocity.multiplyScalar(player.friction);
+            
+            // Fire projectile with space
+            if (keys['KeyE']) {
+                fireProjectile();
+            }
+        }
+        
+        function updateProjectiles() {
+            const now = Date.now();
+            const projectilesToRemove = [];
+            
+            player.projectiles.forEach(projectile => {
+                // Update position
+                projectile.position.add(projectile.userData.velocity);
+                
+                // Check lifetime
+                if (now - projectile.userData.createdAt > 2000) {
+                    projectilesToRemove.push(projectile);
+                    return;
+                }
+                
+                // Check collisions with asteroids
+                asteroids.forEach(asteroid => {
+                    const distance = projectile.position.distanceTo(asteroid.position);
+                    
+                    // Simple collision detection using bounding spheres
+                    if (distance < asteroid.userData.size + 0.1) {
+                        // Damage asteroid
+                        asteroid.userData.health -= 5;
+                        
+                        if (asteroid.userData.health <= 0) {
+                            splitAsteroid(asteroid, projectile.userData.velocity.clone().normalize());
+                        }
+                        
+                        // Create small impact explosion
+                        createExplosion(projectile.position.clone(), 0.3);
+                        
+                        // Remove projectile
+                        projectilesToRemove.push(projectile);
+                    }
+                });
+            });
+            
+            // Remove expired projectiles
+            projectilesToRemove.forEach(projectile => {
+                scene.remove(projectile);
+                const index = player.projectiles.indexOf(projectile);
+                if (index !== -1) {
+                    player.projectiles.splice(index, 1);
+                }
+                
+                // Dispose of geometries and materials
+                projectile.geometry.dispose();
+                projectile.material.dispose();
+            });
+        }
+        
+        function updateAsteroids() {
+            asteroids.forEach(asteroid => {
+                // Update position
+                asteroid.position.add(asteroid.userData.velocity);
+                
+                // Update rotation
+                asteroid.rotateOnAxis(asteroid.userData.rotationAxis, asteroid.userData.rotationSpeed);
+                
+                // Check collision with player
+                const distance = asteroid.position.distanceTo(camera.position);
+                if (distance < asteroid.userData.size + 0.5) {
+                    // Calculate damage based on asteroid size and relative velocity
+                    const relativeVelocity = new THREE.Vector3().subVectors(
+                        asteroid.userData.velocity,
+                        player.velocity
+                    ).length();
+                    
+                    const damage = Math.floor(asteroid.userData.size * relativeVelocity * 10);
+                    
+                    // Apply damage and split asteroid
+                    playerDamage(damage);
+                    splitAsteroid(asteroid, player.velocity.clone().normalize().negate());
+                    
+                    // Apply impact force to player
+                    const impactDirection = new THREE.Vector3().subVectors(
+                        camera.position,
+                        asteroid.position
+                    ).normalize();
+                    
+                    player.velocity.add(impactDirection.multiplyScalar(asteroid.userData.size * 0.2));
+                }
+            });
+        }
+        
+        // Check if player is too far from origin and wrap around
+        function checkBounds() {
+            const maxDistance = asteroidField * 1.5;
+            const distance = camera.position.length();
+            
+            if (distance > maxDistance) {
+                // Wrap around to the opposite side
+                camera.position.multiplyScalar(-0.95);
+                
+                // Visual feedback for warping
+                createWarpEffect();
+            }
+        }
+        
+        // Create a warp effect when the player wraps around the boundary
+        function createWarpEffect() {
+            const warpGeometry = new THREE.RingGeometry(0.1, 15, 32);
+            const warpMaterial = new THREE.MeshBasicMaterial({
+                color: 0x0088ff,
+                transparent: true,
+                opacity: 0.7,
+                side: THREE.DoubleSide
+            });
+            
+            const warp = new THREE.Mesh(warpGeometry, warpMaterial);
+            warp.position.copy(camera.position);
+            
+            // Orient the ring to face the camera
+            warp.lookAt(camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3())));
+            
+            scene.add(warp);
+            
+            // Animate the warp effect
+            const duration = 1000; // ms
+            const startTime = Date.now();
+            
+            const animateWarp = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = elapsed / duration;
+                
+                if (progress < 1) {
+                    // Scale the ring outward
+                    warp.scale.set(1 + progress * 2, 1 + progress * 2, 1);
+                    
+                    // Fade out
+                    warpMaterial.opacity = 0.7 * (1 - progress);
+                    
+                    requestAnimationFrame(animateWarp);
+                } else {
+                    scene.remove(warp);
+                    warp.geometry.dispose();
+                    warpMaterial.dispose();
+                }
+            };
+            
+            animateWarp();
+        }
+        
+        // Ensure there are always enough asteroids in play
+        function ensureAsteroidCount() {
+            const minAsteroids = 50;
+            
+            if (asteroids.length < minAsteroids) {
+                const newCount = minAsteroids - asteroids.length;
+                
+                for (let i = 0; i < newCount; i++) {
+                    const size = Math.random() * 2 + 1;
+                    createAsteroid(size);
+                }
+            }
+        }
+        
+        // Restart game when button is clicked
+        document.getElementById('restart-button').addEventListener('click', () => {
+            initGame();
+        });
+        
+        // Initialize the game
+        initGame();
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            update();
+            renderer.render(scene, camera);
+        }
+        
+        animate();
+    </script>
+</body>
+</html>

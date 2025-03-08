@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Space Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        camera.position.set(0, 0, 0);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(1, 1, 1).normalize();
+        scene.add(directionalLight);
+
+        // Starfield
+        const starGeometry = new THREE.BufferGeometry();
+        const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 1 });
+        const starVertices = [];
+        for (let i = 0; i < 10000; i++) {
+            starVertices.push(
+                (Math.random() - 0.5) * 2000,
+                (Math.random() - 0.5) * 2000,
+                (Math.random() - 0.5) * 2000
+            );
+        }
+        starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        // Procedural asteroid generation
+        const noise = new SimplexNoise();
+        const asteroids = [];
+
+        function generateAsteroid(radius, detail) {
+            const geometry = new THREE.IcosahedronGeometry(radius, detail);
+            const positionAttribute = geometry.attributes.position;
+            for (let i = 0; i < positionAttribute.count; i++) {
+                const vertex = new THREE.Vector3();
+                vertex.fromBufferAttribute(positionAttribute, i);
+                const noiseValue = noise.noise3D(vertex.x * 0.1, vertex.y * 0.1, vertex.z * 0.1) * 0.5;
+                vertex.normalize().multiplyScalar(radius + noiseValue);
+                positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+            }
+            geometry.computeVertexNormals();
+            geometry.computeBoundingSphere();
+            const material = new THREE.MeshStandardMaterial({ color: 0x888888 });
+            const asteroid = new THREE.Mesh(geometry, material);
+            asteroid.userData.radius = radius;
+            return asteroid;
+        }
+
+        // Initialize asteroids
+        for (let i = 0; i < 20; i++) {
+            const asteroid = generateAsteroid(5 + Math.random() * 10, 2);
+            asteroid.position.set(
+                (Math.random() - 0.5) * 1000,
+                (Math.random() - 0.5) * 1000,
+                (Math.random() - 0.5) * 1000
+            );
+            asteroid.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1
+            );
+            scene.add(asteroid);
+            asteroids.push(asteroid);
+        }
+
+        // Player controls
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            ArrowUp: false,
+            ArrowDown: false,
+            KeyW: false,
+            KeyS: false,
+            Space: false
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = false;
+            }
+        });
+
+        const rotationSpeed = 0.02;
+        const thrustSpeed = 0.1;
+
+        // Projectiles
+        const projectiles = [];
+
+        function fireProjectile() {
+            if (!keys.Space) return; // Prevent rapid fire on hold
+            const geometry = new THREE.SphereGeometry(0.5, 8, 8);
+            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const projectile = new THREE.Mesh(geometry, material);
+            projectile.position.copy(camera.position);
+            projectile.velocity = new THREE.Vector3(0, 0, -1)
+                .applyQuaternion(camera.quaternion)
+                .multiplyScalar(5);
+            scene.add(projectile);
+            projectiles.push(projectile);
+            keys.Space = false; // Reset to allow next shot
+        }
+
+        // Debris generation for explosions
+        function generateDebris(position) {
+            const debrisCount = 5;
+            for (let i = 0; i < debrisCount; i++) {
+                const geometry = new THREE.SphereGeometry(1, 4, 4);
+                const material = new THREE.MeshBasicMaterial({ color: 0x888888 });
+                const debris = new THREE.Mesh(geometry, material);
+                debris.position.copy(position);
+                debris.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 2
+                ).normalize().multiplyScalar(0.5);
+                scene.add(debris);
+                setTimeout(() => scene.remove(debris), 2000);
+            }
+        }
+
+        // Game loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Player movement
+            if (keys.ArrowLeft) camera.rotation.y += rotationSpeed;
+            if (keys.ArrowRight) camera.rotation.y -= rotationSpeed;
+            if (keys.ArrowUp) camera.rotation.x += rotationSpeed;
+            if (keys.ArrowDown) camera.rotation.x -= rotationSpeed;
+            if (keys.KeyW) camera.translateZ(-thrustSpeed);
+            if (keys.KeyS) camera.translateZ(thrustSpeed);
+
+            // Fire projectiles
+            fireProjectile();
+
+            // Update asteroids
+            asteroids.forEach(asteroid => {
+                asteroid.position.add(asteroid.velocity);
+            });
+
+            // Update projectiles
+            projectiles.forEach(projectile => {
+                projectile.position.add(projectile.velocity);
+            });
+
+            // Collision detection and response
+            projectiles.forEach(projectile => {
+                asteroids.forEach(asteroid => {
+                    const distance = projectile.position.distanceTo(asteroid.position);
+                    if (distance < asteroid.geometry.boundingSphere.radius) {
+                        projectile.toRemove = true;
+                        if (asteroid.userData.radius > 5) {
+                            asteroid.toSplit = true;
+                        } else {
+                            asteroid.toRemove = true;
+                        }
+                    }
+                });
+            });
+
+            // Handle asteroid splitting
+            asteroids.forEach(asteroid => {
+                if (asteroid.toSplit) {
+                    const newRadius = asteroid.userData.radius / 2;
+                    for (let i = 0; i < 2; i++) {
+                        const newAsteroid = generateAsteroid(newRadius, 2);
+                        newAsteroid.position.copy(asteroid.position);
+                        newAsteroid.position.x += (Math.random() - 0.5) * newRadius;
+                        newAsteroid.position.y += (Math.random() - 0.5) * newRadius;
+                        newAsteroid.position.z += (Math.random() - 0.5) * newRadius;
+                        newAsteroid.velocity = asteroid.velocity.clone().add(
+                            new THREE.Vector3(
+                                (Math.random() - 0.5) * 0.1,
+                                (Math.random() - 0.5) * 0.1,
+                                (Math.random() - 0.5) * 0.1
+                            )
+                        );
+                        scene.add(newAsteroid);
+                        asteroids.push(newAsteroid);
+                    }
+                    asteroid.toRemove = true;
+                }
+            });
+
+            // Clean up
+            asteroids = asteroids.filter(asteroid => {
+                if (asteroid.toRemove) {
+                    scene.remove(asteroid);
+                    if (!asteroid.toSplit) generateDebris(asteroid.position);
+                    return false;
+                }
+                return true;
+            });
+
+            projectiles = projectiles.filter(projectile => {
+                if (projectile.toRemove || projectile.position.distanceTo(camera.position) > 1000) {
+                    scene.remove(projectile);
+                    return false;
+                }
+                return true;
+            });
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
