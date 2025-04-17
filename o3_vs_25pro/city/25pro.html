@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cozy City Explorer</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #000; color: white; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; /* Allow clicks through UI */ }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background-color: rgba(255, 255, 255, 0.5); border-radius: 50%; transform: translate(-50%, -50%); }
+        #instructions { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; text-align: center; pointer-events: auto; cursor: pointer; }
+        #info { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 1em; }
+        #motesCounter { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="instructions">Click to Enter Explore Mode</div>
+        <div id="crosshair" style="display: none;">+</div>
+        <div id="info">Status: Initializing...</div>
+        <div id="motesCounter">Motes: 0 / 0</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+
+    <script>
+        // --- Constants ---
+        const PLAYER_HEIGHT = 1.8;
+        const PLAYER_SPEED = 5.0;
+        const PLAYER_SPRINT_MUL = 1.8;
+        const MOUSE_SENSITIVITY = 0.002;
+        const GRAVITY = 9.8; // Simple gravity/ground check
+        const COLLECTABLE_COUNT = 50;
+        const COLLECT_DISTANCE = 2.0; // How close to collect
+
+        // --- Global Variables ---
+        let scene, camera, renderer, simplex, clock;
+        let cityContainer; // Group for static city elements (instanced meshes, ground)
+
+        // Instanced Meshes
+        let buildingInstances, treeInstances, streetlightInstances, collectableInstances;
+        const MAX_BUILDINGS = 5000; // Pre-allocate buffer size
+        const MAX_TREES = 1000;
+        const MAX_STREETLIGHTS = 500;
+        const MAX_COLLECTABLES = 100; // Should match or exceed COLLECTABLE_COUNT
+
+        // Player State
+        let player = {
+            body: new THREE.Object3D(), // Use an Object3D to represent player position/orientation
+            velocity: new THREE.Vector3(),
+            onGround: true, // Simple ground check flag
+            controlsLocked: false,
+            moveForward: false,
+            moveBackward: false,
+            moveLeft: false,
+            moveRight: false,
+            sprinting: false,
+        };
+
+        // Game State
+        let simulationTime = 0;
+        let weatherState = 'clear'; // clear, rain, fog
+        let motesCollected = 0;
+        let totalMotes = 0;
+        let collectableData = []; // Store { position: Vector3, collected: bool, matrixId: int }
+
+        // City Parameters (Simplified)
+        let currentSeed = Date.now().toString();
+        let cityParams = {
+            gridSize: 12, // Larger grid, optimized with instancing
+            blockSize: 50,
+            roadWidth: 8,
+            buildingDensity: 0.6, // Moderate density for cozy feel
+            maxBuildingHeight: 30,
+            treeDensity: 0.4,
+            streetlightDensity: 0.3,
+            zoneNoiseScale: 0.05,
+            heightNoiseScale: 0.08,
+        };
+
+        // Materials Cache (Cozy Palette)
+        const materials = {
+            ground: new THREE.MeshStandardMaterial({ color: 0x559955, roughness: 0.9 }),
+            road: new THREE.MeshStandardMaterial({ color: 0x5a5a5a, roughness: 0.85 }),
+            park: new THREE.MeshStandardMaterial({ color: 0x448844, roughness: 0.9 }),
+            buildingBase: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), // Use vertex colors for variety
+            treeTrunk: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 }),
+            treeLeaves: new THREE.MeshStandardMaterial({ color: 0x33aa33, roughness: 0.8 }),
+            streetlightPole: new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.6, roughness: 0.5 }),
+            streetlightLamp: new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffaa, emissiveIntensity: 0 }),
+            collectable: new THREE.MeshStandardMaterial({ color: 0xffdd88, emissive: 0xffaa00, roughness: 0.3, metalness: 0.2 }),
+            // Rain particle material (optional simple plane overlay)
+            rainOverlay: new THREE.MeshBasicMaterial({ map: createRainTexture(), transparent: true, opacity: 0.3, depthWrite: false })
+        };
+
+        // Geometries Cache (Low Poly)
+        const geometries = {
+            // Use a few base building shapes for variety in InstancedMesh
+            buildingBox: new THREE.BoxGeometry(1, 1, 1), // Will be scaled by instance matrix
+            buildingBoxFlatRoof: new THREE.BoxGeometry(1, 1, 1), // Can add roof variations later if needed
+            treeTrunk: new THREE.CylinderGeometry(0.2, 0.3, 1, 6), // Low poly
+            treeLeaves: new THREE.IcosahedronGeometry(1, 0), // Low poly sphere
+            streetlightPole: new THREE.CylinderGeometry(0.1, 0.15, 1, 6),
+            streetlightLamp: new THREE.SphereGeometry(0.25, 6, 5),
+            collectable: new THREE.IcosahedronGeometry(0.3, 0), // Glowing mote
+            groundPlane: new THREE.PlaneGeometry(1, 1), // Will be scaled
+            roadPlane: new THREE.PlaneGeometry(1, 1), // Will be scaled
+        };
+
+        // DOM Elements
+        const dom = {
+            instructions: document.getElementById('instructions'),
+            crosshair: document.getElementById('crosshair'),
+            info: document.getElementById('info'),
+            motesCounter: document.getElementById('motesCounter'),
+            canvas: null // Will be set in init
+        };
+
+        // --- Initialization ---
+        function init() {
+            dom.info.textContent = 'Status: Setting up scene...';
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(scene.background, 50, 250); // Start with moderate fog
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, PLAYER_HEIGHT, 5); // Initial camera position slightly offset
+            player.body.add(camera); // Attach camera to player body object
+            scene.add(player.body); // Add player body (which contains camera) to scene
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows look cozier
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            document.body.appendChild(renderer.domElement);
+            dom.canvas = renderer.domElement;
+
+            clock = new THREE.Clock();
+            simplex = new SimplexNoise(); // Seeded in generateCity
+
+            // Lighting (Cozy Adjustments)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xffffff, 0.8); // Slightly less intense sun
+            sunLight.position.set(50, 80, 30);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 1024; // Reduced shadow map size for performance
+            sunLight.shadow.mapSize.height = 1024;
+            sunLight.shadow.camera.near = 10;
+            sunLight.shadow.camera.far = 200;
+            const shadowCamSize = 100; // Adjust based on city size if needed
+            sunLight.shadow.camera.left = -shadowCamSize;
+            sunLight.shadow.camera.right = shadowCamSize;
+            sunLight.shadow.camera.top = shadowCamSize;
+            sunLight.shadow.camera.bottom = -shadowCamSize;
+            scene.add(sunLight);
+            scene.add(sunLight.target); // Important for light direction
+
+            // Hemisphere Light for softer fill
+            const hemiLight = new THREE.HemisphereLight(0xccccff, 0x777744, 0.3); // Sky color, ground color, intensity
+            scene.add(hemiLight);
+
+            // Container for city elements
+            cityContainer = new THREE.Group();
+            scene.add(cityContainer);
+
+            // Initialize Instanced Meshes (will be populated in generateCity)
+            initInstancedMeshes();
+
+            // Event Listeners
+            setupEventListeners();
+
+            // Initial City Generation
+            dom.info.textContent = 'Status: Generating cozy city...';
+            generateCity();
+
+            dom.info.textContent = 'Status: Ready. Click to explore!';
+            animate();
+        }
+
+        function initInstancedMeshes() {
+            // Buildings (using vertex colors for variety)
+             const buildingMat = materials.buildingBase.clone(); // Clone to avoid modifying original
+            buildingInstances = new THREE.InstancedMesh(geometries.buildingBox, buildingMat, MAX_BUILDINGS);
+            buildingInstances.castShadow = true;
+            buildingInstances.receiveShadow = true;
+            buildingInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // Might update instances (e.g., destruction, NYI)
+            buildingInstances.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BUILDINGS * 3), 3);
+            buildingInstances.geometry.setAttribute('instanceColor', buildingInstances.instanceColor);
+            buildingInstances.instanceColor.setUsage(THREE.DynamicDrawUsage);
+             buildingInstances.count = 0; // Start with 0 visible instances
+            cityContainer.add(buildingInstances);
+
+
+            // Trees
+            const treeTrunkInstances = new THREE.InstancedMesh(geometries.treeTrunk, materials.treeTrunk, MAX_TREES);
+            treeTrunkInstances.castShadow = true;
+             treeTrunkInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+             treeTrunkInstances.count = 0;
+             cityContainer.add(treeTrunkInstances);
+
+            const treeLeavesInstances = new THREE.InstancedMesh(geometries.treeLeaves, materials.treeLeaves, MAX_TREES);
+            treeLeavesInstances.castShadow = true;
+             treeLeavesInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+             treeLeavesInstances.count = 0;
+            cityContainer.add(treeLeavesInstances);
+             // Store references for easier access in generation
+             treeInstances = { trunks: treeTrunkInstances, leaves: treeLeavesInstances };
+
+
+            // Streetlights
+            const streetlightPoleInstances = new THREE.InstancedMesh(geometries.streetlightPole, materials.streetlightPole, MAX_STREETLIGHTS);
+            streetlightPoleInstances.castShadow = true;
+             streetlightPoleInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+             streetlightPoleInstances.count = 0;
+             cityContainer.add(streetlightPoleInstances);
+
+            const streetlightLampInstances = new THREE.InstancedMesh(geometries.streetlightLamp, materials.streetlightLamp.clone(), MAX_STREETLIGHTS); // Clone for unique emissive later? No, handle via shader maybe or separate lights
+             streetlightLampInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+             streetlightLampInstances.count = 0;
+            // Need separate point lights array for night time glow, instance mesh can't control individual lights easily.
+             // Or, we fake it with just emissive material on the instance, controlled globally by time of day. Let's do that for simplicity.
+            cityContainer.add(streetlightLampInstances);
+             streetlightInstances = { poles: streetlightPoleInstances, lamps: streetlightLampInstances };
+
+             // Collectables
+             collectableInstances = new THREE.InstancedMesh(geometries.collectable, materials.collectable, MAX_COLLECTABLES);
+             collectableInstances.castShadow = false; // Small glowing things don't need shadows
+             collectableInstances.receiveShadow = false;
+             collectableInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // We will move/hide collected ones
+             collectableInstances.count = 0;
+             cityContainer.add(collectableInstances);
+        }
+
+        function setupEventListeners() {
+            window.addEventListener('resize', onWindowResize);
+
+            // Pointer Lock for Mouse Look
+            dom.instructions.addEventListener('click', () => {
+                dom.canvas.requestPointerLock();
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === dom.canvas) {
+                    player.controlsLocked = true;
+                    dom.instructions.style.display = 'none';
+                    dom.crosshair.style.display = 'block';
+                    // Add key/mouse listeners only when locked
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('keydown', onKeyDown);
+                    document.addEventListener('keyup', onKeyUp);
+                } else {
+                    player.controlsLocked = false;
+                    dom.instructions.style.display = 'block';
+                    dom.crosshair.style.display = 'none';
+                    // Remove listeners when unlocked
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('keydown', onKeyDown);
+                    document.removeEventListener('keyup', onKeyUp);
+                     // Reset movement keys on unlock
+                    player.moveForward = false; player.moveBackward = false; player.moveLeft = false; player.moveRight = false; player.sprinting = false;
+                }
+            });
+        }
+
+        // --- City Generation (Using Instancing) ---
+        function generateCity() {
+            console.time("City Generation (Instanced)");
+            dom.info.textContent = 'Status: Planting seeds...';
+
+            simplex = new SimplexNoise(currentSeed); // Seed the generator
+
+            // --- Clear Existing City Data ---
+            cityContainer.remove(...cityContainer.children.filter(c => !(c instanceof THREE.InstancedMesh))); // Remove old ground/roads
+            buildingInstances.count = 0;
+            treeInstances.trunks.count = 0;
+            treeInstances.leaves.count = 0;
+            streetlightInstances.poles.count = 0;
+            streetlightInstances.lamps.count = 0;
+            collectableInstances.count = 0;
+            collectableData = [];
+            motesCollected = 0;
+
+
+            // --- Generate Ground & Roads ---
+            const cityWorldSize = cityParams.gridSize * cityParams.blockSize;
+            const groundSize = cityWorldSize * 1.5;
+            const groundGeo = geometries.groundPlane; // Reuse geometry
+            const ground = new THREE.Mesh(groundGeo, materials.ground);
+            ground.scale.set(groundSize, groundSize, 1);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            cityContainer.add(ground);
+
+            const roadLength = cityWorldSize + cityParams.roadWidth; // Cover full extent + intersections
+            const hRoadGeo = geometries.roadPlane;
+            const vRoadGeo = geometries.roadPlane;
+
+            for (let i = 0; i <= cityParams.gridSize; i++) {
+                const roadOffset = (i * cityParams.blockSize) - cityWorldSize / 2 - cityParams.blockSize / 2 + cityParams.roadWidth / 2;
+
+                // Horizontal Road
+                const hRoad = new THREE.Mesh(hRoadGeo, materials.road);
+                hRoad.scale.set(roadLength, cityParams.roadWidth, 1);
+                hRoad.rotation.x = -Math.PI / 2;
+                hRoad.position.set(0, 0.01, roadOffset); // Slightly above ground
+                hRoad.receiveShadow = true;
+                cityContainer.add(hRoad);
+
+                // Vertical Road
+                const vRoad = new THREE.Mesh(vRoadGeo, materials.road);
+                 vRoad.scale.set(cityParams.roadWidth, roadLength, 1); // Scale X for width, Y for length
+                vRoad.rotation.x = -Math.PI / 2;
+                 vRoad.rotation.z = Math.PI / 2; // Rotate the scaled plane
+                vRoad.position.set(roadOffset, 0.02, 0); // Slightly above horizontal roads
+                vRoad.receiveShadow = true;
+                cityContainer.add(vRoad);
+            }
+             dom.info.textContent = 'Status: Laying foundations...';
+
+
+            // --- Generate Instanced Objects ---
+            const halfCityWorldSize = cityWorldSize / 2;
+            let buildingCount = 0;
+            let treeCount = 0;
+            let streetlightCount = 0;
+            let collectableCount = 0;
+            const dummy = new THREE.Object3D(); // Helper object for matrix calculations
+
+            // Define some base colors for zones (to blend between)
+             const resColor1 = new THREE.Color(0x88ccff); const resColor2 = new THREE.Color(0x66aadd);
+             const comColor1 = new THREE.Color(0xffdd88); const comColor2 = new THREE.Color(0xeea566);
+             const indColor1 = new THREE.Color(0xcccccc); const indColor2 = new THREE.Color(0xaaaaaa);
+             const parkColor = new THREE.Color(0x448844);
+
+            for (let i = 0; i < cityParams.gridSize; i++) {
+                for (let j = 0; j < cityParams.gridSize; j++) {
+                    const blockCenterX = (i * cityParams.blockSize) - halfCityWorldSize + cityParams.roadWidth / 2 + cityParams.blockSize / 2 - cityParams.roadWidth/2;
+                    const blockCenterZ = (j * cityParams.blockSize) - halfCityWorldSize + cityParams.roadWidth / 2 + cityParams.blockSize / 2 - cityParams.roadWidth/2;
+
+                    const zoneNoise = (simplex.noise2D(i * cityParams.zoneNoiseScale, j * cityParams.zoneNoiseScale) + 1) / 2;
+                    let zoneType = 'residential';
+                    if (zoneNoise < 0.15) zoneType = 'park';
+                    else if (zoneNoise < 0.5) zoneType = 'residential';
+                    else if (zoneNoise < 0.8) zoneType = 'commercial';
+                    else zoneType = 'industrial';
+
+
+                    const blockInnerSize = cityParams.blockSize - cityParams.roadWidth * 1.5; // Leave space from road edge
+
+                    if (zoneType === 'park') {
+                         // Add Trees
+                         const numTrees = Math.floor(Math.random() * blockInnerSize * cityParams.treeDensity * 0.1); // Fewer trees in parks initially
+                         for (let t = 0; t < numTrees && treeCount < MAX_TREES; t++) {
+                             const treeScale = 0.8 + Math.random() * 0.6;
+                             const trunkHeight = 3 + Math.random() * 2;
+                             const leavesRadius = 1.5 + Math.random() * 1.0;
+
+                             const x = blockCenterX + (Math.random() - 0.5) * blockInnerSize;
+                             const z = blockCenterZ + (Math.random() - 0.5) * blockInnerSize;
+
+                             // Trunk Matrix
+                             dummy.position.set(x, trunkHeight * treeScale / 2, z);
+                             dummy.scale.set(treeScale, trunkHeight * treeScale, treeScale);
+                             dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+                             dummy.updateMatrix();
+                             treeInstances.trunks.setMatrixAt(treeCount, dummy.matrix);
+
+                             // Leaves Matrix
+                             dummy.position.set(x, trunkHeight * treeScale + leavesRadius * treeScale * 0.5, z);
+                             dummy.scale.set(leavesRadius * treeScale, leavesRadius * treeScale, leavesRadius * treeScale);
+                             dummy.rotation.set(Math.random()*0.2, Math.random() * Math.PI * 2, Math.random()*0.2); // Slight tilt
+                             dummy.updateMatrix();
+                             treeInstances.leaves.setMatrixAt(treeCount, dummy.matrix);
+                             treeCount++;
+                         }
+                        // Add collectables in parks sometimes
+                        if (Math.random() < 0.1 && collectableCount < MAX_COLLECTABLES && collectableCount < COLLECTABLE_COUNT) {
+                             const colX = blockCenterX + (Math.random() - 0.5) * blockInnerSize;
+                             const colZ = blockCenterZ + (Math.random() - 0.5) * blockInnerSize;
+                            addCollectableInstance(colX, PLAYER_HEIGHT * 0.8, colZ, collectableCount++);
+                        }
+
+                    } else { // Building Zone
+                         // Add Buildings
+                         if (Math.random() < cityParams.buildingDensity && buildingCount < MAX_BUILDINGS) {
+                             const buildingHeightNoise = (simplex.noise2D(i * cityParams.heightNoiseScale, j * cityParams.heightNoiseScale) + 1) / 2;
+                             let baseHeight = 5;
+                             let maxHeight = cityParams.maxBuildingHeight;
+                             let color1 = resColor1, color2 = resColor2;
+
+                             if (zoneType === 'commercial') { baseHeight = 10; maxHeight *= 1.2; color1 = comColor1; color2 = comColor2; }
+                             else if (zoneType === 'industrial') { baseHeight = 8; maxHeight *= 0.7; color1 = indColor1; color2 = indColor2; }
+
+                             const buildingHeight = Math.max(3, baseHeight + buildingHeightNoise * (maxHeight - baseHeight));
+                             const buildingWidth = (0.3 + Math.random() * 0.5) * blockInnerSize;
+                             const buildingDepth = (0.3 + Math.random() * 0.5) * blockInnerSize;
+
+                             const x = blockCenterX + (Math.random() - 0.5) * (blockInnerSize - buildingWidth);
+                             const z = blockCenterZ + (Math.random() - 0.5) * (blockInnerSize - buildingDepth);
+
+                             dummy.position.set(x, buildingHeight / 2, z);
+                             dummy.scale.set(buildingWidth, buildingHeight, buildingDepth);
+                             dummy.rotation.set(0, Math.floor(Math.random() * 4) * Math.PI / 2, 0); // Align to grid axes
+                             dummy.updateMatrix();
+                             buildingInstances.setMatrixAt(buildingCount, dummy.matrix);
+
+                             // Set instance color (lerp between the two zone colors)
+                             const buildingColor = new THREE.Color().lerpColors(color1, color2, Math.random());
+                             buildingInstances.setColorAt(buildingCount, buildingColor);
+
+                             buildingCount++;
+
+                              // Add collectables on rooftops sometimes
+                             if (Math.random() < 0.05 && collectableCount < MAX_COLLECTABLES && collectableCount < COLLECTABLE_COUNT) {
+                                 addCollectableInstance(x, buildingHeight + PLAYER_HEIGHT * 0.5, z, collectableCount++);
+                             }
+                         }
+                    }
+
+                     // Add Streetlights along block edges
+                     if (streetlightCount < MAX_STREETLIGHTS && Math.random() < cityParams.streetlightDensity) {
+                         const edgeChoice = Math.random();
+                         let lightX, lightZ, lightRotY;
+                         const offset = cityParams.roadWidth * 0.8; // Offset from center of road line
+                         const poleHeight = 6 + Math.random();
+                         const lampHeight = poleHeight + 0.5;
+
+                         if (edgeChoice < 0.25) { // Top edge
+                             lightX = blockCenterX + (Math.random() - 0.5) * blockInnerSize; lightZ = blockCenterZ - blockInnerSize/2 - offset; lightRotY = 0;
+                         } else if (edgeChoice < 0.5) { // Bottom edge
+                             lightX = blockCenterX + (Math.random() - 0.5) * blockInnerSize; lightZ = blockCenterZ + blockInnerSize/2 + offset; lightRotY = Math.PI;
+                         } else if (edgeChoice < 0.75) { // Left edge
+                             lightX = blockCenterX - blockInnerSize/2 - offset; lightZ = blockCenterZ + (Math.random() - 0.5) * blockInnerSize; lightRotY = Math.PI / 2;
+                         } else { // Right edge
+                             lightX = blockCenterX + blockInnerSize/2 + offset; lightZ = blockCenterZ + (Math.random() - 0.5) * blockInnerSize; lightRotY = -Math.PI / 2;
+                         }
+
+                         // Pole
+                         dummy.position.set(lightX, poleHeight / 2, lightZ);
+                         dummy.scale.set(1, poleHeight, 1);
+                         dummy.rotation.set(0, lightRotY, 0);
+                         dummy.updateMatrix();
+                         streetlightInstances.poles.setMatrixAt(streetlightCount, dummy.matrix);
+
+                         // Lamp (slightly forward from pole top)
+                         const lampOffsetX = Math.sin(lightRotY) * 0.5;
+                         const lampOffsetZ = Math.cos(lightRotY) * 0.5;
+                          dummy.position.set(lightX + lampOffsetX, lampHeight, lightZ + lampOffsetZ);
+                          dummy.scale.set(1, 1, 1); // Reset scale for lamp geometry base size
+                          dummy.rotation.set(0, 0, 0);
+                          dummy.updateMatrix();
+                          streetlightInstances.lamps.setMatrixAt(streetlightCount, dummy.matrix);
+                          streetlightCount++;
+                     }
+                }
+                 // Update progress roughly
+                 if (i % Math.floor(cityParams.gridSize / 4) === 0) {
+                    dom.info.textContent = `Status: Growing district ${i + 1}/${cityParams.gridSize}...`;
+                }
+            }
+
+             dom.info.textContent = 'Status: Adding final touches...';
+
+             // Add some random collectables in alleys/streets
+             while (collectableCount < MAX_COLLECTABLES && collectableCount < COLLECTABLE_COUNT) {
+                  const randX = (Math.random() - 0.5) * cityWorldSize;
+                  const randZ = (Math.random() - 0.5) * cityWorldSize;
+                  // Basic check: avoid placing directly inside a building instance (approximate)
+                   let tooClose = false;
+                   const checkPos = new THREE.Vector3(randX, 0, randZ);
+                   const buildingCheckRadiusSq = (cityParams.blockSize * 0.4)**2; // Approximate building size check
+                   for(let b = 0; b < buildingCount; b++) {
+                       const matrix = new THREE.Matrix4();
+                       buildingInstances.getMatrixAt(b, matrix);
+                       const buildPos = new THREE.Vector3().setFromMatrixPosition(matrix);
+                       if(buildPos.distanceToSquared(checkPos) < buildingCheckRadiusSq) {
+                           tooClose = true;
+                           break;
+                       }
+                   }
+                   if(!tooClose) {
+                        addCollectableInstance(randX, PLAYER_HEIGHT * 0.5, randZ, collectableCount++);
+                   }
+             }
+
+            // Update InstancedMesh counts and mark buffers for update
+            buildingInstances.count = buildingCount;
+            buildingInstances.instanceMatrix.needsUpdate = true;
+            buildingInstances.instanceColor.needsUpdate = true; // Update colors
+
+            treeInstances.trunks.count = treeCount;
+            treeInstances.trunks.instanceMatrix.needsUpdate = true;
+            treeInstances.leaves.count = treeCount;
+            treeInstances.leaves.instanceMatrix.needsUpdate = true;
+
+            streetlightInstances.poles.count = streetlightCount;
+            streetlightInstances.poles.instanceMatrix.needsUpdate = true;
+            streetlightInstances.lamps.count = streetlightCount;
+            streetlightInstances.lamps.instanceMatrix.needsUpdate = true;
+
+            collectableInstances.count = collectableCount;
+            collectableInstances.instanceMatrix.needsUpdate = true;
+
+            totalMotes = collectableCount;
+            updateMotesCounter();
+
+            // Spawn player in a relatively open area (e.g., near center or a park)
+             player.body.position.set(cityParams.blockSize * 0.5, PLAYER_HEIGHT, cityParams.blockSize * 0.5);
+             player.velocity.set(0, 0, 0);
+
+            console.timeEnd("City Generation (Instanced)");
+        }
+
+        function addCollectableInstance(x, y, z, index) {
+             const dummy = new THREE.Object3D();
+             dummy.position.set(x, y, z);
+             dummy.updateMatrix();
+             collectableInstances.setMatrixAt(index, dummy.matrix);
+             collectableData.push({ position: new THREE.Vector3(x, y, z), collected: false, matrixId: index });
+         }
+
+
+        // --- Player Controls ---
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': player.moveForward = true; break;
+                case 'KeyS': player.moveBackward = true; break;
+                case 'KeyA': player.moveLeft = true; break;
+                case 'KeyD': player.moveRight = true; break;
+                case 'ShiftLeft': player.sprinting = true; break;
+                // case 'Space': if (player.onGround) player.velocity.y += 5; break; // Simple Jump (optional)
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': player.moveForward = false; break;
+                case 'KeyS': player.moveBackward = false; break;
+                case 'KeyA': player.moveLeft = false; break;
+                case 'KeyD': player.moveRight = false; break;
+                case 'ShiftLeft': player.sprinting = false; break;
+            }
+        }
+
+        function onMouseMove(event) {
+            if (!player.controlsLocked) return;
+            const movementX = event.movementX || 0;
+            const movementY = event.movementY || 0;
+
+            // Yaw (rotate around Y axis - player body)
+            player.body.rotation.y -= movementX * MOUSE_SENSITIVITY;
+
+            // Pitch (rotate around X axis - camera only)
+            camera.rotation.x -= movementY * MOUSE_SENSITIVITY;
+            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x)); // Clamp vertical look
+        }
+
+        function updatePlayer(deltaTime) {
+            const speed = PLAYER_SPEED * (player.sprinting ? PLAYER_SPRINT_MUL : 1);
+            const moveDirection = new THREE.Vector3();
+
+            // Calculate movement direction based on camera orientation (Y component ignored)
+            if (player.moveForward) moveDirection.z -= 1;
+            if (player.moveBackward) moveDirection.z += 1;
+            if (player.moveLeft) moveDirection.x -= 1;
+            if (player.moveRight) moveDirection.x += 1;
+
+            // Apply camera rotation (yaw only from player body) to movement direction
+            moveDirection.normalize().applyEuler(player.body.rotation); // Use player body's Y rotation
+
+            player.velocity.x = moveDirection.x * speed;
+            player.velocity.z = moveDirection.z * speed;
+
+            // Simple ground check / gravity (replace with raycasting for slopes later)
+            const groundY = PLAYER_HEIGHT; // Assume flat ground for now
+             if (player.body.position.y > groundY) {
+                player.velocity.y -= GRAVITY * deltaTime; // Apply gravity if in air (e.g., after jump)
+                 player.onGround = false;
+             } else {
+                 player.velocity.y = Math.max(0, player.velocity.y); // Prevent falling through floor
+                 player.onGround = true;
+             }
+             // Apply movement
+             player.body.position.x += player.velocity.x * deltaTime;
+             player.body.position.y += player.velocity.y * deltaTime;
+             player.body.position.z += player.velocity.z * deltaTime;
+
+             // Stop falling through floor
+             if (player.body.position.y < groundY) {
+                player.body.position.y = groundY;
+                player.velocity.y = 0;
+                 player.onGround = true;
+            }
+
+            // Simple Collision (basic placeholder - check against building instances)
+             const playerRadius = 0.5; // Approximate player width
+            for (let i = 0; i < buildingInstances.count; i++) {
+                const matrix = new THREE.Matrix4();
+                buildingInstances.getMatrixAt(i, matrix);
+                const scale = new THREE.Vector3();
+                const position = new THREE.Vector3();
+                matrix.decompose(position, new THREE.Quaternion(), scale); // Get position and scale
+
+                // AABB collision check (simplified)
+                const halfWidth = scale.x / 2 + playerRadius;
+                const halfDepth = scale.z / 2 + playerRadius;
+                const halfHeight = scale.y / 2 + PLAYER_HEIGHT / 2; // Check vertical overlap too
+
+                if (Math.abs(player.body.position.x - position.x) < halfWidth &&
+                    Math.abs(player.body.position.z - position.z) < halfDepth &&
+                    Math.abs(player.body.position.y - (position.y + PLAYER_HEIGHT/2 - scale.y/2) ) < halfHeight) // Check Y overlap
+                    {
+                    // Collision detected - push player back slightly (very basic)
+                    const dx = player.body.position.x - position.x;
+                    const dz = player.body.position.z - position.z;
+
+                    if (Math.abs(dx / halfWidth) > Math.abs(dz / halfDepth)) { // Collided more horizontally
+                        player.body.position.x = position.x + Math.sign(dx) * halfWidth;
+                        player.velocity.x = 0;
+                    } else { // Collided more vertically (depth-wise)
+                        player.body.position.z = position.z + Math.sign(dz) * halfDepth;
+                        player.velocity.z = 0;
+                    }
+                }
+            }
+        }
+
+        // --- Game Loop ---
+        function updateGame(deltaTime) {
+            // Check for collectable interactions
+            const playerPos = player.body.position;
+            let needsUpdate = false;
+
+            for (let i = 0; i < collectableData.length; i++) {
+                const mote = collectableData[i];
+                if (!mote.collected && playerPos.distanceTo(mote.position) < COLLECT_DISTANCE) {
+                    mote.collected = true;
+                    motesCollected++;
+                    updateMotesCounter();
+                    needsUpdate = true;
+
+                    // Hide collected mote - move its instance matrix far away or scale to zero
+                    const dummy = new THREE.Object3D();
+                    dummy.position.set(0, -1000, 0); // Move far away
+                    dummy.scale.set(0.001, 0.001, 0.001); // Or scale down
+                    dummy.updateMatrix();
+                    collectableInstances.setMatrixAt(mote.matrixId, dummy.matrix);
+
+                     dom.info.textContent = `Collected a Memory Mote! (${motesCollected}/${totalMotes})`;
+                     // Optional: Play a sound, particle effect
+                }
+            }
+
+            if (needsUpdate) {
+                collectableInstances.instanceMatrix.needsUpdate = true;
+            }
+
+             // Simple bobbing animation for remaining collectables
+             const bobSpeed = 2.0;
+             const bobHeight = 0.15;
+             for (let i = 0; i < collectableData.length; i++) {
+                 const mote = collectableData[i];
+                 if (!mote.collected) {
+                     const matrix = new THREE.Matrix4();
+                     collectableInstances.getMatrixAt(mote.matrixId, matrix);
+                     const position = new THREE.Vector3();
+                     const quaternion = new THREE.Quaternion();
+                     const scale = new THREE.Vector3();
+                     matrix.decompose(position, quaternion, scale);
+
+                     position.y = mote.position.y + Math.sin(simulationTime * bobSpeed + i * 0.5) * bobHeight; // Bobbing motion
+                     quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), deltaTime * 0.5)); // Slow rotation
+
+                     matrix.compose(position, quaternion, scale);
+                     collectableInstances.setMatrixAt(mote.matrixId, matrix);
+                     collectableInstances.instanceMatrix.needsUpdate = true; // Mark for update if any are bobbing
+                 }
+             }
+
+
+             if (motesCollected === totalMotes && totalMotes > 0) {
+                 dom.info.textContent = "Congratulations! You found all the Memory Motes!";
+                 // Maybe trigger something else? End screen? For now, just a message.
+             }
+        }
+
+         function updateMotesCounter() {
+             dom.motesCounter.textContent = `Motes: ${motesCollected} / ${totalMotes}`;
+         }
+
+        // --- Simulation Update (Simplified) ---
+        function updateSimulation(deltaTime) {
+            simulationTime += deltaTime;
+
+            // Day/Night Cycle & Weather Influence
+            const dayCycleValue = (Math.sin(simulationTime * 0.05) + 1) / 2; // 0 night, 1 day
+            applyDayNightCycle(dayCycleValue);
+
+            // Simple Weather State Transitions (Example)
+            // Could be time-based or random:
+            // if (Math.random() < 0.001) { changeWeather(); }
+
+            // Apply weather effects based on state
+            applyWeatherEffects();
+        }
+
+
+        function applyDayNightCycle(dayCycle) {
+             // --- Colors --- (Adjust for cozy feel)
+             const skyColorDay = new THREE.Color(0x90c5ff); // Softer blue
+             const skyColorDusk = new THREE.Color(0xffaa77); // Warm dusk
+             const skyColorNight = new THREE.Color(0x1a2a4a); // Deep blue night
+
+             const fogColorDay = new THREE.Color(0xb0d5ff); // Match sky-ish
+             const fogColorDusk = new THREE.Color(0xffccaa);
+             const fogColorNight = new THREE.Color(0x050810); // Very dark
+
+             const sunColorDay = new THREE.Color(0xffffee); // Warm sun
+             const sunColorDusk = new THREE.Color(0xff8855);
+             const sunColorNight = new THREE.Color(0x5577cc); // Moonlight blue
+
+             const ambientDay = 0.4; const ambientDusk = 0.2; const ambientNight = 0.05; // Lower night ambient
+             const hemiSkyDay = 0xccccff; const hemiSkyNight = 0x223355;
+             const hemiGroundDay = 0x777744; const hemiGroundNight = 0x111122;
+
+             // --- Interpolation ---
+             let currentSunIntensity, currentAmbientIntensity;
+             let currentSunColor = new THREE.Color();
+             let currentSkyColor = new THREE.Color();
+             let currentFogColor = new THREE.Color();
+             let currentHemiSky = new THREE.Color();
+             let currentHemiGround = new THREE.Color();
+
+
+             const duskPoint = 0.5; // Point where transition happens
+             const transitionWidth = 0.15; // How gradual the dusk/dawn is
+
+             if (dayCycle > duskPoint + transitionWidth) { // Full Day
+                currentSunIntensity = 0.8; currentAmbientIntensity = ambientDay;
+                currentSunColor = sunColorDay; currentSkyColor = skyColorDay; currentFogColor = fogColorDay;
+                 currentHemiSky.setHex(hemiSkyDay); currentHemiGround.setHex(hemiGroundDay);
+             } else if (dayCycle < duskPoint - transitionWidth) { // Full Night
+                currentSunIntensity = 0.1; currentAmbientIntensity = ambientNight;
+                currentSunColor = sunColorNight; currentSkyColor = skyColorNight; currentFogColor = fogColorNight;
+                 currentHemiSky.setHex(hemiSkyNight); currentHemiGround.setHex(hemiGroundNight);
+             } else { // Transition (Dusk/Dawn)
+                const transitionProgress = (dayCycle - (duskPoint - transitionWidth)) / (transitionWidth * 2); // 0 to 1 through transition
+                 currentSunIntensity = THREE.MathUtils.lerp(ambientNight, ambientDay, transitionProgress) * 1.2; // Slightly brighter transition peak
+                 currentAmbientIntensity = THREE.MathUtils.lerp(ambientNight, ambientDay, transitionProgress);
+                 currentSunColor.lerpColors(sunColorNight, sunColorDay, transitionProgress); // Blend over longer range maybe
+                 currentSkyColor.lerpColors(skyColorNight, skyColorDay, transitionProgress);
+                 currentFogColor.lerpColors(fogColorNight, fogColorDay, transitionProgress);
+                 currentHemiSky.lerpColors(new THREE.Color(hemiSkyNight), new THREE.Color(hemiSkyDay), transitionProgress);
+                 currentHemiGround.lerpColors(new THREE.Color(hemiGroundNight), new THREE.Color(hemiGroundDay), transitionProgress);
+
+                 // Use dusk colors more explicitly in middle of transition
+                 const duskFactor = Math.sin(transitionProgress * Math.PI); // Peaks at 0.5 progress
+                 currentSunColor.lerp(sunColorDusk, duskFactor * 0.8);
+                 currentSkyColor.lerp(skyColorDusk, duskFactor * 0.5);
+                 currentFogColor.lerp(fogColorDusk, duskFactor * 0.5);
+             }
+
+             // --- Apply ---
+             scene.background = currentSkyColor;
+             scene.fog.color = currentFogColor;
+             scene.fog.near = THREE.MathUtils.lerp(20, 50, dayCycle); // Less fog during day
+             scene.fog.far = THREE.MathUtils.lerp(150, 250, dayCycle);
+
+
+             scene.traverse(obj => {
+                if (obj.isDirectionalLight) {
+                    obj.intensity = currentSunIntensity;
+                    obj.color = currentSunColor;
+                    const sunAngle = (dayCycle - 0.25) * Math.PI * 2;
+                    obj.position.set(Math.cos(sunAngle) * 150, Math.sin(sunAngle) * 100 + 20, Math.sin(sunAngle*0.5) * 80);
+                    obj.target.position.set(player.body.position.x, 0, player.body.position.z); // Target near player? Or center 0,0,0
+                }
+                 if (obj.isAmbientLight) obj.intensity = currentAmbientIntensity;
+                 if (obj.isHemisphereLight) {
+                    obj.color = currentHemiSky;
+                    obj.groundColor = currentHemiGround;
+                    obj.intensity = THREE.MathUtils.lerp(0.1, 0.3, dayCycle); // Less intense at night
+                 }
+             });
+
+             // Streetlight emissive based on night factor
+             const nightFactor = 1.0 - Math.max(0, dayCycle * 1.5 - 0.2);
+             if (streetlightInstances && streetlightInstances.lamps) {
+                 const lampMaterial = streetlightInstances.lamps.material; // Assuming shared material for lamps
+                 if (lampMaterial && lampMaterial.emissive) {
+                      lampMaterial.emissiveIntensity = nightFactor * 1.5; // Control emissive glow globally
+                 }
+             }
+              // Also control collectable emissive intensity? Make them dimmer during day?
+             if (collectableInstances) {
+                collectableInstances.material.emissiveIntensity = THREE.MathUtils.lerp(1.5, 0.5, dayCycle); // Brighter at night
+             }
+         }
+
+         function applyWeatherEffects() {
+             // Example: Make fog denser during rain
+             if (weatherState === 'rain') {
+                scene.fog.near *= 0.7;
+                scene.fog.far *= 0.6;
+                scene.fog.color.lerp(new THREE.Color(0x778899), 0.1); // Shift fog color to greyish
+                // Could also enable a screen overlay plane with rain texture here
+             } else if (weatherState === 'fog') {
+                scene.fog.near *= 0.5;
+                scene.fog.far *= 0.4;
+                scene.fog.color.lerp(new THREE.Color(0xaaaaaa), 0.2);
+             }
+             // Reset effects if weather is 'clear' - happens implicitly via applyDayNightCycle usually
+         }
+
+        // --- Window Resize ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+         // --- Simple Rain Texture ---
+         function createRainTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const context = canvas.getContext('2d');
+            context.fillStyle = 'rgba(200, 200, 255, 0.7)'; // Bluish semi-transparent drops
+            for (let i = 0; i < 30; i++) {
+                context.fillRect(Math.random() * 32, Math.random() * 32, 1, Math.random() * 5 + 2); // Streaks
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+         }
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = Math.min(0.05, clock.getDelta()); // Clamp delta time to avoid large jumps
+
+            if (player.controlsLocked) {
+                updatePlayer(deltaTime);
+                updateGame(deltaTime); // Game logic like collection checks
+            }
+
+            updateSimulation(deltaTime); // Day/night, weather etc. always update
+
+            renderer.render(scene, camera);
+
+            // Update info display (optional)
+             if (!player.controlsLocked) {
+                // dom.info.textContent = "Status: Paused. Click to explore.";
+             } else {
+                 // Could show player coords or other debug info if needed
+                 // dom.info.textContent = `Pos: ${player.body.position.x.toFixed(1)}, ${player.body.position.z.toFixed(1)}`;
+             }
+        }
+
+        // --- Start ---
+        init();
+
+    </script>
+</body>
+</html>

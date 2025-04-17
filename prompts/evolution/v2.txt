@@ -1,0 +1,12 @@
+Write a spec for a gamified evolution simulator. Make it so that the final output is a single html file. We want to show each generation getting better, and add some ability to modify parameters. Make it visually interesting, add some styling elements, and make it 3D with 3js. 
+
+implement a full game using 3js, create any assets from scratch, reply with a complete, runnable html file that satisfies all of the requirements of the above spec
+
+use this snippit as a starting point to build a single html file <script
+src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> <script
+src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js">
+</script> <script> const scene = new THREE.Scene(); const camera = new
+THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true }); OrbitControls has
+been deprecated, so don't use that. Implement a single html file that satisfies all of the
+above requirements

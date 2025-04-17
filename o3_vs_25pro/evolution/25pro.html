@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamified 3D Evolution Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+            background-color: #111;
+            color: #eee;
+            display: flex;
+        }
+
+        #simulation-container {
+            flex-grow: 1;
+            height: 100vh;
+            position: relative; /* Needed for overlay elements */
+        }
+
+        #ui-panel {
+            width: 300px;
+            height: 100vh;
+            background-color: #2a2a2a;
+            padding: 15px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        #ui-panel h2, #ui-panel h3 {
+            color: #0af;
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        .control-group input[type="range"],
+        .control-group input[type="number"] {
+            width: 100%;
+            box-sizing: border-box;
+        }
+         /* Style range inputs */
+        input[type=range] {
+            height: 18px;
+            -webkit-appearance: none;
+            margin: 5px 0;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        /* Chrome/Safari */
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #555;
+            border-radius: 4px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #0af;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -4px; /* Center thumb on track */
+        }
+        /* Firefox */
+        input[type=range]::-moz-range-track {
+             width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #555;
+            border-radius: 4px;
+        }
+        input[type=range]::-moz-range-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #0af;
+            cursor: pointer;
+            border: none;
+        }
+        /* IE */
+         input[type=range]::-ms-track {
+             width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: transparent;
+            border-color: transparent;
+            color: transparent;
+        }
+        input[type=range]::-ms-fill-lower {
+            background: #555;
+            border-radius: 4px;
+        }
+        input[type=range]::-ms-fill-upper {
+            background: #555;
+            border-radius: 4px;
+        }
+        input[type=range]::-ms-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #0af;
+            cursor: pointer;
+            margin-top: 1px; /* Slight adjustment for IE */
+        }
+
+
+        .control-group input[type="number"] {
+             background-color: #444;
+             color: #eee;
+             border: 1px solid #666;
+             padding: 5px;
+             border-radius: 3px;
+        }
+
+        .control-group span {
+            display: inline-block;
+            min-width: 30px;
+            text-align: right;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        button {
+            padding: 8px 15px;
+            background-color: #0af;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+            margin-right: 5px;
+        }
+
+        button:hover {
+            background-color: #08d;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        .stats-display {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .stats-display p {
+            margin: 5px 0;
+        }
+        .stats-display span {
+            font-weight: bold;
+            color: #0f8;
+        }
+
+        #goal-display {
+            background-color: #4a4a2a;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            border: 1px solid #aa3;
+        }
+         #goal-display p {
+            margin: 5px 0;
+         }
+         #goal-display span {
+            font-weight: bold;
+            color: #ff5;
+         }
+
+        canvas { display: block; } /* Prevent scrollbars */
+
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5em;
+            z-index: 10;
+        }
+
+    </style>
+    <!-- Embed Libraries - Using CDNs as per starting snippet for ease of sharing -->
+    <!-- For a truly single file offline, download these and paste content here -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+</head>
+<body>
+    <div id="simulation-container">
+        <div id="loading-overlay">Loading Assets & Initializing...</div>
+    </div>
+    <div id="ui-panel">
+        <h2>EvoSim 3D</h2>
+
+        <div class="stats-display">
+            <h3>Simulation Status</h3>
+            <p>Generation: <span id="generation-display">0</span></p>
+            <p>Best Fitness: <span id="best-fitness-display">0.00</span></p>
+            <p>Average Fitness: <span id="avg-fitness-display">0.00</span></p>
+        </div>
+
+        <div id="goal-display">
+            <h3>Evolution Goal</h3>
+            <p>Objective: <span id="goal-objective">Collect Food</span></p>
+            <p>Target Fitness: <span id="goal-target">5</span> items</p>
+            <p>Progress: <span id="goal-progress">Not Met</span></p>
+        </div>
+
+        <div class="control-group">
+            <h3>Simulation Controls</h3>
+            <button id="start-button">Start</button>
+            <button id="pause-button" disabled>Pause</button>
+            <button id="step-button">Step</button>
+            <button id="reset-button">Reset</button>
+        </div>
+
+         <div class="control-group">
+             <h3>Parameters</h3>
+             <label for="population-size">Population Size: <span id="population-size-value">100</span></label>
+             <input type="range" id="population-size" min="10" max="500" value="100" step="10">
+
+             <label for="mutation-rate">Mutation Rate (%): <span id="mutation-rate-value">5</span></label>
+             <input type="range" id="mutation-rate" min="0" max="100" value="5" step="1">
+
+             <label for="mutation-magnitude">Mutation Magnitude: <span id="mutation-magnitude-value">0.1</span></label>
+             <input type="range" id="mutation-magnitude" min="0.01" max="1.0" value="0.1" step="0.01">
+
+             <label for="selection-pressure">Selection Pressure (Tournament Size): <span id="selection-pressure-value">5</span></label>
+             <input type="range" id="selection-pressure" min="2" max="20" value="5" step="1">
+
+              <label for="generation-time">Time per Generation (Frames): <span id="generation-time-value">500</span></label>
+             <input type="range" id="generation-time" min="100" max="2000" value="500" step="50">
+
+             <label for="food-count">Food Count: <span id="food-count-value">150</span></label>
+             <input type="range" id="food-count" min="10" max="500" value="150" step="10">
+        </div>
+    </div>
+
+    <script>
+        // --- Three.js Setup ---
+        let scene, camera, renderer;
+        let environmentPlane, foodItems = [];
+        const creatureMeshes = [];
+        const container = document.getElementById('simulation-container');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        // --- Simulation State ---
+        let isRunning = false;
+        let generationCount = 0;
+        let creatures = [];
+        let simulationFrame = 0;
+        let simplex; // For terrain noise
+
+        // --- Simulation Parameters (Defaults & UI Linked) ---
+        const config = {
+            populationSize: 100,
+            mutationRate: 0.05, // 5%
+            mutationMagnitude: 0.1,
+            selectionPressure: 5, // Tournament size
+            genomeLength: 6, // [speed, turnRate, size, r, g, b]
+            worldSize: 50,
+            generationTime: 500, // Frames per generation
+            foodCount: 150,
+            foodValue: 1,
+            foodRadius: 0.3,
+            creatureBaseSize: 0.3,
+            targetFitness: 5, // Goal: collect 5 food items
+        };
+
+        // --- Camera Controls ---
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let cameraRadius = 70;
+        let cameraTheta = Math.PI / 4; // Angle around Y axis
+        let cameraPhi = Math.PI / 4;   // Angle from Y=0 plane
+        let cameraTarget = new THREE.Vector3(0, 5, 0); // Look slightly above origin
+
+
+        // --- UI Element References ---
+        const ui = {
+            startButton: document.getElementById('start-button'),
+            pauseButton: document.getElementById('pause-button'),
+            stepButton: document.getElementById('step-button'),
+            resetButton: document.getElementById('reset-button'),
+            generationDisplay: document.getElementById('generation-display'),
+            bestFitnessDisplay: document.getElementById('best-fitness-display'),
+            avgFitnessDisplay: document.getElementById('avg-fitness-display'),
+            goalObjective: document.getElementById('goal-objective'),
+            goalTarget: document.getElementById('goal-target'),
+            goalProgress: document.getElementById('goal-progress'),
+            populationSizeSlider: document.getElementById('population-size'),
+            populationSizeValue: document.getElementById('population-size-value'),
+            mutationRateSlider: document.getElementById('mutation-rate'),
+            mutationRateValue: document.getElementById('mutation-rate-value'),
+            mutationMagnitudeSlider: document.getElementById('mutation-magnitude'),
+            mutationMagnitudeValue: document.getElementById('mutation-magnitude-value'),
+            selectionPressureSlider: document.getElementById('selection-pressure'),
+            selectionPressureValue: document.getElementById('selection-pressure-value'),
+            generationTimeSlider: document.getElementById('generation-time'),
+            generationTimeValue: document.getElementById('generation-time-value'),
+            foodCountSlider: document.getElementById('food-count'),
+            foodCountValue: document.getElementById('food-count-value'),
+        };
+
+        // --- Initialization ---
+        function init() {
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true; // Enable shadows
+             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a2a3a);
+            scene.fog = new THREE.Fog(0x1a2a3a, 80, 150); // Add fog for depth
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+            updateCameraPosition(); // Set initial position using angles
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(30, 50, 20);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+             directionalLight.shadow.camera.near = 0.5;
+             directionalLight.shadow.camera.far = 150;
+             directionalLight.shadow.camera.left = -config.worldSize;
+             directionalLight.shadow.camera.right = config.worldSize;
+             directionalLight.shadow.camera.top = config.worldSize;
+             directionalLight.shadow.camera.bottom = -config.worldSize;
+            scene.add(directionalLight);
+            // const lightHelper = new THREE.DirectionalLightHelper(directionalLight, 5); // Optional: visualize light
+            // scene.add(lightHelper);
+            // const shadowHelper = new THREE.CameraHelper( directionalLight.shadow.camera ); // Optional: visualize shadow frustum
+            // scene.add( shadowHelper );
+
+
+            // Noise Generator
+            simplex = new SimplexNoise();
+
+            // Environment
+            createEnvironment();
+
+            // Food (initial placement)
+            createFoodItems();
+
+            // Initial Population
+            createInitialPopulation();
+            updateUIParameters(); // Sync UI sliders with initial config values
+
+            // Setup Event Listeners
+            setupEventListeners();
+
+            // Hide loading overlay
+            loadingOverlay.style.display = 'none';
+
+            // Start Animation Loop
+            animate();
+        }
+
+        // --- Environment Creation ---
+        function createEnvironment() {
+            const geometry = new THREE.PlaneGeometry(config.worldSize * 2, config.worldSize * 2, 100, 100);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x558844, // Greenish base
+                roughness: 0.8,
+                metalness: 0.1,
+                // wireframe: true // for debugging terrain
+                vertexColors: true // Use vertex colors for terrain shading
+            });
+            environmentPlane = new THREE.Mesh(geometry, material);
+            environmentPlane.rotation.x = -Math.PI / 2; // Lay flat
+            environmentPlane.receiveShadow = true;
+
+            // Apply noise for terrain height and color variation
+            const positionAttribute = geometry.attributes.position;
+            const colors = [];
+            const color = new THREE.Color();
+
+            for (let i = 0; i < positionAttribute.count; i++) {
+                const x = positionAttribute.getX(i);
+                const y = positionAttribute.getY(i); // This is Z in world space after rotation
+                const noiseScale = 0.08;
+                const heightScale = 4; // Max height variation
+
+                // Calculate height based on Simplex noise
+                const height = simplex.noise2D(x * noiseScale, y * noiseScale) * heightScale;
+                positionAttribute.setZ(i, height); // Modify vertex Z (which becomes Y in world space)
+
+                // Set vertex color based on height
+                const normalizedHeight = (height / heightScale + 1) / 2; // Normalize height 0-1
+                 if (normalizedHeight < 0.4) {
+                     color.setHex(0x608040); // Lowland green
+                 } else if (normalizedHeight < 0.7) {
+                     color.setHex(0x709050); // Mid-green
+                 } else {
+                     color.setHex(0x88a060); // Highland green/brownish
+                 }
+                 colors.push(color.r, color.g, color.b);
+
+            }
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            positionAttribute.needsUpdate = true; // Important after modifying vertices
+            geometry.computeVertexNormals(); // Recalculate normals for correct lighting
+
+            scene.add(environmentPlane);
+        }
+
+         // --- Get Terrain Height at specific X, Z ---
+        function getTerrainHeight(x, z) {
+             // Clamp coordinates to plane bounds
+             const clampedX = Math.max(-config.worldSize, Math.min(config.worldSize, x));
+             const clampedZ = Math.max(-config.worldSize, Math.min(config.worldSize, z));
+
+             // Use noise function directly (consistent with vertex generation)
+             const noiseScale = 0.08;
+             const heightScale = 4;
+             return simplex.noise2D(clampedX * noiseScale, clampedZ * noiseScale) * heightScale;
+        }
+
+        // --- Food Creation ---
+        function createFoodItems() {
+            // Clear existing food meshes
+            foodItems.forEach(food => scene.remove(food.mesh));
+            foodItems = [];
+
+            const foodGeometry = new THREE.SphereGeometry(config.foodRadius, 8, 8);
+            const foodMaterial = new THREE.MeshStandardMaterial({
+                color: 0x33ff33, // Bright green
+                emissive: 0x115511, // Slight glow
+                 roughness: 0.5
+            });
+
+            for (let i = 0; i < config.foodCount; i++) {
+                const x = (Math.random() - 0.5) * config.worldSize * 1.8; // Spread out a bit
+                const z = (Math.random() - 0.5) * config.worldSize * 1.8;
+                const y = getTerrainHeight(x, z) + config.foodRadius + 0.2; // Place slightly above ground
+
+                const foodMesh = new THREE.Mesh(foodGeometry, foodMaterial.clone()); // Clone material if needed
+                foodMesh.position.set(x, y, z);
+                foodMesh.castShadow = true;
+                 foodMesh.userData.isFood = true; // Mark as food
+                foodMesh.userData.eaten = false; // Track if eaten this generation
+
+                scene.add(foodMesh);
+                foodItems.push({ mesh: foodMesh, position: foodMesh.position });
+            }
+        }
+
+         function resetFoodItems() {
+            foodItems.forEach(food => {
+                food.mesh.visible = true;
+                food.mesh.userData.eaten = false;
+            });
+         }
+
+        // --- Creature Logic ---
+        function createCreature(genome) {
+            const creature = {
+                id: THREE.MathUtils.generateUUID(),
+                genome: genome || randomGenome(),
+                phenotype: {},
+                mesh: null, // Will hold the Three.js object
+                fitness: 0,
+                position: new THREE.Vector3(),
+                velocity: new THREE.Vector3(),
+                rotationY: Math.random() * Math.PI * 2,
+                foodCollected: 0,
+                isAlive: true, // Could be used for more complex scenarios
+                framesAlive: 0
+            };
+            applyGenome(creature);
+            createCreatureMesh(creature);
+            resetCreatureState(creature); // Set initial position/velocity
+            return creature;
+        }
+
+        function randomGenome() {
+            const genome = [];
+            for (let i = 0; i < config.genomeLength; i++) {
+                genome.push(Math.random()); // Genes normalized between 0 and 1
+            }
+            return genome;
+        }
+
+        // Maps genome (0-1 values) to phenotype traits
+        function applyGenome(creature) {
+            const genome = creature.genome;
+            creature.phenotype = {
+                speed: THREE.MathUtils.lerp(0.05, 0.3, genome[0]),      // Max speed
+                turnRate: THREE.MathUtils.lerp(0.01, 0.1, genome[1]),   // Max turn speed per frame
+                size: THREE.MathUtils.lerp(0.8, 1.5, genome[2]),       // Size multiplier
+                colorR: genome[3],
+                colorG: genome[4],
+                colorB: genome[5],
+                // sensorRange: THREE.MathUtils.lerp(5, 20, genome[6]) // Example if adding sensor gene
+            };
+        }
+
+        function createCreatureMesh(creature) {
+             // Simple Capsule Shape: Cylinder + two Spheres
+            const radius = config.creatureBaseSize * creature.phenotype.size * 0.5;
+            const height = config.creatureBaseSize * creature.phenotype.size * 1.5;
+
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(creature.phenotype.colorR, creature.phenotype.colorG, creature.phenotype.colorB),
+                roughness: 0.6,
+                metalness: 0.2,
+            });
+
+            const bodyGeom = new THREE.CylinderGeometry(radius, radius, height, 8);
+            const topGeom = new THREE.SphereGeometry(radius, 8, 8);
+            const bottomGeom = new THREE.SphereGeometry(radius, 8, 8);
+
+            const bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+            const topMesh = new THREE.Mesh(topGeom, bodyMat);
+            const bottomMesh = new THREE.Mesh(bottomGeom, bodyMat);
+
+            topMesh.position.y = height / 2;
+            bottomMesh.position.y = -height / 2;
+
+            // Group parts together
+            const group = new THREE.Group();
+            group.add(bodyMesh);
+            group.add(topMesh);
+            group.add(bottomMesh);
+
+             // Add a simple 'eye' or 'nose' pointing forward
+             const noseGeom = new THREE.ConeGeometry(radius * 0.5, radius * 1.5, 4);
+             const noseMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+             const noseMesh = new THREE.Mesh(noseGeom, noseMat);
+             noseMesh.position.z = radius * 0.8; // Point forward along local Z
+             noseMesh.position.y = height * 0.2; // Slightly up
+             noseMesh.rotation.x = Math.PI / 2;
+             group.add(noseMesh);
+
+            group.castShadow = true;
+            group.traverse(child => {
+                if (child.isMesh) child.castShadow = true;
+            });
+
+            creature.mesh = group; // Assign the group as the mesh
+            creature.mesh.userData.creatureId = creature.id; // Link mesh back to creature data
+            scene.add(creature.mesh);
+        }
+
+
+        function resetCreatureState(creature) {
+             // Start near center, slightly randomized
+            const startRadius = 5;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Math.cos(angle) * startRadius * Math.random();
+            const z = Math.sin(angle) * startRadius * Math.random();
+            const y = getTerrainHeight(x, z) + creature.phenotype.size * config.creatureBaseSize; // Place on terrain
+
+            creature.position.set(x, y, z);
+            creature.mesh.position.copy(creature.position);
+            creature.rotationY = Math.random() * Math.PI * 2;
+            creature.mesh.rotation.y = creature.rotationY;
+            creature.velocity.set(0, 0, 0);
+            creature.fitness = 0;
+            creature.foodCollected = 0;
+            creature.framesAlive = 0;
+            creature.isAlive = true; // Reset life status if implementing death
+        }
+
+        // --- Population Management ---
+        function createInitialPopulation() {
+            creatures = [];
+            clearCreatureMeshes(); // Remove any old meshes first
+            for (let i = 0; i < config.populationSize; i++) {
+                creatures.push(createCreature());
+            }
+            generationCount = 0;
+            updateStatsDisplay();
+        }
+
+        function clearCreatureMeshes() {
+             creatures.forEach(c => {
+                 if (c.mesh) scene.remove(c.mesh);
+             });
+             // Clear the array used by Three.js rendering as well (if you maintained a separate one)
+             creatureMeshes.length = 0;
+        }
+
+
+        // --- Simulation Step Logic ---
+        function runSimulationStep() {
+             if (!isRunning && simulationFrame === 0) return; // Don't run if paused unless mid-generation step
+
+            creatures.forEach(creature => {
+                if (!creature.isAlive) return;
+
+                // --- Simple AI: Move forward, random turns, basic food seeking ---
+                // Move forward based on speed phenotype
+                const forward = new THREE.Vector3(0, 0, 1); // Local forward
+                forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), creature.rotationY);
+                forward.multiplyScalar(creature.phenotype.speed);
+
+                // Add a slight random turn tendency
+                creature.rotationY += (Math.random() - 0.5) * creature.phenotype.turnRate * 2;
+
+                // Basic Food Seeking (replace random turn if food is close)
+                let closestFood = null;
+                let minFoodDistSq = 15*15; // Simple sensor range squared
+
+                foodItems.forEach(food => {
+                     if (!food.mesh.userData.eaten && food.mesh.visible) {
+                        const distSq = creature.position.distanceToSquared(food.position);
+                        if (distSq < minFoodDistSq) {
+                            minFoodDistSq = distSq;
+                            closestFood = food.position;
+                        }
+                    }
+                });
+
+                if (closestFood) {
+                     // Turn towards closest food
+                     const directionToFood = closestFood.clone().sub(creature.position).normalize();
+                     const targetAngle = Math.atan2(directionToFood.x, directionToFood.z);
+
+                     // Smooth turning towards target angle
+                     let angleDiff = targetAngle - creature.rotationY;
+                     // Normalize angle difference to [-PI, PI]
+                     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+                     // Apply turn, clamped by turnRate
+                     const turnAmount = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), creature.phenotype.turnRate);
+                     creature.rotationY += turnAmount;
+                }
+
+
+                // Update velocity (simple forward movement for now)
+                creature.velocity.copy(forward);
+
+                // Update position
+                creature.position.add(creature.velocity);
+
+                // Keep creature within bounds (simple wrap around or bounce)
+                 const limit = config.worldSize * 0.95; // Stay slightly within plane edge
+                 if (creature.position.x > limit) creature.position.x = -limit;
+                 if (creature.position.x < -limit) creature.position.x = limit;
+                 if (creature.position.z > limit) creature.position.z = -limit;
+                 if (creature.position.z < -limit) creature.position.z = limit;
+
+
+                // Update Y position based on terrain height
+                creature.position.y = getTerrainHeight(creature.position.x, creature.position.z) + creature.phenotype.size * config.creatureBaseSize * 0.8; // Adjust height based on size
+
+                // Update mesh position and rotation
+                creature.mesh.position.copy(creature.position);
+                creature.mesh.rotation.y = creature.rotationY;
+
+                // --- Check for Food Collision ---
+                const collisionRadiusSq = (config.creatureBaseSize * creature.phenotype.size * 0.7 + config.foodRadius)**2; // Approx collision distance squared
+                foodItems.forEach(food => {
+                    if (!food.mesh.userData.eaten && food.mesh.visible) {
+                        if (creature.position.distanceToSquared(food.position) < collisionRadiusSq) {
+                            food.mesh.visible = false; // Hide food
+                            food.mesh.userData.eaten = true;
+                            creature.foodCollected += config.foodValue;
+                            // Fitness could be updated directly here, or calculated at the end
+                        }
+                    }
+                });
+
+                creature.framesAlive++;
+            });
+
+            simulationFrame++;
+
+            // --- Generation End Check ---
+            if (simulationFrame >= config.generationTime) {
+                endGeneration();
+            }
+        }
+
+        // --- Evolution Logic ---
+        function endGeneration() {
+            calculateFitness();
+            updateStatsDisplay();
+            checkGoalProgress();
+
+            const parents = selectParents();
+            const nextGeneration = createNextGeneration(parents);
+
+            // Replace old population
+            clearCreatureMeshes(); // Remove old meshes from scene
+            creatures = nextGeneration;
+            creatures.forEach(c => {
+                // Mesh should already be created in createNextGeneration/createCreature
+                scene.add(c.mesh); // Add new meshes to scene
+                resetCreatureState(c); // Reset positions etc. for new gen
+            });
+
+             resetFoodItems(); // Make food available again
+
+            generationCount++;
+            simulationFrame = 0; // Reset frame counter for the new generation
+
+            // If running continuously, the loop continues. If paused or stepping, this is the end of the step.
+             if (!isRunning) {
+                 ui.startButton.disabled = false;
+                 ui.pauseButton.disabled = true;
+                 ui.stepButton.disabled = false;
+             }
+        }
+
+        function calculateFitness() {
+            creatures.forEach(creature => {
+                // Fitness is simply the amount of food collected
+                creature.fitness = creature.foodCollected;
+            });
+        }
+
+        function selectParents() {
+            const parents = [];
+            // Tournament Selection
+            for (let i = 0; i < config.populationSize; i++) {
+                let tournament = [];
+                for (let j = 0; j < config.selectionPressure; j++) {
+                    tournament.push(creatures[Math.floor(Math.random() * creatures.length)]);
+                }
+                // Find the best in the tournament
+                let winner = tournament.reduce((best, current) => (current.fitness > best.fitness) ? current : best, tournament[0]);
+                parents.push(winner);
+            }
+            return parents;
+        }
+
+        function createNextGeneration(parents) {
+            const nextGeneration = [];
+            for (let i = 0; i < config.populationSize; i++) {
+                // Select two distinct parents randomly from the selected pool
+                const parentA = parents[Math.floor(Math.random() * parents.length)];
+                let parentB = parents[Math.floor(Math.random() * parents.length)];
+                while (parentB === parentA && parents.length > 1) { // Ensure different parents if possible
+                    parentB = parents[Math.floor(Math.random() * parents.length)];
+                }
+
+                const offspringGenome = crossover(parentA.genome, parentB.genome);
+                mutate(offspringGenome);
+                nextGeneration.push(createCreature(offspringGenome)); // Creates creature with mesh
+            }
+            return nextGeneration;
+        }
+
+        function crossover(genomeA, genomeB) {
+            // Single-point crossover
+            const crossoverPoint = Math.floor(Math.random() * config.genomeLength);
+            const offspringGenome = [];
+            for (let i = 0; i < config.genomeLength; i++) {
+                offspringGenome.push(i < crossoverPoint ? genomeA[i] : genomeB[i]);
+            }
+            return offspringGenome;
+        }
+
+        function mutate(genome) {
+            for (let i = 0; i < config.genomeLength; i++) {
+                if (Math.random() < config.mutationRate) {
+                    genome[i] += (Math.random() - 0.5) * 2 * config.mutationMagnitude;
+                    // Clamp genome values between 0 and 1
+                    genome[i] = Math.max(0, Math.min(1, genome[i]));
+                }
+            }
+        }
+
+
+        // --- UI Update Functions ---
+        function updateStatsDisplay() {
+             ui.generationDisplay.textContent = generationCount;
+
+             if (creatures.length === 0) {
+                 ui.bestFitnessDisplay.textContent = '0.00';
+                 ui.avgFitnessDisplay.textContent = '0.00';
+                 return;
+             }
+
+             let bestFitness = 0;
+             let totalFitness = 0;
+             creatures.forEach(c => {
+                 if (c.fitness > bestFitness) bestFitness = c.fitness;
+                 totalFitness += c.fitness;
+             });
+             const avgFitness = totalFitness / creatures.length;
+
+             ui.bestFitnessDisplay.textContent = bestFitness.toFixed(2);
+             ui.avgFitnessDisplay.textContent = avgFitness.toFixed(2);
+        }
+
+         function checkGoalProgress() {
+            let bestFitness = 0;
+             creatures.forEach(c => {
+                 if (c.fitness > bestFitness) bestFitness = c.fitness;
+             });
+
+             if (bestFitness >= config.targetFitness) {
+                 ui.goalProgress.textContent = `Met! (Best: ${bestFitness.toFixed(0)})`;
+                 ui.goalProgress.style.color = '#0f8'; // Green
+             } else {
+                 ui.goalProgress.textContent = `Not Met (Best: ${bestFitness.toFixed(0)})`;
+                  ui.goalProgress.style.color = '#ff5'; // Yellow
+             }
+         }
+
+        function updateUIParameters() {
+            // Update sliders/inputs from config
+            ui.populationSizeSlider.value = config.populationSize;
+            ui.populationSizeValue.textContent = config.populationSize;
+            ui.mutationRateSlider.value = config.mutationRate * 100;
+            ui.mutationRateValue.textContent = (config.mutationRate * 100).toFixed(0);
+            ui.mutationMagnitudeSlider.value = config.mutationMagnitude;
+            ui.mutationMagnitudeValue.textContent = config.mutationMagnitude.toFixed(2);
+            ui.selectionPressureSlider.value = config.selectionPressure;
+            ui.selectionPressureValue.textContent = config.selectionPressure;
+             ui.generationTimeSlider.value = config.generationTime;
+            ui.generationTimeValue.textContent = config.generationTime;
+             ui.foodCountSlider.value = config.foodCount;
+            ui.foodCountValue.textContent = config.foodCount;
+
+            // Update goal display
+            ui.goalTarget.textContent = config.targetFitness;
+        }
+
+        function handleParameterChange() {
+            config.populationSize = parseInt(ui.populationSizeSlider.value);
+            config.mutationRate = parseFloat(ui.mutationRateSlider.value) / 100;
+            config.mutationMagnitude = parseFloat(ui.mutationMagnitudeSlider.value);
+            config.selectionPressure = parseInt(ui.selectionPressureSlider.value);
+             config.generationTime = parseInt(ui.generationTimeSlider.value);
+             const oldFoodCount = config.foodCount;
+             config.foodCount = parseInt(ui.foodCountSlider.value);
+
+             // Update text displays next to sliders
+            ui.populationSizeValue.textContent = config.populationSize;
+            ui.mutationRateValue.textContent = (config.mutationRate * 100).toFixed(0);
+            ui.mutationMagnitudeValue.textContent = config.mutationMagnitude.toFixed(2);
+            ui.selectionPressureValue.textContent = config.selectionPressure;
+             ui.generationTimeValue.textContent = config.generationTime;
+             ui.foodCountValue.textContent = config.foodCount;
+
+             // If food count changed significantly, maybe regenerate food? Only on Reset for now.
+             // if (config.foodCount !== oldFoodCount) {
+             //     // Consider implications: should this happen mid-simulation? Best on reset.
+             // }
+
+            console.log("Parameters updated:", config);
+             // Note: Population size change only takes effect on Reset.
+        }
+
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            // Window Resize
+            window.addEventListener('resize', onWindowResize, false);
+
+            // UI Controls
+            ui.startButton.addEventListener('click', startSimulation);
+            ui.pauseButton.addEventListener('click', pauseSimulation);
+            ui.stepButton.addEventListener('click', stepSimulation);
+            ui.resetButton.addEventListener('click', resetSimulation);
+
+            // Parameter Sliders/Inputs
+            ui.populationSizeSlider.addEventListener('input', handleParameterChange);
+            ui.mutationRateSlider.addEventListener('input', handleParameterChange);
+            ui.mutationMagnitudeSlider.addEventListener('input', handleParameterChange);
+            ui.selectionPressureSlider.addEventListener('input', handleParameterChange);
+            ui.generationTimeSlider.addEventListener('input', handleParameterChange);
+             ui.foodCountSlider.addEventListener('input', handleParameterChange);
+
+            // Basic Mouse Camera Controls
+             container.addEventListener('mousedown', onMouseDown, false);
+             container.addEventListener('mousemove', onMouseMove, false);
+             container.addEventListener('mouseup', onMouseUp, false);
+             container.addEventListener('mouseleave', onMouseUp, false); // Treat leave as mouse up
+             container.addEventListener('wheel', onMouseWheel, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // --- Simulation Control Functions ---
+        function startSimulation() {
+            isRunning = true;
+            ui.startButton.disabled = true;
+            ui.pauseButton.disabled = false;
+            ui.stepButton.disabled = true;
+            ui.resetButton.disabled = true; // Disable reset while running
+             disableParameterInputs(true);
+            console.log("Simulation Started");
+        }
+
+        function pauseSimulation() {
+            isRunning = false;
+            ui.startButton.disabled = false;
+            ui.pauseButton.disabled = true;
+            ui.stepButton.disabled = false;
+            ui.resetButton.disabled = false; // Allow reset when paused
+             disableParameterInputs(false);
+            console.log("Simulation Paused");
+        }
+
+        function stepSimulation() {
+             if (isRunning) return; // Don't step if already running
+
+             console.log("Stepping one generation...");
+             isRunning = false; // Ensure it's off for manual control
+             ui.startButton.disabled = true; // Disable start during step
+             ui.pauseButton.disabled = true; // Disable pause during step
+             ui.stepButton.disabled = true; // Disable step during step
+             ui.resetButton.disabled = true; // Disable reset during step
+              disableParameterInputs(true); // Prevent changes during step calculation
+
+              // Run the generation end logic manually
+             if (simulationFrame === 0) {
+                 // If at the start of a generation, simulate it fully then end
+                 // For simplicity here, we'll just advance one generation instantly
+                 // A more complex step would involve running runSimulationStep() repeatedly
+                 // until simulationFrame >= config.generationTime
+                 endGeneration();
+                 updateStatsDisplay(); // Ensure UI reflects the new gen
+                 console.log(`Advanced to generation ${generationCount}`);
+                 ui.startButton.disabled = false; // Re-enable controls after step
+                 ui.pauseButton.disabled = true;
+                 ui.stepButton.disabled = false;
+                 ui.resetButton.disabled = false;
+                  disableParameterInputs(false);
+
+             } else {
+                 // If mid-generation, maybe just finish the current generation?
+                 // For now, simplest is to just trigger the generation end logic
+                 endGeneration();
+                 updateStatsDisplay();
+                 console.log(`Advanced to generation ${generationCount}`);
+                  ui.startButton.disabled = false; // Re-enable controls after step
+                 ui.pauseButton.disabled = true;
+                 ui.stepButton.disabled = false;
+                 ui.resetButton.disabled = false;
+                  disableParameterInputs(false);
+             }
+        }
+
+        function resetSimulation() {
+            pauseSimulation(); // Stop simulation first
+            console.log("Resetting Simulation...");
+            simulationFrame = 0;
+            generationCount = 0;
+            createFoodItems(); // Regenerate food according to current count parameter
+            createInitialPopulation(); // Regenerate population according to current size parameter
+            updateStatsDisplay();
+             ui.goalProgress.textContent = 'Not Met';
+             ui.goalProgress.style.color = '#ff5';
+            console.log("Simulation Reset.");
+        }
+
+         function disableParameterInputs(disabled) {
+            ui.populationSizeSlider.disabled = disabled;
+            ui.mutationRateSlider.disabled = disabled;
+            ui.mutationMagnitudeSlider.disabled = disabled;
+            ui.selectionPressureSlider.disabled = disabled;
+            ui.generationTimeSlider.disabled = disabled;
+             ui.foodCountSlider.disabled = disabled;
+         }
+
+
+        // --- Basic Camera Mouse Controls ---
+        function onMouseDown(event) {
+            isDragging = true;
+            previousMousePosition.x = event.clientX;
+            previousMousePosition.y = event.clientY;
+        }
+
+        function onMouseMove(event) {
+            if (!isDragging) return;
+
+            const deltaX = event.clientX - previousMousePosition.x;
+            const deltaY = event.clientY - previousMousePosition.y;
+
+            // Adjust angles based on mouse movement
+            cameraTheta -= deltaX * 0.005; // Rotation around Y
+            cameraPhi -= deltaY * 0.005;   // Rotation up/down
+
+            // Clamp Phi to prevent flipping over
+            cameraPhi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraPhi));
+
+            updateCameraPosition();
+
+            previousMousePosition.x = event.clientX;
+            previousMousePosition.y = event.clientY;
+        }
+
+        function onMouseUp(event) {
+            isDragging = false;
+        }
+
+        function onMouseWheel(event) {
+            event.preventDefault(); // Prevent page scrolling
+
+            // Adjust camera radius based on scroll
+            cameraRadius += event.deltaY * 0.05;
+            cameraRadius = Math.max(10, Math.min(200, cameraRadius)); // Clamp zoom distance
+
+            updateCameraPosition();
+        }
+
+        function updateCameraPosition() {
+            // Convert spherical coordinates (radius, theta, phi) to Cartesian
+            // Y is up in Three.js, so Phi is angle from Y=0 plane
+            camera.position.x = cameraTarget.x + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+            camera.position.y = cameraTarget.y + cameraRadius * Math.cos(cameraPhi);
+            camera.position.z = cameraTarget.z + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+            camera.lookAt(cameraTarget); // Always look at the target point
+            camera.updateMatrixWorld(); // Ensure matrix is updated
+        }
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isRunning) {
+                runSimulationStep();
+            }
+
+             // Update visual representation even if paused
+             // (Already done within runSimulationStep, but could be separated if needed)
+             // creatures.forEach(creature => {
+             //     if (creature.mesh) {
+             //         creature.mesh.position.copy(creature.position);
+             //         creature.mesh.rotation.y = creature.rotationY;
+             //     }
+             // });
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Start Everything ---
+        init();
+
+    </script>
+</body>
+</html>

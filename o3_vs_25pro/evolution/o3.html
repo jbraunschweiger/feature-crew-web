@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>3‑D Evolution Simulator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+
+<!-- ── Core libs (non‑module) ─────────────────────────────────────────── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/geometries/CapsuleGeometry.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.18.2/dist/lil-gui.min.js"></script>
+
+<!-- ── Styling ─────────────────────────────────────────────────────────── -->
+<style>
+html,body{margin:0;height:100%;overflow:hidden;font-family:"Nunito Sans",Arial,Helvetica,sans-serif;background:#0a0a0f;color:#e0e0f2}
+canvas{display:block}
+:root{--glass-bg:rgba(20,25,40,.45);--glass-border:rgba(255,255,255,.15);--accent:#6ee7ff}
+
+/* HUD panel */
+#hud{position:fixed;top:12px;right:12px;min-width:190px;background:var(--glass-bg);padding:12px 18px;border-radius:14px;
+     backdrop-filter:blur(14px);border:1px solid var(--glass-border);box-shadow:0 4px 12px rgba(0,0,0,.4);pointer-events:none;user-select:none}
+#hud h2{margin:0 0 6px;font-size:18px;color:var(--accent)}
+#hud .stat{font-size:14px;margin:2px 0}
+
+/* bottom control buttons */
+#controls{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:18px;align-items:center}
+button{width:48px;height:48px;border:0;border-radius:50%;cursor:pointer;background:var(--glass-bg);color:#fff;
+       backdrop-filter:blur(14px);font-size:20px;box-shadow:0 4px 10px rgba(0,0,0,.35);transition:background .25s}
+button:hover{background:rgba(255,255,255,.08)}
+
+/* lil‑gui glass‑morphic skin */
+.lil-gui.root{--width:300px;background:var(--glass-bg)!important;border:1px solid var(--glass-border)!important;border-radius:14px!important;box-shadow:0 4px 12px rgba(0,0,0,.4)!important}
+.lil-gui .title{color:var(--accent)!important}
+</style>
+</head>
+
+<body>
+<canvas id="sim"></canvas>
+
+<div id="hud">
+  <h2>Generation <span id="genNum">1</span></h2>
+  <div class="stat">Best Fitness: <span id="bestFit">0.00</span></div>
+  <div class="stat">Avg Fitness: <span id="avgFit">0.00</span></div>
+</div>
+<div id="controls">
+  <button id="playPause">⏸</button>
+  <button id="step">⏭</button>
+  <button id="restart">🔄</button>
+</div>
+
+<!-- ── Main game logic (plain script) ─────────────────────────────────── -->
+<script>
+/* ---------- Scene & Renderer ---------- */
+const canvas = document.getElementById("sim");
+const renderer = new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x050509,60,200);
+
+/* ---------- Camera with manual orbit ---------- */
+const camera = new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,500);
+let camR=60, camT=0, camP=Math.PI*0.35,userOrbit=false;
+function camUpdate(){
+  camera.position.set(
+    camR*Math.sin(camP)*Math.sin(camT),
+    camR*Math.cos(camP),
+    camR*Math.sin(camP)*Math.cos(camT)
+  );
+  camera.lookAt(0,0,0);
+}
+camUpdate();
+addEventListener("resize",()=>{renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()});
+/* pointer‑drag */
+let drag=false,lx=0,ly=0,orbitTO;
+canvas.addEventListener("pointerdown",e=>{drag=true;lx=e.clientX;ly=e.clientY;userOrbit=true});
+addEventListener("pointerup",()=>{drag=false;clearTimeout(orbitTO);orbitTO=setTimeout(()=>userOrbit=false,4000)});
+addEventListener("pointermove",e=>{
+  if(!drag) return;
+  const dx=(e.clientX-lx)/innerWidth,dy=(e.clientY-ly)/innerHeight;
+  lx=e.clientX;ly=e.clientY;
+  camT-=dx*4*Math.PI; camP=Math.min(Math.max(0.1,camP+dy*2*Math.PI),Math.PI-0.1);
+  camUpdate();
+});
+
+/* ---------- Environment ---------- */
+const env={size:60};
+const grid=new THREE.GridHelper(env.size,env.size/2,0x8888aa,0x444466);
+grid.material.transparent=true;grid.material.opacity=0.25;scene.add(grid);
+scene.add(new THREE.HemisphereLight(0x99aaff,0x222233,0.6));
+const sun=new THREE.DirectionalLight(0xffffff,0.9);sun.position.set(50,80,20);scene.add(sun);
+
+/* ---------- Config ---------- */
+const cfg={
+  populationSize:40,
+  mutationRate:0.15,
+  elitePercent:0.2,
+  generationTime:15000,
+  simulationSpeed:1,
+  trail:true
+};
+
+/* ---------- GUI ---------- */
+const GUIClass = window.lil ? window.lil.GUI : window.GUI;
+const gui = new GUIClass({title:"Simulation Parameters"});
+gui.add(cfg,"populationSize",10,200,1).name("Population").onFinishChange(restartSim);
+gui.add(cfg,"mutationRate",0,1,.01).name("Mutation σ");
+gui.add(cfg,"elitePercent",0,0.5,.05).name("Elite %");
+gui.add(cfg,"generationTime",5000,30000,500).name("Gen Duration (ms)");
+gui.add(cfg,"simulationSpeed",0.1,8,.1).name("Speed ×");
+gui.add(cfg,"trail").name("Show Trails");
+if(innerWidth<640) gui.close();
+
+/* ---------- Creature ---------- */
+const bodyGeo = new THREE.CapsuleGeometry(0.6,1.2,4,8);
+const legGeo  = new THREE.CylinderGeometry(0.15,0.15,1,6);
+function gaussian(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+class Creature{
+  constructor(g){this.genes=g||Creature.randomGenes();this.mesh=Creature.build(this.genes.colorHue);this.reset();}
+  static randomGenes(){return{speed:THREE.MathUtils.randFloat(1,4),turnRate:THREE.MathUtils.randFloat(0.2,1.5),colorHue:Math.random()*360};}
+  static build(h){
+    const mat=new THREE.MeshStandardMaterial({color:new THREE.Color(`hsl(${h},70%,60%)`)});
+    const m=new THREE.Mesh(bodyGeo,mat);m.castShadow=m.receiveShadow=true;
+    for(let i=0;i<4;i++){
+      const leg=new THREE.Mesh(legGeo,new THREE.MeshStandardMaterial({color:0x333333}));
+      leg.position.set(i<2?0.3:-0.3,-1,i%2?0.3:-0.3);m.add(leg);
+    }return m;
+  }
+  reset(){
+    this.pos=new THREE.Vector3((Math.random()-0.5)*env.size*0.6,0.6,(Math.random()-0.5)*env.size*0.6);
+    this.dir=Math.random()*Math.PI*2;this.fitness=0;
+    this.mesh.position.copy(this.pos);this.mesh.rotation.y=-this.dir;
+    if(cfg.trail){this._makeTrail();}
+  }
+  _makeTrail(){
+    if(this.trail)scene.remove(this.trail);
+    const curve=new THREE.CatmullRomCurve3([this.pos.clone()]);
+    const g=new THREE.TubeGeometry(curve,1,0.05,4,false);
+    const m=new THREE.MeshBasicMaterial({color:this.mesh.material.color,opacity:0.65,transparent:true});
+    this.trail=new THREE.Mesh(g,m);this.trail.geometry.curve=curve;scene.add(this.trail);
+  }
+  update(dt){
+    this.dir+=(Math.random()-0.5)*this.genes.turnRate*dt;
+    const v=this.genes.speed*dt;
+    this.pos.x+=Math.sin(this.dir)*v;this.pos.z+=Math.cos(this.dir)*v;
+    if(this.pos.x>env.size/2)this.pos.x=-env.size/2;if(this.pos.x<-env.size/2)this.pos.x=env.size/2;
+    if(this.pos.z>env.size/2)this.pos.z=-env.size/2;if(this.pos.z<-env.size/2)this.pos.z=env.size/2;
+    this.mesh.position.copy(this.pos);this.mesh.rotation.y=-this.dir;
+    this.fitness=Math.max(this.fitness,this.pos.z+env.size/2);
+    if(cfg.trail && this.trail){
+      const curve=this.trail.geometry.curve;curve.points.push(this.pos.clone());
+      this.trail.geometry.dispose();
+      this.trail.geometry=new THREE.TubeGeometry(curve,curve.points.length*2,0.05,4,false);
+    }
+  }
+}
+
+/* ---------- GA ---------- */
+let creatures=[],generation=1,genClock=0;
+function spawnPop(){
+  creatures.forEach(c=>{scene.remove(c.mesh);c.trail&&scene.remove(c.trail)});
+  creatures=[];for(let i=0;i<cfg.populationSize;i++){const c=new Creature();scene.add(c.mesh);creatures.push(c);}
+  genClock=0;updateHUD();
+}
+function nextGen(){
+  creatures.sort((a,b)=>b.fitness-a.fitness);
+  const elite=Math.max(1,Math.floor(cfg.elitePercent*cfg.populationSize)),next=[];
+  for(let i=0;i<elite;i++)next.push(new Creature({...creatures[i].genes}));
+  while(next.length<cfg.populationSize){
+    const p1=creatures[Math.floor(Math.random()*elite)],p2=creatures[Math.floor(Math.random()*elite)];
+    const g={};for(const k in p1.genes){
+      const v=Math.random()<0.5?p1.genes[k]:p2.genes[k];
+      g[k]=typeof v==="number"?v+gaussian()*cfg.mutationRate:v;
+    }
+    g.speed=THREE.MathUtils.clamp(g.speed,0.5,6);g.turnRate=THREE.MathUtils.clamp(g.turnRate,0.05,2);g.colorHue=(g.colorHue+360)%360;
+    next.push(new Creature(g));
+  }
+  creatures.forEach(c=>{scene.remove(c.mesh);c.trail&&scene.remove(c.trail)});
+  creatures=next;creatures.forEach(c=>scene.add(c.mesh));
+  generation++;genClock=0;updateHUD();
+}
+
+/* ---------- HUD ---------- */
+const genNum=document.getElementById("genNum"),bestFit=document.getElementById("bestFit"),avgFit=document.getElementById("avgFit");
+function updateHUD(){
+  genNum.textContent=generation;
+  const best=creatures.reduce((m,c)=>Math.max(m,c.fitness),0);
+  const avg=creatures.reduce((s,c)=>s+c.fitness,0)/creatures.length;
+  bestFit.textContent=best.toFixed(2);avgFit.textContent=avg.toFixed(2);
+}
+
+/* ---------- Buttons & keys ---------- */
+let paused=false;
+document.getElementById("playPause").onclick=()=>{paused=!paused;document.getElementById("playPause").textContent=paused?'▶':'⏸';};
+document.getElementById("step").onclick=()=>{if(paused)simStep(cfg.generationTime/cfg.simulationSpeed);}
+document.getElementById("restart").onclick=restartSim;
+addEventListener("keydown",e=>{if(e.code==="Space"){e.preventDefault();document.getElementById("playPause").click();}
+                               if(e.code==="KeyR")document.getElementById("restart").click();});
+function restartSim(){generation=1;spawnPop();}
+
+/* ---------- Main Loop ---------- */
+let last=performance.now();
+function simStep(dt){
+  const d=dt/1000*cfg.simulationSpeed;
+  creatures.forEach(c=>c.update(d));genClock+=dt;
+  if(genClock>=cfg.generationTime)nextGen();
+}
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt=now-last;last=now;
+  if(!paused)simStep(dt);
+  if(!userOrbit){camT+=0.0001*dt;camUpdate();}
+  renderer.render(scene,camera);
+}
+spawnPop();animate(performance.now());
+</script>
+</body>
+</html>
