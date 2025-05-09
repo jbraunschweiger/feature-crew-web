@@ -1,0 +1,59 @@
+Prompt for a Coding AI: City Generator & Simulation
+Project Overview:
+Develop a city generator and simulation that procedurally creates a visually interesting and
+representative urban environment. The generator should dynamically construct buildings,
+roads, districts, parks, and other urban elements while simulating aspects such as population
+growth, traffic flow, and economy. The goal is to provide a realistic yet stylized simulation that
+allows users to observe and interact with an evolving cityscape.
+Core Features:
+1. Procedural City Generation
+● Generate a grid-based or organic road network with main roads, intersections, and side
+streets.
+● Create distinct districts (e.g., residential, commercial, industrial, downtown, suburban,
+rural outskirts).
+● Populate the city with building types based on district zoning:
+○ Skyscrapers and office buildings in commercial areas.
+○ Houses, apartments, and condos in residential zones.
+○ Factories and warehouses in industrial sectors.
+● Implement parks, rivers, and green spaces for a balanced urban design.
+● Vary architectural styles and heights to make the city visually diverse.
+2. Simulation Dynamics
+● Simulate population growth and migration based on available housing, jobs, and
+amenities.
+● Implement traffic simulation with moving vehicles, pedestrians, and public transport.
+● Introduce an economic system with fluctuating property values, business activity, and
+tax revenue.
+● Add time progression, allowing the city to expand, upgrade, or decay over time.
+3. Visual & Aesthetic Elements
+● Use low-poly, pixel art, or semi-realistic rendering to balance performance and
+aesthetics.
+● Implement day-night cycle and weather effects (rain, fog, snow) to enhance realism.
+● Add lighting effects for streetlights, car headlights, and building windows.
+● Provide a camera system allowing zooming, panning, and top-down or isometric views.
+4. User Interaction & Customization
+● Allow users to manually place roads, buildings, and modify zones (sandbox mode).
+● Implement a procedural mode where cities are generated automatically.
+● Provide sliders and toggles to control density, road layouts, and simulation speed.
+● Include random city seed generation for endless variety.
+5. Optimization & Performance Considerations
+● Use data structures like quad-trees or spatial hashing for efficient rendering and
+pathfinding.
+● Implement multi-threading or asynchronous processing for smooth simulation.
+● Optimize for scalability to handle small towns to large metropolitan areas.
+Advanced Features:
+● AI-Driven NPC Behavior: Citizens with daily routines, work shifts, and leisure activities.
+● Historical Evolution: City grows from a small town to a futuristic metropolis.
+● Disasters & Events: Fires, floods, traffic jams, or economic recessions affecting city
+growth.
+● Multiplayer Mode: Shared cities where multiple users contribute to urban planning.
+Goal & Expected Output:
+● A working prototype that generates a city dynamically and simulates activity.
+● A visually engaging experience that represents a realistic or stylized city.
+● A scalable and interactive environment where users can observe or influence growth.
+
+Build a full node project that uses the following libraries:
+- three
+- simplex-noise 
+
+OrbitControls has
+been deprecated, so don't use that. Implement a full node project that fulfills all of the above .requirements
