@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural 3D Planet</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #000;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0;
+            border-radius: 8px;
+            user-select: none;
+            transition: all 0.3s ease;
+        }
+        #controls-header {
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        #controls-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+        #toggle-icon {
+            font-size: 12px;
+            transition: transform 0.3s ease;
+        }
+        #controls.collapsed #toggle-icon {
+            transform: rotate(-90deg);
+        }
+        #controls-content {
+            padding: 15px;
+            max-height: 500px;
+            overflow-y: auto;
+            transition: all 0.3s ease;
+        }
+        #controls.collapsed #controls-content {
+            max-height: 0;
+            padding: 0 15px;
+            overflow: hidden;
+        }
+        .control-section {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .control-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #4CAF50;
+        }
+        .control-group {
+            margin: 8px 0;
+        }
+        .control-group label {
+            display: inline-block;
+            width: 120px;
+            font-size: 12px;
+        }
+        .control-group input[type="range"] {
+            width: 100px;
+        }
+        .control-group span {
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 5px;
+            margin-right: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="controls">
+            <div id="controls-header">
+                <h3>Planet Controls</h3>
+                <span id="toggle-icon">▼</span>
+            </div>
+            <div id="controls-content">
+                <div class="control-section">
+                    <div class="section-title">Rotation & Time</div>
+                    <div class="control-group">
+                        <label>Rotation Speed:</label>
+                        <input type="range" id="rotationSpeed" min="0" max="2" value="0.5" step="0.1">
+                        <span id="rotationValue">0.5</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Time of Day:</label>
+                        <input type="range" id="timeOfDay" min="0" max="360" value="0" step="1">
+                        <span id="timeValue">0°</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Cloud Speed:</label>
+                        <input type="range" id="cloudSpeed" min="0" max="2" value="0.3" step="0.1">
+                        <span id="cloudValue">0.3</span>
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <div class="section-title">Terrain</div>
+                    <div class="control-group">
+                        <label>Sea Level:</label>
+                        <input type="range" id="seaLevel" min="-0.2" max="0.2" value="0" step="0.01">
+                        <span id="seaLevelValue">0.00</span>
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <div class="section-title">Props & Vegetation</div>
+                    <div class="control-group">
+                        <label>Tree Density:</label>
+                        <input type="range" id="treeDensity" min="0" max="100" value="50" step="5">
+                        <span id="treeDensityValue">50%</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Flora Density:</label>
+                        <input type="range" id="floraDensity" min="0" max="100" value="30" step="5">
+                        <span id="floraDensityValue">30%</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Rock Density:</label>
+                        <input type="range" id="rockDensity" min="0" max="100" value="40" step="5">
+                        <span id="rockDensityValue">40%</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Prop Scale:</label>
+                        <input type="range" id="propScale" min="0.5" max="2" value="1" step="0.1">
+                        <span id="propScaleValue">1.0</span>
+                    </div>
+                </div>
+                
+                <div class="control-section">
+                    <button id="resetCamera">Reset Camera</button>
+                    <button id="pauseRotation">Pause Rotation</button>
+                    <button id="regenerateProps">Regenerate Props</button>
+                </div>
+            </div>
+        </div>
+        <div id="info">
+            Mouse: Drag to rotate camera | Scroll: Zoom
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Camera position
+        camera.position.set(0, 0, 50);
+        camera.lookAt(0, 0, 0);
+
+        // Initialize Simplex Noise
+        const simplex = new SimplexNoise();
+
+        // Planet parameters
+        const planetRadius = 15;
+        const atmosphereRadius = 18;
+        const cloudRadius = 16.5;
+        let rotationSpeed = 0.5;
+        let cloudRotationSpeed = 0.3;
+        let isPaused = false;
+        let seaLevelOffset = 0;
+
+        // Prop parameters
+        let treeDensity = 50;
+        let floraDensity = 30;
+        let rockDensity = 40;
+        let propScale = 1.0;
+        let propGroup = new THREE.Group();
+        scene.add(propGroup);
+
+        // Biome data storage
+        let biomeData = [];
+
+        // Create terrain noise function
+        function terrainNoise(x, y, z) {
+            let elevation = 0;
+            let frequency = 1.5;
+            let amplitude = 1;
+            let maxValue = 0;
+            const persistence = 0.5;
+            const octaves = 6;
+
+            for (let i = 0; i < octaves; i++) {
+                elevation += simplex.noise3D(x * frequency, y * frequency, z * frequency) * amplitude;
+                maxValue += amplitude;
+                amplitude *= persistence;
+                frequency *= 2;
+            }
+
+            elevation = elevation / maxValue;
+            
+            // Add continental features
+            const continental = simplex.noise3D(x * 0.3, y * 0.3, z * 0.3) * 0.5;
+            elevation = elevation * 0.6 + continental * 0.4;
+            
+            // Add mountain ridges
+            const ridgeNoise = Math.abs(simplex.noise3D(x * 2, y * 2, z * 2));
+            elevation += Math.pow(ridgeNoise, 3) * 0.2;
+
+            return Math.max(-0.8, Math.min(1, elevation));
+        }
+
+        // Determine biome type
+        function getBiomeType(elevation, latitude) {
+            const adjustedElevation = elevation - seaLevelOffset;
+            
+            if (adjustedElevation < 0) return 'ocean';
+            if (adjustedElevation < 0.1) return 'beach';
+            if (latitude > 0.8) return 'polar';
+            if (adjustedElevation > 0.6) {
+                if (adjustedElevation > 0.8) return 'snowcap';
+                return 'mountain';
+            }
+            if (latitude > 0.6) return 'tundra';
+            if (adjustedElevation < 0.3) {
+                const forestNoise = simplex.noise3D(latitude * 10, elevation * 10, 0);
+                if (forestNoise > 0.2) return 'forest';
+                return 'grassland';
+            }
+            if (latitude < 0.3) return 'desert';
+            return 'savanna';
+        }
+
+        // Calculate slope from neighboring points
+        function calculateSlope(position, radius) {
+            const samples = [
+                new THREE.Vector3(position.x + 0.1, position.y, position.z),
+                new THREE.Vector3(position.x - 0.1, position.y, position.z),
+                new THREE.Vector3(position.x, position.y + 0.1, position.z),
+                new THREE.Vector3(position.x, position.y - 0.1, position.z)
+            ];
+
+            let maxHeightDiff = 0;
+            const baseHeight = position.length() - radius;
+
+            for (const sample of samples) {
+                const normal = sample.normalize();
+                const elevation = terrainNoise(normal.x * 2, normal.y * 2, normal.z * 2);
+                const height = radius + elevation * 3;
+                const heightDiff = Math.abs(height - radius - baseHeight);
+                maxHeightDiff = Math.max(maxHeightDiff, heightDiff);
+            }
+
+            return maxHeightDiff / 0.1; // Normalize slope value
+        }
+
+        // Create planet geometry with terrain
+        function createPlanetGeometry() {
+            const geometry = new THREE.SphereGeometry(planetRadius, 128, 64);
+            const positions = geometry.attributes.position;
+            const colors = [];
+            biomeData = [];
+
+            for (let i = 0; i < positions.count; i++) {
+                const x = positions.getX(i);
+                const y = positions.getY(i);
+                const z = positions.getZ(i);
+
+                // Normalize position
+                const length = Math.sqrt(x * x + y * y + z * z);
+                const nx = x / length;
+                const ny = y / length;
+                const nz = z / length;
+
+                // Calculate elevation
+                const elevation = terrainNoise(nx * 2, ny * 2, nz * 2);
+                const height = planetRadius + elevation * 3;
+
+                // Update position
+                positions.setXYZ(i, nx * height, ny * height, nz * height);
+
+                // Calculate biome based on elevation and latitude
+                const latitude = Math.abs(ny);
+                const biome = getBiomeType(elevation, latitude);
+                
+                // Calculate slope for this position
+                const slope = calculateSlope(new THREE.Vector3(nx * height, ny * height, nz * height), planetRadius);
+                
+                // Store biome data for prop placement
+                biomeData.push({
+                    position: new THREE.Vector3(nx * height, ny * height, nz * height),
+                    normal: new THREE.Vector3(nx, ny, nz),
+                    biome: biome,
+                    elevation: elevation,
+                    slope: slope
+                });
+
+                let color;
+                switch(biome) {
+                    case 'ocean':
+                        const depth = Math.abs(elevation - seaLevelOffset);
+                        color = new THREE.Color().lerpColors(
+                            new THREE.Color(0x003d5a),
+                            new THREE.Color(0x001f2e),
+                            Math.min(depth * 2, 1)
+                        );
+                        break;
+                    case 'beach':
+                        color = new THREE.Color(0xc2b280);
+                        break;
+                    case 'polar':
+                    case 'snowcap':
+                        color = new THREE.Color(0xffffff);
+                        break;
+                    case 'mountain':
+                        color = new THREE.Color(0x8b7355);
+                        break;
+                    case 'tundra':
+                        color = new THREE.Color(0xb0c4b1);
+                        break;
+                    case 'forest':
+                        color = new THREE.Color(0x228b22);
+                        break;
+                    case 'grassland':
+                        color = new THREE.Color(0x90ee90);
+                        break;
+                    case 'desert':
+                        color = new THREE.Color(0xedc9af);
+                        break;
+                    case 'savanna':
+                        color = new THREE.Color(0xdaa520);
+                        break;
+                }
+
+                colors.push(color.r, color.g, color.b);
+            }
+
+            geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(colors), 3));
+            geometry.computeVertexNormals();
+            return geometry;
+        }
+
+        // Create improved tree geometry
+        function createTreeGeometry() {
+            const tree = new THREE.Group();
+            
+            // Trunk
+            const trunkGeometry = new THREE.CylinderGeometry(0.08, 0.12, 1.2, 8);
+            const trunkMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x654321,
+                roughness: 0.8 
+            });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 0.6; // Half trunk height above ground
+            trunk.castShadow = true;
+            tree.add(trunk);
+            
+            // Main foliage (conical)
+            const mainFoliageGeometry = new THREE.ConeGeometry(0.6, 1.4, 8);
+            const foliageMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x2d5a2d,
+                flatShading: true 
+            });
+            const mainFoliage = new THREE.Mesh(mainFoliageGeometry, foliageMaterial);
+            mainFoliage.position.y = 1.6; // On top of trunk
+            mainFoliage.castShadow = true;
+            tree.add(mainFoliage);
+            
+            // Secondary foliage layer for more realistic look
+            const secondFoliageGeometry = new THREE.ConeGeometry(0.45, 1.0, 8);
+            const secondFoliage = new THREE.Mesh(secondFoliageGeometry, foliageMaterial);
+            secondFoliage.position.y = 2.1;
+            secondFoliage.castShadow = true;
+            tree.add(secondFoliage);
+            
+            return tree;
+        }
+
+        // Create improved rock geometry
+        function createRockGeometry() {
+            const baseSize = 0.3;
+            const geometry = new THREE.DodecahedronGeometry(baseSize, 0);
+            
+            // Deform geometry for more natural look
+            const positions = geometry.attributes.position;
+            for (let i = 0; i < positions.count; i++) {
+                const x = positions.getX(i);
+                const y = positions.getY(i);
+                const z = positions.getZ(i);
+                
+                const deformation = 1 + (Math.random() - 0.5) * 0.3;
+                positions.setXYZ(i, x * deformation, y * deformation, z * deformation);
+            }
+            geometry.computeVertexNormals();
+            
+            const material = new THREE.MeshPhongMaterial({ 
+                color: new THREE.Color().setHSL(0, 0, 0.3 + Math.random() * 0.3),
+                flatShading: true,
+                roughness: 0.9
+            });
+            
+            const rock = new THREE.Mesh(geometry, material);
+            
+            // More natural scaling
+            const scaleX = 0.7 + Math.random() * 0.6;
+            const scaleY = 0.4 + Math.random() * 0.8;
+            const scaleZ = 0.7 + Math.random() * 0.6;
+            rock.scale.set(scaleX, scaleY, scaleZ);
+            
+            // Random rotation
+            rock.rotation.x = Math.random() * Math.PI;
+            rock.rotation.y = Math.random() * Math.PI;
+            rock.rotation.z = Math.random() * Math.PI;
+            
+            rock.castShadow = true;
+            return rock;
+        }
+
+        // Create improved flora geometry
+        function createFloraGeometry(type) {
+            const group = new THREE.Group();
+            
+            if (type === 'cactus') {
+                // Main body
+                const bodyGeometry = new THREE.CylinderGeometry(0.12, 0.15, 1.0, 8);
+                const cactusColor = new THREE.Color(0x2d4a2d);
+                const cactusMaterial = new THREE.MeshPhongMaterial({ 
+                    color: cactusColor,
+                    roughness: 0.9 
+                });
+                
+                const body = new THREE.Mesh(bodyGeometry, cactusMaterial);
+                body.position.y = 0.5;
+                body.castShadow = true;
+                group.add(body);
+                
+                // Arms (sometimes)
+                if (Math.random() > 0.5) {
+                    const armGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.5, 6);
+                    const arm = new THREE.Mesh(armGeometry, cactusMaterial);
+                    arm.position.set(0.15, 0.3, 0);
+                    arm.rotation.z = -Math.PI / 6;
+                    arm.castShadow = true;
+                    group.add(arm);
+                }
+                
+            } else if (type === 'flower') {
+                // Stem
+                const stemGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 4);
+                const stemMaterial = new THREE.MeshPhongMaterial({ color: 0x228b22 });
+                const stem = new THREE.Mesh(stemGeometry, stemMaterial);
+                stem.position.y = 0.2;
+                group.add(stem);
+                
+                // Flower head
+                const petalColors = [0xff69b4, 0xff0000, 0xffff00, 0xff8c00, 0x9370db];
+                const petalColor = petalColors[Math.floor(Math.random() * petalColors.length)];
+                const flowerGeometry = new THREE.SphereGeometry(0.08, 6, 4);
+                const flowerMaterial = new THREE.MeshPhongMaterial({ color: petalColor });
+                const flower = new THREE.Mesh(flowerGeometry, flowerMaterial);
+                flower.position.y = 0.4;
+                flower.scale.y = 0.5;
+                group.add(flower);
+                
+            } else {
+                // Bush/shrub
+                const bushGeometry = new THREE.SphereGeometry(0.35, 8, 6);
+                const bushColor = new THREE.Color().setHSL(0.33, 0.6, 0.25 + Math.random() * 0.2);
+                const bushMaterial = new THREE.MeshPhongMaterial({ 
+                    color: bushColor,
+                    flatShading: true 
+                });
+                
+                const bush = new THREE.Mesh(bushGeometry, bushMaterial);
+                bush.position.y = 0.2;
+                bush.scale.y = 0.6 + Math.random() * 0.4;
+                bush.scale.x = 0.8 + Math.random() * 0.4;
+                bush.scale.z = 0.8 + Math.random() * 0.4;
+                bush.castShadow = true;
+                group.add(bush);
+            }
+            
+            return group;
+        }
+
+        // Improved prop placement with better orientation and filtering
+        function placePropsOnSurface(prop, position, normal, biome) {
+            // Clone the prop
+            const placedProp = prop.clone();
+            
+            // Position slightly above surface to avoid z-fighting
+            const offset = normal.clone().multiplyScalar(0.05);
+            placedProp.position.copy(position.clone().add(offset));
+            
+            // Create proper orientation matrix
+            const up = new THREE.Vector3(0, 1, 0);
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
+            placedProp.setRotationFromQuaternion(quaternion);
+            
+            // Add some random rotation around the normal axis
+            const randomRotation = Math.random() * Math.PI * 2;
+            placedProp.rotateOnAxis(normal, randomRotation);
+            
+            // Biome-specific scaling
+            let biomeScale = 1.0;
+            switch(biome) {
+                case 'forest':
+                    biomeScale = 0.8 + Math.random() * 0.4; // Trees: 0.8-1.2
+                    break;
+                case 'grassland':
+                    biomeScale = 0.6 + Math.random() * 0.3; // Smaller: 0.6-0.9
+                    break;
+                case 'mountain':
+                    biomeScale = 0.5 + Math.random() * 0.3; // Rocks: 0.5-0.8
+                    break;
+                case 'desert':
+                    biomeScale = 0.7 + Math.random() * 0.6; // Cacti: 0.7-1.3
+                    break;
+                case 'tundra':
+                    biomeScale = 0.4 + Math.random() * 0.3; // Small: 0.4-0.7
+                    break;
+                case 'savanna':
+                    biomeScale = 0.6 + Math.random() * 0.5; // Medium: 0.6-1.1
+                    break;
+                default:
+                    biomeScale = 0.7 + Math.random() * 0.4; // Default: 0.7-1.1
+            }
+            
+            const finalScale = biomeScale * propScale;
+            placedProp.scale.set(finalScale, finalScale, finalScale);
+            
+            return placedProp;
+        }
+
+        // Improved prop generation with better distribution and placement
+        function generateProps() {
+            // Clear existing props
+            while(propGroup.children.length > 0) {
+                propGroup.remove(propGroup.children[0]);
+            }
+            
+            // Filter suitable points for prop placement
+            const suitablePoints = biomeData.filter(data => {
+                // Exclude water and very steep slopes
+                if (data.biome === 'ocean' || data.biome === 'beach') return false;
+                if (data.slope > 0.3) return false; // Too steep
+                
+                // Random thinning for better distribution
+                return Math.random() < 0.15; // Use 15% of available points
+            });
+            
+            // Sort by biome for better organization
+            const biomeGroups = {
+                forest: [],
+                grassland: [],
+                mountain: [],
+                desert: [],
+                tundra: [],
+                savanna: [],
+                polar: [],
+                snowcap: []
+            };
+            
+            suitablePoints.forEach(point => {
+                if (biomeGroups[point.biome]) {
+                    biomeGroups[point.biome].push(point);
+                }
+            });
+            
+            // Place trees in forests and some grasslands
+            const forestPoints = [...biomeGroups.forest, ...biomeGroups.grassland];
+            const treeCount = Math.min(
+                Math.floor(forestPoints.length * treeDensity / 100),
+                200 // Limit for performance
+            );
+            
+            for (let i = 0; i < treeCount; i++) {
+                if (forestPoints.length === 0) break;
+                
+                const randomIndex = Math.floor(Math.random() * forestPoints.length);
+                const point = forestPoints.splice(randomIndex, 1)[0];
+                
+                // Only place trees in suitable biomes
+                if (point.biome === 'forest' || 
+                    (point.biome === 'grassland' && Math.random() < 0.3)) {
+                    
+                    const tree = createTreeGeometry();
+                    const placedTree = placePropsOnSurface(tree, point.position, point.normal, point.biome);
+                    propGroup.add(placedTree);
+                }
+            }
+            
+            // Place rocks in mountains, deserts, and tundra
+            const rockPoints = [...biomeGroups.mountain, ...biomeGroups.desert, ...biomeGroups.tundra];
+            const rockCount = Math.min(
+                Math.floor(rockPoints.length * rockDensity / 100),
+                150
+            );
+            
+            for (let i = 0; i < rockCount; i++) {
+                if (rockPoints.length === 0) break;
+                
+                const randomIndex = Math.floor(Math.random() * rockPoints.length);
+                const point = rockPoints.splice(randomIndex, 1)[0];
+                
+                const rock = createRockGeometry();
+                const placedRock = placePropsOnSurface(rock, point.position, point.normal, point.biome);
+                propGroup.add(placedRock);
+            }
+            
+            // Place flora based on biome
+            const floraPoints = [...biomeGroups.grassland, ...biomeGroups.savanna, ...biomeGroups.desert, ...biomeGroups.tundra];
+            const floraCount = Math.min(
+                Math.floor(floraPoints.length * floraDensity / 100),
+                180
+            );
+            
+            for (let i = 0; i < floraCount; i++) {
+                if (floraPoints.length === 0) break;
+                
+                const randomIndex = Math.floor(Math.random() * floraPoints.length);
+                const point = floraPoints.splice(randomIndex, 1)[0];
+                
+                let floraType;
+                switch(point.biome) {
+                    case 'desert':
+                        floraType = 'cactus';
+                        break;
+                    case 'grassland':
+                    case 'savanna':
+                        floraType = Math.random() < 0.7 ? 'flower' : 'bush';
+                        break;
+                    case 'tundra':
+                        floraType = 'bush';
+                        break;
+                    default:
+                        floraType = 'bush';
+                }
+                
+                const flora = createFloraGeometry(floraType);
+                const placedFlora = placePropsOnSurface(flora, point.position, point.normal, point.biome);
+                propGroup.add(placedFlora);
+            }
+            
+            console.log(`Generated ${propGroup.children.length} props total`);
+        }
+
+        // Create planet
+        let planetGeometry = createPlanetGeometry();
+        const planetMaterial = new THREE.MeshPhongMaterial({
+            vertexColors: true,
+            shininess: 20,
+            flatShading: false
+        });
+        const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+        planet.castShadow = true;
+        planet.receiveShadow = true;
+        scene.add(planet);
+
+        // Generate initial props
+        generateProps();
+
+        // Create ocean
+        const oceanGeometry = new THREE.SphereGeometry(planetRadius + 0.05, 64, 32);
+        const oceanMaterial = new THREE.MeshPhongMaterial({
+            color: 0x006994,
+            transparent: true,
+            opacity: 0.7,
+            shininess: 100,
+            reflectivity: 0.8
+        });
+        const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
+        scene.add(ocean);
+
+        // Create atmosphere with proper glow effect
+        const atmosphereVert = `
+            varying vec3 vNormal;
+            varying vec3 vPositionNormal;
+            
+            void main() {
+                vNormal = normalize(normalMatrix * normal);
+                vPositionNormal = normalize((modelMatrix * vec4(position, 1.0)).xyz);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const atmosphereFrag = `
+            varying vec3 vNormal;
+            varying vec3 vPositionNormal;
+            uniform vec3 lightDirection;
+            
+            void main() {
+                // Calculate atmosphere intensity based on viewing angle
+                float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.5);
+                
+                // Base atmosphere color
+                vec3 atmosphereColor = vec3(0.3, 0.6, 1.0);
+                
+                // Add sunset/sunrise colors based on light direction
+                float sunAlignment = dot(vPositionNormal, lightDirection);
+                vec3 sunsetColor = vec3(1.0, 0.6, 0.3);
+                vec3 dayColor = vec3(0.4, 0.7, 1.0);
+                
+                // Blend between day and sunset colors
+                vec3 finalColor = mix(dayColor, sunsetColor, max(0.0, sunAlignment));
+                
+                // Apply intensity to create the glow effect
+                finalColor *= intensity;
+                
+                // Output with smooth alpha falloff
+                gl_FragColor = vec4(finalColor, intensity * 0.6);
+            }
+        `;
+
+        const atmosphereMaterial = new THREE.ShaderMaterial({
+            vertexShader: atmosphereVert,
+            fragmentShader: atmosphereFrag,
+            side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            uniforms: {
+                lightDirection: { value: new THREE.Vector3(1, 0, 0) }
+            }
+        });
+        const atmosphereGeometry = new THREE.SphereGeometry(atmosphereRadius, 64, 64);
+        const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+        scene.add(atmosphere);
+
+        // Create clouds with better visibility
+        const cloudVert = `
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            
+            void main() {
+                vUv = uv;
+                vNormal = normalize(normalMatrix * normal);
+                vPosition = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const cloudFrag = `
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            uniform float time;
+            uniform vec3 lightDirection;
+            
+            // Improved noise function for cloud generation
+            vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+            
+            float snoise(vec2 v) {
+                const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                                   -0.577350269189626, 0.024390243902439);
+                vec2 i  = floor(v + dot(v, C.yy));
+                vec2 x0 = v - i + dot(i, C.xx);
+                vec2 i1;
+                i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+                vec4 x12 = x0.xyxy + C.xxzz;
+                x12.xy -= i1;
+                i = mod289(i);
+                vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+                vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+                m = m*m;
+                m = m*m;
+                vec3 x = 2.0 * fract(p * C.www) - 1.0;
+                vec3 h = abs(x) - 0.5;
+                vec3 ox = floor(x + 0.5);
+                vec3 a0 = x - ox;
+                m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+                vec3 g;
+                g.x  = a0.x  * x0.x  + h.x  * x0.y;
+                g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                return 130.0 * dot(m, g);
+            }
+            
+            float cloudNoise(vec2 uv) {
+                float n = 0.0;
+                float amplitude = 1.0;
+                float frequency = 2.0;
+                
+                // Multiple octaves for cloud detail
+                for(int i = 0; i < 4; i++) {
+                    n += snoise(uv * frequency + time * 0.02) * amplitude;
+                    frequency *= 2.5;
+                    amplitude *= 0.4;
+                }
+                
+                return n * 0.5 + 0.5;
+            }
+            
+            void main() {
+                vec2 uv = vUv;
+                
+                // Generate cloud pattern
+                float cloud = cloudNoise(uv * 3.0);
+                cloud *= cloudNoise(uv * 8.0 + 100.0);
+                
+                // Sharp cutoff for cloud edges
+                cloud = smoothstep(0.4, 0.6, cloud);
+                
+                // Cloud lighting
+                float lightIntensity = max(0.4, dot(vNormal, lightDirection));
+                vec3 cloudColor = vec3(1.0) * lightIntensity;
+                
+                // Fade clouds near poles for realism
+                float latitude = abs(vPosition.y / length(vPosition));
+                cloud *= 1.0 - smoothstep(0.7, 0.9, latitude);
+                
+                gl_FragColor = vec4(cloudColor, cloud * 0.8);
+            }
+        `;
+
+        const cloudMaterial = new THREE.ShaderMaterial({
+            vertexShader: cloudVert,
+            fragmentShader: cloudFrag,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            uniforms: {
+                time: { value: 0 },
+                lightDirection: { value: new THREE.Vector3(1, 0, 0) }
+            }
+        });
+        const cloudGeometry = new THREE.SphereGeometry(cloudRadius, 64, 32);
+        const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+        scene.add(clouds);
+
+        // Lighting
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        sunLight.position.set(100, 0, 0);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 500;
+        sunLight.shadow.camera.left = -50;
+        sunLight.shadow.camera.right = 50;
+        sunLight.shadow.camera.top = 50;
+        sunLight.shadow.camera.bottom = -50;
+        scene.add(sunLight);
+
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        scene.add(ambientLight);
+
+        // Add rim light for better planet definition
+        const rimLight = new THREE.DirectionalLight(0x4488ff, 0.3);
+        rimLight.position.set(-50, 0, -50);
+        scene.add(rimLight);
+
+        // Camera controls
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let cameraRotation = { x: 0, y: 0 };
+        let cameraDistance = 50;
+
+        function updateCameraPosition() {
+            camera.position.x = cameraDistance * Math.sin(cameraRotation.x) * Math.cos(cameraRotation.y);
+            camera.position.y = cameraDistance * Math.sin(cameraRotation.y);
+            camera.position.z = cameraDistance * Math.cos(cameraRotation.x) * Math.cos(cameraRotation.y);
+            camera.lookAt(0, 0, 0);
+        }
+
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        renderer.domElement.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
+
+            cameraRotation.x += deltaX * 0.01;
+            cameraRotation.y = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraRotation.y + deltaY * 0.01));
+
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+            updateCameraPosition();
+        });
+
+        renderer.domElement.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        renderer.domElement.addEventListener('wheel', (e) => {
+            cameraDistance = Math.max(20, Math.min(100, cameraDistance + e.deltaY * 0.05));
+            updateCameraPosition();
+        });
+
+        // UI Controls
+        // Collapsible panel
+        document.getElementById('controls-header').addEventListener('click', () => {
+            document.getElementById('controls').classList.toggle('collapsed');
+        });
+
+        // Existing controls
+        document.getElementById('rotationSpeed').addEventListener('input', (e) => {
+            rotationSpeed = parseFloat(e.target.value);
+            document.getElementById('rotationValue').textContent = rotationSpeed.toFixed(1);
+        });
+
+        document.getElementById('timeOfDay').addEventListener('input', (e) => {
+            const angle = parseFloat(e.target.value) * Math.PI / 180;
+            sunLight.position.set(Math.cos(angle) * 100, Math.sin(angle) * 100, 0);
+            atmosphereMaterial.uniforms.lightDirection.value.set(Math.cos(angle), Math.sin(angle), 0);
+            cloudMaterial.uniforms.lightDirection.value.set(Math.cos(angle), Math.sin(angle), 0);
+            document.getElementById('timeValue').textContent = e.target.value + '°';
+        });
+
+        document.getElementById('cloudSpeed').addEventListener('input', (e) => {
+            cloudRotationSpeed = parseFloat(e.target.value);
+            document.getElementById('cloudValue').textContent = cloudRotationSpeed.toFixed(1);
+        });
+
+        document.getElementById('seaLevel').addEventListener('input', (e) => {
+            seaLevelOffset = parseFloat(e.target.value);
+            document.getElementById('seaLevelValue').textContent = seaLevelOffset.toFixed(2);
+            
+            // Recreate planet geometry with new sea level
+            planet.geometry.dispose();
+            planetGeometry = createPlanetGeometry();
+            planet.geometry = planetGeometry;
+            generateProps();
+        });
+
+        // Prop controls
+        document.getElementById('treeDensity').addEventListener('input', (e) => {
+            treeDensity = parseInt(e.target.value);
+            document.getElementById('treeDensityValue').textContent = treeDensity + '%';
+        });
+
+        document.getElementById('floraDensity').addEventListener('input', (e) => {
+            floraDensity = parseInt(e.target.value);
+            document.getElementById('floraDensityValue').textContent = floraDensity + '%';
+        });
+
+        document.getElementById('rockDensity').addEventListener('input', (e) => {
+            rockDensity = parseInt(e.target.value);
+            document.getElementById('rockDensityValue').textContent = rockDensity + '%';
+        });
+
+        document.getElementById('propScale').addEventListener('input', (e) => {
+            propScale = parseFloat(e.target.value);
+            document.getElementById('propScaleValue').textContent = propScale.toFixed(1);
+        });
+
+        document.getElementById('regenerateProps').addEventListener('click', () => {
+            generateProps();
+        });
+
+        document.getElementById('resetCamera').addEventListener('click', () => {
+            cameraRotation = { x: 0, y: 0 };
+            cameraDistance = 50;
+            updateCameraPosition();
+        });
+
+        document.getElementById('pauseRotation').addEventListener('click', () => {
+            isPaused = !isPaused;
+            document.getElementById('pauseRotation').textContent = isPaused ? 'Resume Rotation' : 'Pause Rotation';
+        });
+
+        // Animation loop
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!isPaused) {
+                planet.rotation.y += 0.001 * rotationSpeed;
+                ocean.rotation.y = planet.rotation.y;
+                clouds.rotation.y += 0.001 * cloudRotationSpeed;
+                propGroup.rotation.y = planet.rotation.y;
+            }
+
+            time += 0.01;
+            cloudMaterial.uniforms.time.value = time;
+
+            // Animate ocean waves
+            const oceanPositions = ocean.geometry.attributes.position;
+            for (let i = 0; i < oceanPositions.count; i++) {
+                const x = oceanPositions.getX(i);
+                const y = oceanPositions.getY(i);
+                const z = oceanPositions.getZ(i);
+                const length = Math.sqrt(x * x + y * y + z * z);
+                const waveHeight = Math.sin(time * 2 + length * 0.5) * 0.05;
+                const newLength = planetRadius + 0.05 + waveHeight;
+                oceanPositions.setXYZ(i, x / length * newLength, y / length * newLength, z / length * newLength);
+            }
+            oceanPositions.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

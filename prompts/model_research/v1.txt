@@ -1,0 +1,5 @@
+Conduct an investigation on state of the art AI models from all the big tech companies. Make sure to find the most up to date models using web search as required. List them all here. Gather as much information as you can before replying. Reply with an info dump. 
+
+Based on the information you pulled, conduct a detailed analysis comparing latest models - please visualize improvements in model performance to make it obvious what's been happening. Project out what you think the model performance will be through charts, and walkthrough your thinking process. Also make recommendations for what a small to medium sized business should use as part of their tech transition, and why.
+
+Conduct deep analysis by using your tools (e.g. code), and continue to iterate until you think you have novel findings. Please provide at least some charts, but the output is at your discretion. 
