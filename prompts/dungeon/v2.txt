@@ -1,0 +1,72 @@
+Objective:
+Create a browser-based, 3D dungeon-crawling game as a node project. The game world should be fully procedural each time the player starts a new session, with winding corridors, rooms, traps, enemies, loot, and a simple UI.
+
+Technical Requirements:
+1. Core Framework
+   - Use Three.js for 3D rendering.
+   - No external build tools—everything lives in one HTML file.
+   - Responsive to window resize.
+
+2. Dungeon Generation
+   - Implement a procedural dungeon algorithm (e.g. BSP or random walk) to carve out corridors and rooms on a grid.
+   - Represent walls, floors, and ceilings with low-poly geometry (e.g. boxes or planes).
+   - Randomize room sizes, corridor length, and branching.
+
+3. Player & Controls
+   - First-person camera using PointerLockControls for “walking” through the dungeon.
+   - WASD movement, mouse to look around.
+   - Basic collision detection to prevent walking through walls.
+
+4. Enemies & AI
+   - Populate rooms and corridors with simple enemy entities (e.g. cubes or low-poly monsters).
+   - Basic state machine: idle, patrol (random waypoint), chase if player comes within sight cone.
+   - Health for player and enemies; display health as an on-screen bar.
+
+5. Traps & Hazards
+   - Randomly place a few trap types (spike pits, swinging blades, floor arrows).
+   - Trigger trap when player steps on a zone; apply damage and visual feedback.
+
+6. Loot & Power-Ups
+   - Scatter collectible items (coins, health potions) in rooms.
+   - On pickup, update UI counters or restore health.
+
+7. UI & Feedback
+   - Overlay HUD showing player health, current level, and score.
+   - Simple “Game Over” and “You Win” screens.
+   - On-screen minimap (optional): top-down view of discovered map.
+
+Gameplay Loop:
+1. On load, generate a brand-new dungeon layout.
+2. Player spawns at entrance; HUD zeroed.
+3. Player explores, fights enemies, avoids traps, collects loot.
+4. When player reaches exit door, show “Level Complete” and regenerate new dungeon at higher difficulty (e.g. more enemies, fewer loot).
+5. If player health reaches zero, show “Game Over,” then allow restart.
+
+Controls Summary:
+- W/A/S/D: Move forward/left/back/right  
+- Mouse: Look around  
+- E or click: Interact with doors or pick up items  
+- R: Restart level  
+
+Use the following libraries and frameworks:
+// Three.js for 3D rendering
+// Rapier for physics
+// simplex-noise for procedural generation
+I have attached a simple example project to demonstrate correct usage of these libraries. Use this as a starting point.
+
+Ensure the project is modular, with clear separation of concerns, and follows best practices for performance and maintainability. 
+Include a README file that explains how to set up and run the project. Use TypeScript for type safety and better development experience.
+
+
+Format your entire output using Markdown-style code blocks. For each file in the codebase, use this exact structure:
+
+```filename.ext
+// file contents here
+```
+
+	•	Start each file block with triple backticks followed immediately by the full filename (including extension), with no extra text before or after the backticks.
+	•	Only include code files. No explanations, summaries, or prose.
+	•	If there are multiple files, place each in its own code block, one after the other.
+	•	Avoid nested or indented code blocks. Use plain Markdown syntax.
+
+This format will be parsed by an automated script that extracts file names and contents. Incorrect formatting will cause parsing to fail.

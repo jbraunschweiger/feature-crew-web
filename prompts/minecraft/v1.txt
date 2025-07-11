@@ -1,0 +1,31 @@
+Build a complete, performant, well-structured Minecraft-style single player sandbox game node project with the following features:
+// 1. **World Generation**: Implement a procedural world generation algorithm that creates a vast, explorable terrain with biomes, caves, and structures.
+// 2. **Player Mechanics**: Develop player controls for movement, jumping, and interaction with the environment.
+// 3. **Block System**: Create a block system that allows players to place, break, and interact with blocks in the world.
+// 4. **Inventory System**: Implement an inventory system for players to collect and manage items.
+// 5. **Entities**: Add entities such as animals, monsters, and NPCs with basic AI behaviors.
+
+Create all of the assets from scratch including procedural textures, entity models, ect.
+
+Use the following libraries and frameworks:
+// Three.js for 3D rendering
+// Rapier for physics
+// simplex-noise for procedural generation
+I have attached documentation for each library that demonstrates correct syntax.
+
+Ensure the project is modular, with clear separation of concerns, and follows best practices for performance and maintainability. 
+Include comprehensive documentation for each module and a README file that explains how to set up and run the project. Use TypeScript for type safety and better development experience.
+
+
+Format your entire output using Markdown-style code blocks. For each file in the codebase, use this exact structure:
+
+```filename.ext
+// file contents here
+```
+
+	•	Start each file block with triple backticks followed immediately by the full filename (including extension), with no extra text before or after the backticks.
+	•	Only include code files. No explanations, summaries, or prose.
+	•	If there are multiple files, place each in its own code block, one after the other.
+	•	Avoid nested or indented code blocks. Use plain Markdown syntax.
+
+This format will be parsed by an automated script that extracts file names and contents. Incorrect formatting will cause parsing to fail.

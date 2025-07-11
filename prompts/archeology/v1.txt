@@ -1,0 +1,77 @@
+🏺 Game Requirements: Procedural Archaeology Adventure
+
+1. Game Overview
+
+A compact, replayable exploration game where the player takes on the role of an archaeologist exploring mysterious, procedurally generated dig sites. Each site hides ancient relics, buried secrets, and environmental storytelling. The core loop involves uncovering artifacts, solving light puzzles, and deciphering the past.
+
+⸻
+
+2. Core Features
+
+2.1 Procedural Generation
+	•	Dig Sites: Procedurally generated 2D or 3D grids representing layered excavation zones.
+	•	Biome Themes: Ruins, tombs, deserts, jungles, tundra, or underwater sites.
+	•	Buried Layouts: Each dig site contains:
+	•	Hidden artifacts (placed with procedural logic).
+	•	Collapsed walls, debris, and clues.
+	•	Optional: generated civilization history logs or glyphs.
+
+2.2 Archaeology Gameplay
+	•	Tools & Mechanics:
+	•	Brush (uncover without damaging),
+	•	Pickaxe (riskier but faster),
+	•	Scanner (limited-use ability to detect underground anomalies).
+	•	Excavation:
+	•	Artifacts are fragile—using the wrong tool or carelessness may break them.
+	•	Artifacts appear in layers (e.g., sand → stone → hidden chamber).
+	•	Cataloging System:
+	•	Players must identify the era, culture, and use of each artifact.
+	•	A scoring or XP system based on correct identification.
+
+2.3 Puzzle & Lore Systems
+	•	Relic Puzzles:
+	•	Occasionally, artifacts are pieces of a puzzle (e.g., assembling a broken tablet).
+	•	Environmental Lore:
+	•	Discover murals, carvings, or ancient diaries that hint at the site’s history.
+	•	Optional: deciphering a fictional language over multiple playthroughs.
+
+⸻
+
+3. Progression and Replayability
+
+3.1 Progression
+	•	Player Level: Unlock better tools and knowledge categories.
+	•	Research Journal:
+	•	Collect relics to fill in cultural timelines or unlock ‘civilization profiles’.
+	•	New Sites:
+	•	Higher-level players unlock more complex or dangerous dig sites.
+
+3.2 Replayability
+	•	Each new game seed offers:
+	•	A different civilization,
+	•	Different artifact sets and layouts,
+	•	Different historical implications or mysteries.
+	•	Optional modifiers: artifact density, site danger, cultural complexity.
+
+⸻
+
+4. Visual and Audio Style
+	•	Visuals: Stylized low-poly.
+	•	UI: Clean journal-style interface.
+
+⸻
+
+5. Stretch Features
+	•	Time pressure (e.g., weather, cave-ins).
+	•	NPC rivals or assistants.
+	•	Museum building/customization (showcase your finds).
+	•	Artifact trading or grant funding for upgrades.
+
+use this snippit as a starting point to build a single html file <script
+src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> <script
+src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js">
+</script> <script> const scene = new THREE.Scene(); const camera = new
+THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true }); OrbitControls has
+been deprecated, so don't use that. Implement a single html file that satisfies all of the
+above requirements

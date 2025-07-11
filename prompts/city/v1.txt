@@ -50,8 +50,6 @@ Goal & Expected Output:
 ● A working prototype that generates a city dynamically and simulates activity.
 ● A visually engaging experience that represents a realistic or stylized city.
 ● A scalable and interactive environment where users can observe or influence growth.
-Would you like to refine any aspects, such as focusing on realism vs. stylization,
-performance constraints, or specific visual styles? :rocket:
 use this snippit as a starting point to build a single html file <script
 src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> <script
 src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js">

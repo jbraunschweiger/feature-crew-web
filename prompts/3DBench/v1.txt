@@ -1,0 +1,4 @@
+Create a benchmarking suite that tests the performance LLMs on tasks that require 3d understanding and generation.
+The suite should include a variety of tasks including object generation, placement, and interaction in a 3D environment. Each task should be designed to evaluate the LLM's ability to understand spatial relationships, generate 3D models, and interact with a 3D scene.
+All test cases must be scored deterministically and the test suite should output image previews in addition to scores for easy human evaluation.
+The suite should be implemented in a modular way, allowing for easy addition of new tasks and models.

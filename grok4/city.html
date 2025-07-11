@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cozy City Simulator Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        #ui button, #ui input { margin: 5px; }
+        #objectives {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 20;
+        }
+        #instructions {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <div id="ui">
+        <button id="generateBtn">Generate City</button>
+        <button id="sandboxBtn">Sandbox Mode (Press Mouse to Place)</button>
+        <label>Density: <input type="range" id="densitySlider" min="0.1" max="1" step="0.1" value="0.5"></label>
+        <label>Simulation Speed: <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1"></label>
+        <label>Seed: <input type="number" id="seedInput" value="123"></label>
+    </div>
+    <div id="objectives">
+        <h3>Objectives</h3>
+        <ul id="objList"></ul>
+    </div>
+    <div id="blocker">
+        <div id="instructions">
+            <p>Click to play</p>
+            <p>Move: WASD<br>Look: Mouse<br>Sandbox: Click to place building</p>
+        </div>
+    </div>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+          }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/PointerLockControls.js';
+        import { Sky } from 'https://unpkg.com/three@0.128.0/examples/jsm/objects/Sky.js';
+        import { GLTFLoader } from 'https://unpkg.com/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new PointerLockControls(camera, document.body);
+        scene.add(controls.getObject());
+
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+
+        instructions.addEventListener('click', function () {
+            controls.lock();
+        });
+
+        controls.addEventListener('lock', function () {
+            instructions.style.display = 'none';
+            blocker.style.display = 'none';
+        });
+
+        controls.addEventListener('unlock', function () {
+            blocker.style.display = 'block';
+            instructions.style.display = '';
+        });
+
+        // Movement
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+
+        const onKeyDown = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = true;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+            }
+        };
+
+        const onKeyUp = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = false;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffddbb, 1);
+        directionalLight.position.set(5, 10, 5);
+        scene.add(directionalLight);
+        const hemiLight = new THREE.HemisphereLight(0xffeeb1, 0x080820, 1);
+        scene.add(hemiLight);
+
+        // Sky
+        const sky = new Sky();
+        sky.scale.setScalar(450000);
+        scene.add(sky);
+        const sun = new THREE.Vector3();
+        const effectController = {
+            turbidity: 10,
+            rayleigh: 3,
+            mieCoefficient: 0.005,
+            mieDirectionalG: 0.7,
+            elevation: 2,
+            azimuth: 180,
+            exposure: renderer.toneMappingExposure
+        };
+        function updateSky() {
+            const uniforms = sky.material.uniforms;
+            uniforms['turbidity'].value = effectController.turbidity;
+            uniforms['rayleigh'].value = effectController.rayleigh;
+            uniforms['mieCoefficient'].value = effectController.mieCoefficient;
+            uniforms['mieDirectionalG'].value = effectController.mieDirectionalG;
+            const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
+            const theta = THREE.MathUtils.degToRad(effectController.azimuth);
+            sun.setFromSphericalCoords(1, phi, theta);
+            uniforms['sunPosition'].value.copy(sun);
+            directionalLight.position.copy(sun);
+            renderer.toneMappingExposure = effectController.exposure;
+        }
+        updateSky();
+
+        // Fog for cozy atmosphere
+        scene.fog = new THREE.FogExp2(0xffddee, 0.005);
+
+        // Textures
+        const textureLoader = new THREE.TextureLoader();
+        const grassTexture = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/3/33/Green_grass_texture_%28Unsplash%29.jpg');
+        grassTexture.wrapS = THREE.RepeatWrapping;
+        grassTexture.wrapT = THREE.RepeatWrapping;
+        grassTexture.repeat.set(10, 10);
+        const asphaltTexture = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/0/0d/Asphalt_high_resolution_texture.jpg');
+        asphaltTexture.wrapS = THREE.RepeatWrapping;
+        asphaltTexture.wrapT = THREE.RepeatWrapping;
+        asphaltTexture.repeat.set(1, 10);
+        const brickTexture = textureLoader.load('https://upload.wikimedia.org/wikipedia/commons/4/40/Brick_high_definition_texture.jpg');
+        brickTexture.wrapS = THREE.RepeatWrapping;
+        brickTexture.wrapT = THREE.RepeatWrapping;
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        const groundMaterial = new THREE.MeshStandardMaterial({ map: grassTexture });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // Simplex Noise
+        const noise = new SimplexNoise();
+
+        // City parameters
+        const citySize = 50;
+        const cellSize = 2;
+        let districts = [];
+        let buildings = [];
+        let roads = [];
+        let parks = [];
+        let rivers = [];
+        let vehicles = [];
+        let population = 0;
+        let economy = 1000;
+        let time = 0;
+        let dayNightCycle = 0;
+        let simulationSpeed = 1;
+        let density = 0.5;
+        let seed = 123;
+        let sandboxMode = false;
+        let hasBuiltInSandbox = false;
+
+        // Player parameters
+        const playerHeight = 1.8;
+        camera.position.y = playerHeight;
+        const playerSpeed = 10;
+        const clock = new THREE.Clock();
+        const playerBox = new THREE.Box3();
+
+        // Vehicle model
+        let carModel;
+        const gltfLoader = new GLTFLoader();
+        gltfLoader.load('https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb', (gltf) => {
+            carModel = gltf.scene;
+            carModel.scale.set(0.5, 0.5, 0.5);
+        });
+
+        // Objectives
+        const objectives = [
+            { text: "Generate your first city", completed: false, check: () => true },
+            { text: "Reach population of 500", completed: false, check: () => population >= 500 },
+            { text: "Build a building in sandbox mode", completed: false, check: () => hasBuiltInSandbox },
+            { text: "Explore the downtown district", completed: false, check: () => {
+                const downtown = districts.find(d => d.type === 'downtown');
+                if (downtown) {
+                    const dist = Math.sqrt((camera.position.x / cellSize - downtown.x)**2 + (camera.position.z / cellSize - downtown.z)**2);
+                    return dist < downtown.radius;
+                }
+                return false;
+            } }
+        ];
+
+        function updateObjectives() {
+            const objList = document.getElementById('objList');
+            objList.innerHTML = '';
+            objectives.forEach(obj => {
+                if (!obj.completed && obj.check()) obj.completed = true;
+                const li = document.createElement('li');
+                li.textContent = obj.text + (obj.completed ? ' ✓' : '');
+                objList.appendChild(li);
+            });
+        }
+
+        // Generate districts
+        function generateDistricts() {
+            districts = [];
+            for (let i = 0; i < 5; i++) {
+                const type = ['residential', 'commercial', 'industrial', 'downtown', 'suburban'][Math.floor(Math.random() * 5)];
+                const x = Math.random() * citySize - citySize / 2;
+                const z = Math.random() * citySize - citySize / 2;
+                const radius = 5 + Math.random() * 10;
+                districts.push({ type, x, z, radius });
+            }
+        }
+
+        // Generate roads
+        function generateRoads() {
+            roads.forEach(road => scene.remove(road));
+            roads = [];
+            for (let x = -citySize / 2; x < citySize / 2; x += 5) {
+                const geometry = new THREE.BoxGeometry(1, 0.1, 100);
+                const material = new THREE.MeshStandardMaterial({ map: asphaltTexture.clone() });
+                material.map.repeat.set(1, 100);
+                const road = new THREE.Mesh(geometry, material);
+                road.position.set(x * cellSize, 0.1, 0);
+                scene.add(road);
+                roads.push(road);
+            }
+            for (let z = -citySize / 2; z < citySize / 2; z += 5) {
+                const geometry = new THREE.BoxGeometry(100, 0.1, 1);
+                const material = new THREE.MeshStandardMaterial({ map: asphaltTexture.clone() });
+                material.map.repeat.set(100, 1);
+                const road = new THREE.Mesh(geometry, material);
+                road.position.set(0, 0.1, z * cellSize);
+                scene.add(road);
+                roads.push(road);
+            }
+        }
+
+        // Generate buildings with cozy visuals
+        function generateBuildings() {
+            buildings.forEach(b => scene.remove(b));
+            buildings = [];
+            population = 0;
+            for (let x = -citySize / 2; x < citySize / 2; x++) {
+                for (let z = -citySize / 2; z < citySize / 2; z++) {
+                    if (x % 5 === 0 || z % 5 === 0) continue;
+                    const placeNoise = (noise.noise2D(x / 10 + seed, z / 10 + seed) + 1) / 2;
+                    if (Math.random() > density * placeNoise) continue;
+                    let districtType = 'rural';
+                    for (const d of districts) {
+                        const dist = Math.sqrt((x - d.x)**2 + (z - d.z)**2);
+                        if (dist < d.radius) {
+                            districtType = d.type;
+                            break;
+                        }
+                    }
+                    let baseHeight = 1 + Math.random() * 5;
+                    let color = 0xcccccc;
+                    let width = 1.5 + Math.random() * 0.5;
+                    let depth = 1.5 + Math.random() * 0.5;
+                    switch (districtType) {
+                        case 'residential': baseHeight = 2 + Math.random() * 3; color = 0xffe4b5; population += 10; break; // Soft orange
+                        case 'commercial': baseHeight = 5 + Math.random() * 10; color = 0xadd8e6; population += 5; break; // Soft blue
+                        case 'industrial': baseHeight = 3 + Math.random() * 4; color = 0xa9a9a9; population += 2; break; // Soft gray
+                        case 'downtown': baseHeight = 10 + Math.random() * 20; color = 0xffb6c1; population += 20; break; // Soft pink
+                        case 'suburban': baseHeight = 1 + Math.random() * 2; color = 0x90ee90; population += 5; break; // Soft green
+                    }
+                    const group = new THREE.Group();
+                    const baseGeometry = new THREE.BoxGeometry(width, baseHeight, depth);
+                    const baseMaterial = new THREE.MeshStandardMaterial({ map: brickTexture.clone() });
+                    baseMaterial.map.repeat.set(1, baseHeight / 2);
+                    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                    base.position.y = baseHeight / 2;
+                    group.add(base);
+
+                    // Add details
+                    if (districtType === 'residential') {
+                        const roofGeometry = new THREE.ConeGeometry(width / 1.5, 1 + Math.random(), 4);
+                        const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xcd853f }); // Soft brown
+                        const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+                        roof.position.y = baseHeight + roofGeometry.parameters.height / 2;
+                        group.add(roof);
+                    } else if (districtType === 'industrial') {
+                        const chimneyGeometry = new THREE.CylinderGeometry(0.2, 0.2, 2 + Math.random() * 2, 8);
+                        const chimneyMaterial = new THREE.MeshStandardMaterial({ color: 0x696969 });
+                        const chimney = new THREE.Mesh(chimneyGeometry, chimneyMaterial);
+                        chimney.position.set(0.5, baseHeight + chimneyGeometry.parameters.height / 2, 0.5);
+                        group.add(chimney);
+                    } else if (districtType === 'commercial' || districtType === 'downtown') {
+                        const topGeometry = new THREE.BoxGeometry(width * 0.8, 1 + Math.random() * 2, depth * 0.8);
+                        const topMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+                        const top = new THREE.Mesh(topGeometry, topMaterial);
+                        top.position.y = baseHeight + topGeometry.parameters.height / 2;
+                        group.add(top);
+                    }
+
+                    // Add windows (small planes)
+                    for (let level = 1; level < baseHeight; level += 1.5) {
+                        const windowGeo = new THREE.PlaneGeometry(0.3, 0.5);
+                        const windowMat = new THREE.MeshStandardMaterial({ color: 0x87cefa, emissive: 0x87cefa, emissiveIntensity: 0.2 });
+                        const window1 = new THREE.Mesh(windowGeo, windowMat);
+                        window1.position.set(0, level, depth / 2 + 0.01);
+                        window1.rotation.y = Math.PI;
+                        group.add(window1);
+                        const window2 = new THREE.Mesh(windowGeo, windowMat);
+                        window2.position.set(0, level, -depth / 2 - 0.01);
+                        group.add(window2);
+                    }
+
+                    group.position.set(x * cellSize, 0, z * cellSize);
+                    scene.add(group);
+                    group.bbox = new THREE.Box3().setFromObject(group);
+                    buildings.push(group);
+                }
+            }
+        }
+
+        // Generate parks with trees
+        function generateParks() {
+            parks.forEach(p => scene.remove(p));
+            parks = [];
+            for (let x = -citySize / 2; x < citySize / 2; x += 3) {
+                for (let z = -citySize / 2; z < citySize / 2; z += 3) {
+                    const n = noise.noise2D(x / 10 + seed, z / 10 + seed);
+                    if (n > 0.5 && Math.random() > 0.8) {
+                        const parkGroup = new THREE.Group();
+                        const grassGeo = new THREE.BoxGeometry(3, 0.2, 3);
+                        const grassMat = new THREE.MeshStandardMaterial({ map: grassTexture.clone() });
+                        grassMat.map.repeat.set(1, 1);
+                        const grass = new THREE.Mesh(grassGeo, grassMat);
+                        grass.position.y = 0.1;
+                        parkGroup.add(grass);
+
+                        // Add tree
+                        const trunkGeo = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+                        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+                        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                        trunk.position.y = 0.5 + 0.1;
+                        parkGroup.add(trunk);
+
+                        const foliageGeo = new THREE.SphereGeometry(0.8, 8, 8);
+                        const foliageMat = new THREE.MeshStandardMaterial({ color: 0x006400 });
+                        const foliage1 = new THREE.Mesh(foliageGeo, foliageMat);
+                        foliage1.position.y = 1.5 + 0.1;
+                        parkGroup.add(foliage1);
+                        const foliage2 = new THREE.Mesh(foliageGeo, foliageMat);
+                        foliage2.position.set(0.2, 1.8 + 0.1, 0.2);
+                        foliage2.scale.set(0.7, 0.7, 0.7);
+                        parkGroup.add(foliage2);
+
+                        parkGroup.position.set(x * cellSize, 0, z * cellSize);
+                        scene.add(parkGroup);
+                        parks.push(parkGroup);
+                    }
+                }
+            }
+        }
+
+        // Generate river
+        function generateRiver() {
+            rivers.forEach(r => scene.remove(r));
+            rivers = [];
+            const points = [];
+            for (let i = 0; i < 11; i++) {
+                const x = -50 + i * 10;
+                const z = noise.noise2D(x / 20 + seed, 0) * 30;
+                points.push(new THREE.Vector3(x, 0.05, z));
+            }
+            const path = new THREE.CatmullRomCurve3(points);
+            const geometry = new THREE.TubeGeometry(path, 20, 3, 8, false);
+            const material = new THREE.MeshStandardMaterial({ color: 0x4169e1, transparent: true, opacity: 0.8 });
+            const river = new THREE.Mesh(geometry, material);
+            scene.add(river);
+            rivers.push(river);
+        }
+
+        // Generate vehicles
+        function generateVehicles() {
+            vehicles.forEach(v => scene.remove(v));
+            vehicles = [];
+            const roadPos = [];
+            for (let i = -5; i <= 5; i++) roadPos.push(i * 10);
+            for (let i = 0; i < 50; i++) {
+                const axis = Math.random() > 0.5 ? 'x' : 'z';
+                const fixed = roadPos[Math.floor(Math.random() * roadPos.length)];
+                const varying = Math.random() * 100 - 50;
+                const dir = Math.random() > 0.5 ? 1 : -1;
+                let vehicle;
+                if (carModel) {
+                    vehicle = carModel.clone();
+                    vehicle.position.set(axis === 'x' ? varying : fixed, 0.5, axis === 'x' ? fixed : varying);
+                    vehicle.rotation.y = (axis === 'x' ? Math.PI / 2 : 0) + (dir < 0 ? Math.PI : 0);
+                } else {
+                    const geometry = new THREE.BoxGeometry(0.5, 0.5, 1);
+                    const material = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff });
+                    vehicle = new THREE.Mesh(geometry, material);
+                    vehicle.position.set(axis === 'x' ? varying : fixed, 0.5, axis === 'x' ? fixed : varying);
+                    vehicle.rotation.y = (axis === 'x' ? Math.PI / 2 : 0) + (dir < 0 ? Math.PI : 0);
+                }
+                vehicle.axis = axis;
+                vehicle.dir = dir;
+                vehicle.speed = 0.1 + Math.random() * 0.1;
+                scene.add(vehicle);
+                vehicles.push(vehicle);
+            }
+        }
+
+        // Simulate traffic
+        function simulateTraffic(delta) {
+            vehicles.forEach(v => {
+                const move = v.speed * v.dir * simulationSpeed * delta * 10;
+                if (v.axis === 'x') {
+                    v.position.x += move;
+                    if (Math.abs(v.position.x) > 50) {
+                        v.dir *= -1;
+                        v.rotation.y = v.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+                    }
+                } else {
+                    v.position.z += move;
+                    if (Math.abs(v.position.z) > 50) {
+                        v.dir *= -1;
+                        v.rotation.y = v.dir > 0 ? 0 : Math.PI;
+                    }
+                }
+            });
+        }
+
+        // Simulate growth
+        function simulateGrowth() {
+            population += Math.floor(economy / 1000 * simulationSpeed);
+            economy += Math.floor(population / 100 * simulationSpeed) - 50;
+            if (Math.random() < 0.01 * simulationSpeed) {
+                population -= 100;
+                economy -= 500;
+            }
+        }
+
+        // Update day-night (affect sky elevation)
+        function updateDayNight() {
+            dayNightCycle = (dayNightCycle + 0.001 * simulationSpeed) % 1;
+            const intensity = Math.sin(dayNightCycle * Math.PI * 2) * 0.5 + 0.5;
+            ambientLight.intensity = intensity * 0.5 + 0.2;
+            directionalLight.intensity = intensity;
+            hemiLight.intensity = intensity;
+            effectController.elevation = 30 * intensity - 15; // From dawn to dusk
+            updateSky();
+        }
+
+        // Full generation
+        function generateCity(procedural = true) {
+            seed = parseInt(document.getElementById('seedInput').value) || Math.random() * 1000;
+            noise.seed = seed;
+            generateDistricts();
+            generateRoads();
+            generateBuildings();
+            generateParks();
+            generateRiver();
+            generateVehicles();
+            if (!procedural) sandboxMode = true;
+        }
+
+        // UI events
+        document.getElementById('generateBtn').addEventListener('click', () => generateCity(true));
+        document.getElementById('sandboxBtn').addEventListener('click', () => {
+            sandboxMode = !sandboxMode;
+            alert(sandboxMode ? 'Sandbox mode: Click mouse to place buildings while walking' : 'Sandbox off');
+        });
+        document.getElementById('densitySlider').addEventListener('input', (e) => density = parseFloat(e.target.value));
+        document.getElementById('speedSlider').addEventListener('input', (e) => simulationSpeed = parseFloat(e.target.value));
+
+        // Sandbox placement
+        document.addEventListener('pointerdown', (event) => {
+            if (controls.isLocked && sandboxMode && event.button === 0) {
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = raycaster.intersectObject(ground);
+                if (intersects.length > 0) {
+                    const point = intersects[0].point;
+                    const group = new THREE.Group();
+                    const baseGeometry = new THREE.BoxGeometry(1.5, 5, 1.5);
+                    const baseMaterial = new THREE.MeshStandardMaterial({ map: brickTexture.clone() });
+                    baseMaterial.map.repeat.set(1, 5 / 1.5);
+                    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                    base.position.y = 2.5;
+                    group.add(base);
+                    const roofGeometry = new THREE.ConeGeometry(1, 1, 4);
+                    const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xcd853f });
+                    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+                    roof.position.y = 5 + 0.5;
+                    group.add(roof);
+                    group.position.set(point.x, 0, point.z);
+                    scene.add(group);
+                    group.bbox = new THREE.Box3().setFromObject(group);
+                    buildings.push(group);
+                    population += 10;
+                    hasBuiltInSandbox = true;
+                }
+            }
+        });
+
+        // Collision check
+        function checkCollision(newPos) {
+            playerBox.set(
+                new THREE.Vector3(newPos.x - 0.5, 0, newPos.z - 0.5),
+                new THREE.Vector3(newPos.x + 0.5, playerHeight + 1, newPos.z + 0.5)
+            );
+            for (const building of buildings) {
+                if (playerBox.intersectsBox(building.bbox)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            time += delta * simulationSpeed;
+
+            if (controls.isLocked) {
+                const direction = new THREE.Vector3();
+                const frontVector = new THREE.Vector3();
+                camera.getWorldDirection(frontVector);
+                frontVector.y = 0;
+                frontVector.normalize();
+                const rightVector = new THREE.Vector3();
+                rightVector.crossVectors(frontVector, camera.up);
+                rightVector.normalize();
+
+                direction.z = Number(moveBackward) - Number(moveForward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize();
+
+                const velocity = direction.clone().multiplyScalar(playerSpeed * delta);
+
+                const deltaPos = new THREE.Vector3();
+                deltaPos.add(frontVector.clone().multiplyScalar(-velocity.z)); // Note: forward is negative z in direction
+                deltaPos.add(rightVector.clone().multiplyScalar(velocity.x));
+
+                const newPos = camera.position.clone().add(deltaPos);
+
+                // Boundary check
+                if (Math.abs(newPos.x) > 50 || Math.abs(newPos.z) > 50) {
+                    // Don't move if out of bounds
+                } else if (!checkCollision(newPos)) {
+                    camera.position.copy(newPos);
+                }
+            }
+
+            simulateTraffic(delta);
+            simulateGrowth();
+            updateDayNight();
+            updateObjectives();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Initial generation
+        generateCity();
+        updateObjectives();
+    </script>
+</body>
+</html>
