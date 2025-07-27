@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cozy Procedural City Generator & Simulation</title>
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100%;
+      background: #20262e;
+      color: #f0f3fa;
+      font-family: Arial, sans-serif;
+    }
+    #overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 14px;
+      max-width: 300px;
+      user-select: none;
+    }
+    #overlay input[type=range] {
+      width: 100%;
+    }
+    #overlay label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div id="info"></div>
+    <div>
+      <label for="simSpeed">Simulation Speed</label>
+      <input id="simSpeed" type="range" min="0.1" max="5" step="0.1" value="1" />
+    </div>
+    <div>
+      <label for="density">Urban Density</label>
+      <input id="density" type="range" min="0.2" max="2" step="0.1" value="1" />
+    </div>
+    <div>
+      <label for="seed">Seed</label>
+      <input id="seed" type="number" value="0" style="width:100%;" />
+    </div>
+    <button id="regen">Regenerate City</button>
+    <button id="toggleWeather">Toggle Weather</button>
+    <button id="toggleDisaster">Trigger Disaster</button>
+  </div>
+  <script>
+    // Setup scene, camera and renderer
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting: ambient and directional to mimic sun
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 2000;
+    sunLight.position.set(1000, 1000, 1000);
+    scene.add(sunLight);
+
+    // Fog for atmosphere and weather transitions
+    scene.fog = new THREE.FogExp2(scene.background, 0.0005);
+
+    // GUI elements
+    const info = document.getElementById('info');
+    const simSpeedSlider = document.getElementById('simSpeed');
+    const densitySlider = document.getElementById('density');
+    const seedInput = document.getElementById('seed');
+    const regenBtn = document.getElementById('regen');
+    const toggleWeatherBtn = document.getElementById('toggleWeather');
+    const toggleDisasterBtn = document.getElementById('toggleDisaster');
+
+    // Simulation parameters
+    let simSpeed = 1;
+    const params = {
+      density: 1,
+      seed: 0,
+      weather: false,
+      disaster: false,
+    };
+
+    simSpeedSlider.addEventListener('input', e => simSpeed = parseFloat(e.target.value));
+    densitySlider.addEventListener('input', e => params.density = parseFloat(e.target.value));
+    seedInput.addEventListener('input', e => params.seed = parseInt(e.target.value));
+    regenBtn.addEventListener('click', () => regenerateCity());
+    toggleWeatherBtn.addEventListener('click', () => { params.weather = !params.weather; });
+    toggleDisasterBtn.addEventListener('click', () => { params.disaster = !params.disaster; });
+
+    // Colour palettes inspired by cosy city builders
+    const residentialPalette = [0xffc8dd,0xffdfd9,0xfff9e4,0xcde7b0,0xace1af,0xbfd8f9,0xe4c1f9];
+    const commercialPalette  = [0xf2d7ee,0xd7e3fc,0xffe5ec,0xd1f7c4,0xf6d6ad,0xf9f0c4];
+    const industrialPalette  = [0xd9e4dd,0xdfe7fd,0xf5f0e1,0xe6d6ca,0xf4dfc8];
+    // Rural/farmland colours: warm wheat and ochre tones for a soft countryside feel
+    const ruralPalette       = [0xfce8b5,0xecd9a5,0xe7cfa1,0xe1b95a];
+
+    // City data structure
+    const city = {
+      size: 200,
+      grid: 50,
+      roads: [],
+      buildings: [],
+      vehicles: [],
+      districtMap: []
+    };
+
+    let simplex; // noise generator
+
+    // Random generator with seed for reproducibility
+    function randomSeeded(seed) {
+      let t = seed + 0x6d2b79f5;
+      return function() {
+        t += 0x6d2b79f5;
+        let r = Math.imul(t ^ (t >>> 15), 1 | t);
+        r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // Helper functions to add cell contents
+    function addPark(x, z, cellSize) {
+      const objects = [];
+      const centerX = -city.size/2 + cellSize * x + cellSize / 2;
+      const centerZ = -city.size/2 + cellSize * z + cellSize / 2;
+      const plane = new THREE.PlaneGeometry(cellSize * 0.9, cellSize * 0.9);
+      const grassColor = new THREE.Color(0x84c97a).offsetHSL(0,0,(Math.random()-0.5)*0.05);
+      const mat = new THREE.MeshStandardMaterial({ color: grassColor, roughness: 1.0 });
+      const park = new THREE.Mesh(plane, mat);
+      park.rotation.x = -Math.PI/2;
+      park.position.set(centerX, 0, centerZ);
+      park.receiveShadow = true;
+      scene.add(park);
+      objects.push(park);
+      // Random trees
+      const treeCount = 1 + Math.floor(Math.random()*3);
+      for(let i=0;i<treeCount;i++){
+        const group = new THREE.Group();
+        const trunkH = cellSize * 0.2 * (0.8 + Math.random()*0.4);
+        const trunkGeom = new THREE.CylinderGeometry(cellSize*0.02, cellSize*0.03, trunkH, 6);
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true});
+        const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+        trunk.position.y = trunkH/2;
+        const crownGeom = new THREE.SphereGeometry(cellSize*0.08*(0.8+Math.random()*0.4),6,6);
+        const crownMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x2e8b57).offsetHSL(0,0,(Math.random()-0.5)*0.2), flatShading: true});
+        const crown = new THREE.Mesh(crownGeom, crownMat);
+        crown.position.y = trunkH + crownGeom.parameters.radius * 0.8;
+        group.add(trunk);
+        group.add(crown);
+        const offX = (Math.random()-0.5)*cellSize*0.6;
+        const offZ = (Math.random()-0.5)*cellSize*0.6;
+        group.position.set(centerX + offX, 0, centerZ + offZ);
+        group.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; }});
+        scene.add(group);
+        objects.push(group);
+      }
+      return objects;
+    }
+
+    function addRural(x, z, cellSize) {
+      const objects = [];
+      const centerX = -city.size/2 + cellSize * x + cellSize/2;
+      const centerZ = -city.size/2 + cellSize * z + cellSize/2;
+      const plane = new THREE.PlaneGeometry(cellSize * 0.9, cellSize * 0.9);
+      const col = new THREE.Color(ruralPalette[Math.floor(Math.random()*ruralPalette.length)]);
+      const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 1.0 });
+      const farm = new THREE.Mesh(plane, mat);
+      farm.rotation.x = -Math.PI/2;
+      farm.position.set(centerX, 0, centerZ);
+      farm.receiveShadow = true;
+      scene.add(farm);
+      objects.push(farm);
+      // Optional barn
+      if(Math.random()<0.3){
+        const barnH = cellSize * 0.4;
+        const geom = new THREE.BoxGeometry(cellSize*0.3, barnH, cellSize*0.2);
+        // Soft red barns reminiscent of toy farmhouses
+        const col2 = new THREE.Color(0xe58c8c).offsetHSL(0,0,(Math.random()-0.5)*0.1);
+        const mat2 = new THREE.MeshPhongMaterial({ color: col2, flatShading:true });
+        const barn = new THREE.Mesh(geom, mat2);
+        barn.position.set(centerX + (Math.random()-0.5)*cellSize*0.2, barnH/2, centerZ + (Math.random()-0.5)*cellSize*0.2);
+        barn.castShadow = true;
+        barn.receiveShadow = true;
+        scene.add(barn);
+        objects.push(barn);
+      }
+      return objects;
+    }
+
+    function addBuilding(x, z, cellSize, type, noiseVal, nx, nz) {
+      const objects = [];
+      // Adjust base and extra heights for a more cosy, small‑scale vibe.  Residential
+      // areas will be comprised mostly of low houses with pitched roofs, while
+      // commercial and industrial districts rise modestly above them.  The final
+      // height still scales with noise and the user‑controlled density.
+      let baseHeight, extraHeight, palette;
+      if(type === 'residential'){ baseHeight=2; extraHeight=2; palette=residentialPalette; }
+      else if(type === 'commercial'){ baseHeight=4; extraHeight=4; palette=commercialPalette; }
+      else { baseHeight=3; extraHeight=3; palette=industrialPalette; }
+      // Compute height and clamp to a sensible maximum to avoid spiky skyscrapers
+      let height = (baseHeight + noiseVal * extraHeight) * params.density;
+      // Limit the height to ensure cosy proportions; units are roughly metres in our world
+      const maxHeight = (baseHeight + extraHeight) * 1.2;
+      height = Math.min(height, maxHeight);
+      const colIdx = Math.floor(Math.abs(simplex.noise2D(nx*10+500, nz*10+500)) * palette.length);
+      let col = new THREE.Color( palette[colIdx] );
+      const randBri = Math.abs(simplex.noise2D(nx*8+200, nz*8+200));
+      col.offsetHSL(0,0,(randBri-0.5)*0.25);
+      const randShape = Math.abs(simplex.noise2D(nx*6+100, nz*6+100));
+      // Footprint size adjusted: residential buildings occupy a slightly larger
+      // footprint, commercial and industrial remain compact to leave space for
+      // footpaths and details.
+      const footprint = cellSize * 0.5;
+      const group = new THREE.Group();
+      // Residential houses: increase the probability of pitched roofs for a cosy look
+      if(type === 'residential' && randShape < 0.5){
+        const baseH = height * 0.6;
+        const roofH = height * 0.4;
+        const baseGeom = new THREE.BoxGeometry(footprint, baseH, footprint);
+        const roofGeom = new THREE.ConeGeometry( footprint*0.55, roofH, 4 );
+        roofGeom.rotateY(Math.PI/4);
+        const baseMat = new THREE.MeshPhongMaterial({ color: col, specular:0x111111, shininess:20, flatShading:true });
+        const roofMat = new THREE.MeshPhongMaterial({ color: col.clone().offsetHSL(0,0,-0.1), specular:0x111111, shininess:20, flatShading:true });
+        const baseMesh = new THREE.Mesh(baseGeom, baseMat);
+        const roofMesh = new THREE.Mesh(roofGeom, roofMat);
+        baseMesh.position.y = baseH/2;
+        roofMesh.position.y = baseH + roofH/2;
+        baseMesh.castShadow = true;
+        roofMesh.castShadow = true;
+        group.add(baseMesh);
+        group.add(roofMesh);
+      } else if(randShape < 0.7){
+        // Cylindrical towers for both residential overflow and commercial districts
+        const radius = footprint * (0.3 + 0.2 * randShape);
+        const geom = new THREE.CylinderGeometry(radius, radius, height, 12);
+        const mat = new THREE.MeshPhongMaterial({ color: col, specular:0x111111, shininess:25, flatShading:true });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.y = height/2;
+        mesh.castShadow = true;
+        group.add(mesh);
+      } else {
+        // Tapered towers for variety
+        const bottom = footprint;
+        const top = footprint * (0.6 + 0.2 * randShape);
+        const geom = new THREE.CylinderGeometry(top, bottom, height, 6);
+        const mat = new THREE.MeshPhongMaterial({ color: col, specular:0x111111, shininess:25, flatShading:true });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.y = height/2;
+        mesh.castShadow = true;
+        group.add(mesh);
+      }
+      const centerX = -city.size/2 + cellSize * x + cellSize/2;
+      const centerZ = -city.size/2 + cellSize * z + cellSize/2;
+      // Randomly rotate the building to break up the strict grid alignment
+      group.rotation.y = Math.random() * Math.PI * 2;
+      // Apply a larger random offset within the cell to create a more organic layout
+      group.position.set(centerX + (Math.random()-0.5)*cellSize*0.2, 0, centerZ + (Math.random()-0.5)*cellSize*0.2);
+      group.traverse(o=>{ if(o.isMesh){ o.receiveShadow = true; } });
+      scene.add(group);
+      objects.push(group);
+      return objects;
+    }
+
+    // Create or regenerate the city
+    function createCity() {
+      // Remove existing meshes
+      for(const mesh of city.roads) scene.remove(mesh);
+      for(const obj of city.buildings) scene.remove(obj);
+      for(const v of city.vehicles) if(v.mesh) scene.remove(v.mesh);
+      city.roads.length = 0;
+      city.buildings.length = 0;
+      city.vehicles.length = 0;
+      city.districtMap = [];
+
+      // Seeded noise
+      const rng = randomSeeded(params.seed);
+      simplex = new SimplexNoise(rng);
+      const half = city.size / 2;
+      const cellSize = city.size / city.grid;
+
+      // Determine district type for each cell and create structures
+      for(let x=0; x<city.grid; x++){
+        city.districtMap[x] = [];
+        for(let z=0; z<city.grid; z++){
+          const nx = x / city.grid - 0.5;
+          const nz = z / city.grid - 0.5;
+          const noise = simplex.noise2D(nx*2, nz*2);
+          const dx = x - city.grid/2;
+          const dz = z - city.grid/2;
+          const radiusNorm = Math.sqrt(dx*dx + dz*dz) / (city.grid/Math.sqrt(2));
+          let type;
+          if(noise < -0.35){
+            type = 'park';
+          } else if(radiusNorm > 0.85){
+            type = 'rural';
+          } else if(radiusNorm < 0.25){
+            type = 'commercial';
+          } else if(radiusNorm < 0.7){
+            type = 'residential';
+          } else {
+            type = 'industrial';
+          }
+          // Create objects for this cell
+          const objects = [];
+          const noiseVal = (simplex.noise2D(nx*4+50, nz*4+50)+1)/2;
+          if(type === 'park'){
+            objects.push(...addPark(x, z, cellSize));
+          } else if(type === 'rural'){
+            objects.push(...addRural(x, z, cellSize));
+          } else {
+            objects.push(...addBuilding(x, z, cellSize, type, noiseVal, nx, nz));
+          }
+          // Store cell data
+          city.districtMap[x][z] = { type, objects };
+          // Register objects in city.buildings for later removal
+          for(const obj of objects) city.buildings.push(obj);
+        }
+      }
+
+      // Create roads: horizontal and vertical segments between non-green cells
+      const roadWidth = cellSize * 0.3;
+      const roadHeight = 0.1;
+      // Use a lighter pastel tone for roads to better match the cosy aesthetic
+      const roadMat = new THREE.MeshStandardMaterial({ color: 0xcfd8e0, roughness:1.0 });
+      // Horizontal roads
+      for(let i=0; i<=city.grid; i++){
+        let segmentStart = null;
+        for(let xIdx=0; xIdx<city.grid; xIdx++){
+          let needRoad;
+          if(i===0 || i===city.grid){
+            needRoad = true;
+          } else {
+            const below = city.districtMap[xIdx][i-1].type;
+            const above = city.districtMap[xIdx][i].type;
+            needRoad = !(['park','rural'].includes(below) && ['park','rural'].includes(above));
+          }
+          if(needRoad){
+            if(segmentStart===null) segmentStart = xIdx;
+          } else {
+            if(segmentStart!==null){
+              const segLength = (xIdx - segmentStart) * cellSize;
+              const geometryH = new THREE.BoxGeometry(segLength, roadHeight, roadWidth);
+              const road = new THREE.Mesh(geometryH, roadMat);
+              const segCenterX = -half + segmentStart * cellSize + segLength/2;
+              const segZ = -half + cellSize * i;
+              road.position.set(segCenterX, roadHeight/2-0.05, segZ);
+              road.receiveShadow = true;
+              scene.add(road);
+              city.roads.push(road);
+              segmentStart = null;
+            }
+          }
+        }
+        if(segmentStart!==null){
+          const segLength = (city.grid - segmentStart) * cellSize;
+          const geometryH = new THREE.BoxGeometry(segLength, roadHeight, roadWidth);
+          const road = new THREE.Mesh(geometryH, roadMat);
+          const segCenterX = -half + segmentStart * cellSize + segLength/2;
+          const segZ = -half + cellSize * i;
+          road.position.set(segCenterX, roadHeight/2-0.05, segZ);
+          road.receiveShadow = true;
+          scene.add(road);
+          city.roads.push(road);
+        }
+      }
+      // Vertical roads
+      for(let j=0; j<=city.grid; j++){
+        let segmentStart = null;
+        for(let zIdx=0; zIdx<city.grid; zIdx++){
+          let needRoad;
+          if(j===0 || j===city.grid){
+            needRoad = true;
+          } else {
+            const left  = city.districtMap[j-1][zIdx].type;
+            const right = city.districtMap[j][zIdx].type;
+            needRoad = !(['park','rural'].includes(left) && ['park','rural'].includes(right));
+          }
+          if(needRoad){
+            if(segmentStart===null) segmentStart = zIdx;
+          } else {
+            if(segmentStart!==null){
+              const segLength = (zIdx - segmentStart) * cellSize;
+              const geometryV = new THREE.BoxGeometry(roadWidth, roadHeight, segLength);
+              const road = new THREE.Mesh(geometryV, roadMat);
+              const segCenterZ = -half + segmentStart * cellSize + segLength/2;
+              const segX = -half + cellSize * j;
+              road.position.set(segX, roadHeight/2-0.05, segCenterZ);
+              road.receiveShadow = true;
+              scene.add(road);
+              city.roads.push(road);
+              segmentStart = null;
+            }
+          }
+        }
+        if(segmentStart!==null){
+          const segLength = (city.grid - segmentStart) * cellSize;
+          const geometryV = new THREE.BoxGeometry(roadWidth, roadHeight, segLength);
+          const road = new THREE.Mesh(geometryV, roadMat);
+          const segCenterZ = -half + segmentStart * cellSize + segLength/2;
+          const segX = -half + cellSize * j;
+          road.position.set(segX, roadHeight/2-0.05, segCenterZ);
+          road.receiveShadow = true;
+          scene.add(road);
+          city.roads.push(road);
+        }
+      }
+
+      // Add a river across the city with pastel water
+      const riverMat = new THREE.MeshStandardMaterial({ color: 0x70b7e6, transparent:true, opacity:0.7, roughness:0.5, metalness:0.1 });
+      const riverWidth = cellSize * 4;
+      const riverGeom = new THREE.PlaneGeometry(city.size, riverWidth);
+      const river = new THREE.Mesh(riverGeom, riverMat);
+      river.rotation.x = -Math.PI/2;
+      const offset = simplex.noise2D(params.seed * 0.1, params.seed * 0.1) * (city.size/4);
+      river.position.set(offset, 0.02, 0);
+      river.receiveShadow = true;
+      scene.add(river);
+      city.roads.push(river);
+
+      // Spawn vehicles
+      createVehicles();
+    }
+
+    // Vehicles creation and update
+    function createVehicles(){
+      const geom = new THREE.BoxGeometry(1.5,1,3);
+      const num = Math.floor(city.grid * 1.5);
+      for(let i=0;i<num;i++){
+        const hue = Math.random();
+        const material = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue,0.7,0.5), metalness:0.4, roughness:0.4 });
+        const mesh = new THREE.Mesh(geom, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        const horizontal = Math.random() < 0.5;
+        const index = Math.floor(Math.random() * (city.grid + 1));
+        const speed = 20 + Math.random() * 20;
+        city.vehicles.push({ mesh, horizontal, index, progress: Math.random() * city.size, speed });
+      }
+    }
+    function updateVehicles(dt){
+      const half = city.size / 2;
+      const cellSize = city.size / city.grid;
+      for(const v of city.vehicles){
+        v.progress += v.speed * dt * simSpeed;
+        if(v.progress > city.size) v.progress -= city.size;
+        if(v.horizontal){
+          const z = -half + cellSize * v.index;
+          const x = -half + v.progress;
+          v.mesh.position.set(x, 0.5, z);
+          v.mesh.rotation.y = 0;
+        } else {
+          const x = -half + cellSize * v.index;
+          const z = -half + v.progress;
+          v.mesh.position.set(x, 0.5, z);
+          v.mesh.rotation.y = Math.PI/2;
+        }
+      }
+    }
+
+    // Simulation state
+    const simulationState = {
+      population: 1000,
+      employed: 800,
+      unemployed: 200,
+      timeOfDay: 0,
+      days: 0,
+      economy: 1000,
+      weatherIntensity: 0
+    };
+
+    function updateSimulation(dt){
+      simulationState.timeOfDay += dt * simSpeed * 0.1;
+      if(simulationState.timeOfDay >= 24){
+        simulationState.timeOfDay -= 24;
+        simulationState.days++;
+      }
+      const t = simulationState.timeOfDay / 24;
+      const angle = t * Math.PI * 2;
+      sunLight.position.set(Math.cos(angle)*1000, Math.sin(angle)*800, Math.sin(angle)*1000);
+      const sunHeight = sunLight.position.y;
+      const normalizedHeight = Math.max(0, Math.min(1, sunHeight/800));
+      sunLight.intensity = 0.5 + normalizedHeight * 1.5;
+      ambientLight.intensity = 0.2 + normalizedHeight * 0.8;
+      const skyColor = new THREE.Color().lerpColors(new THREE.Color(0x001f3f), new THREE.Color(0x87ceeb), normalizedHeight);
+      scene.background = skyColor;
+      scene.fog.color = skyColor;
+      if(params.weather){
+        simulationState.weatherIntensity += dt*0.05;
+      } else {
+        simulationState.weatherIntensity -= dt*0.05;
+      }
+      simulationState.weatherIntensity = Math.max(0, Math.min(1, simulationState.weatherIntensity));
+      scene.fog.density = 0.0005 + simulationState.weatherIntensity * 0.003;
+      // Update emissive lights in buildings for nighttime windows
+      const nightFactor = 1 - normalizedHeight;
+      for(const obj of city.buildings){
+        obj.traverse?.(mesh => {
+          if(mesh.material && mesh.material.emissive){
+            mesh.material.emissive.setScalar(nightFactor * 0.4);
+          }
+        });
+      }
+      // Simple economic simulation
+      const jobCapacity = city.buildings.length * 2;
+      const growthRate = jobCapacity > simulationState.population ? 0.01 : -0.005;
+      simulationState.population += simulationState.population * growthRate * dt * simSpeed;
+      simulationState.population = Math.max(0, simulationState.population);
+      const employmentRatio = Math.min(1, jobCapacity / simulationState.population);
+      simulationState.employed = simulationState.population * employmentRatio;
+      simulationState.unemployed = simulationState.population - simulationState.employed;
+      simulationState.economy += (simulationState.employed * 0.0001 - simulationState.unemployed * 0.00005) * dt * simSpeed;
+      if(params.disaster){
+        simulationState.economy -= 0.1 * dt;
+        if(Math.random() < dt * 0.5 && city.buildings.length > 0){
+          const idx = Math.floor(Math.random() * city.buildings.length);
+          const obj = city.buildings[idx];
+          obj.traverse?.(m => scene.remove(m));
+          scene.remove(obj);
+          city.buildings.splice(idx, 1);
+        }
+      }
+      simulationState.economy = Math.max(0, simulationState.economy);
+      info.innerHTML = `<strong>Day ${simulationState.days}, Time ${simulationState.timeOfDay.toFixed(2)}h</strong><br/>` +
+        `Population: ${simulationState.population.toFixed(0)}<br/>` +
+        `Employed: ${simulationState.employed.toFixed(0)}<br/>` +
+        `Unemployed: ${simulationState.unemployed.toFixed(0)}<br/>` +
+        `Economy: ${simulationState.economy.toFixed(2)}<br/>` +
+        `Weather: ${params.weather ? 'Active' : 'Clear'}<br/>` +
+        `Disaster: ${params.disaster ? 'ON' : 'OFF'}`;
+    }
+
+    // Camera controls similar to orbit controls but implemented manually
+    let isDragging = false;
+    let prevMouse = { x:0, y:0 };
+    let rotation = { theta: -Math.PI/4, phi: Math.PI/4 };
+    let cameraDistance = 600;
+    const target = new THREE.Vector3(0,0,0);
+    function updateCamera(){
+      const x = target.x + cameraDistance * Math.cos(rotation.phi) * Math.cos(rotation.theta);
+      const y = target.y + cameraDistance * Math.sin(rotation.phi);
+      const z = target.z + cameraDistance * Math.cos(rotation.phi) * Math.sin(rotation.theta);
+      camera.position.set(x,y,z);
+      camera.lookAt(target);
+    }
+    function onMouseDown(e){ isDragging = true; prevMouse.x = e.clientX; prevMouse.y = e.clientY; }
+    function onMouseMove(e){ if(!isDragging) return; const dx = e.clientX - prevMouse.x; const dy = e.clientY - prevMouse.y; prevMouse.x = e.clientX; prevMouse.y = e.clientY; rotation.theta -= dx * 0.005; rotation.phi -= dy * 0.005; rotation.phi = Math.max(0.1, Math.min(Math.PI/2 - 0.1, rotation.phi)); updateCamera(); }
+    function onMouseUp(){ isDragging = false; }
+    function onWheel(e){ cameraDistance *= 1 + e.deltaY * 0.0008; cameraDistance = Math.max(50, Math.min(2000, cameraDistance)); updateCamera(); }
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive:false });
+    // Touch controls
+    let touchStartDist = 0;
+    let touchStartRot = null;
+    function getTouchDist(touches){
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
+    function onTouchStart(e){
+      if(e.touches.length===1){
+        isDragging = true; prevMouse.x = e.touches[0].clientX; prevMouse.y = e.touches[0].clientY;
+      } else if(e.touches.length===2){
+        touchStartDist = getTouchDist(e.touches);
+        touchStartRot = { ...rotation };
+      }
+    }
+    function onTouchMove(e){
+      if(e.touches.length===1 && isDragging){
+        const dx = e.touches[0].clientX - prevMouse.x;
+        const dy = e.touches[0].clientY - prevMouse.y;
+        prevMouse.x = e.touches[0].clientX;
+        prevMouse.y = e.touches[0].clientY;
+        rotation.theta -= dx * 0.005;
+        rotation.phi -= dy * 0.005;
+        rotation.phi = Math.max(0.1, Math.min(Math.PI/2 - 0.1, rotation.phi));
+        updateCamera();
+      } else if(e.touches.length===2){
+        const dist = getTouchDist(e.touches);
+        const delta = dist - touchStartDist;
+        cameraDistance = cameraDistance * (1 - delta * 0.001);
+        cameraDistance = Math.max(50, Math.min(2000, cameraDistance));
+        rotation.theta = touchStartRot.theta;
+        rotation.phi = touchStartRot.phi;
+        updateCamera();
+      }
+    }
+    function onTouchEnd(e){ isDragging = false; }
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive:false });
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive:false });
+    renderer.domElement.addEventListener('touchend', onTouchEnd);
+
+    // Rebuild a single cell on manual edit
+    function rebuildCell(x,z){
+      const cell = city.districtMap[x][z];
+      // Remove all objects for this cell
+      if(cell.objects){
+        for(const obj of cell.objects){
+          obj.traverse?.(m => scene.remove(m));
+          scene.remove(obj);
+          const idx = city.buildings.indexOf(obj);
+          if(idx>=0) city.buildings.splice(idx,1);
+        }
+      }
+      const cellSize = city.size / city.grid;
+      const nx = x / city.grid - 0.5;
+      const nz = z / city.grid - 0.5;
+      const noiseVal = (simplex.noise2D(nx*4+50, nz*4+50)+1)/2;
+      // Build new cell objects according to its type
+      const objects = [];
+      const type = cell.type;
+      if(type === 'park'){ objects.push(...addPark(x,z,cellSize)); }
+      else if(type === 'rural'){ objects.push(...addRural(x,z,cellSize)); }
+      else { objects.push(...addBuilding(x,z,cellSize,type,noiseVal,nx,nz)); }
+      cell.objects = objects;
+      for(const obj of objects) city.buildings.push(obj);
+    }
+
+    // Cycle through district types on double click
+    function cycleDistrictType(current){
+      switch(current){
+        case 'residential': return 'commercial';
+        case 'commercial': return 'industrial';
+        case 'industrial': return 'park';
+        case 'park': return 'rural';
+        case 'rural': return 'residential';
+        default: return 'residential';
+      }
+    }
+    // Double click to modify cell
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    renderer.domElement.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const plane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+      const intersection = new THREE.Vector3();
+      if(raycaster.ray.intersectPlane(plane, intersection)){
+        const half = city.size/2;
+        const cellSize = city.size / city.grid;
+        const x = Math.floor((intersection.x + half)/cellSize);
+        const z = Math.floor((intersection.z + half)/cellSize);
+        if(x>=0 && x<city.grid && z>=0 && z<city.grid){
+          const cell = city.districtMap[x][z];
+          cell.type = cycleDistrictType(cell.type);
+          rebuildCell(x,z);
+        }
+      }
+    });
+
+    // Regeneration
+    function regenerateCity(){ createCity(); }
+
+    // Initialisation
+    createCity();
+    updateCamera();
+    let lastTime = performance.now();
+    function animate(){
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+      updateSimulation(dt);
+      updateVehicles(dt);
+      renderer.render(scene, camera);
+    }
+    animate();
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
