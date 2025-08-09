@@ -47,7 +47,7 @@ UI/UX
 	•	Tooltips for all stats; number formatting (k/M/B), power in kW, heat in BTU/h.
 	•	Keyboard: 1=Build, 2=Move, 3=Sell; WASD pan, Q/E rotate, Z/X zoom, Space pause.
 
-Balancing (MVP constants—put in /src/data/balance.ts)
+Balancing
 	•	Power price: $0.11/kWh base; surge 1.6–2.2×.
 	•	Coin price/difficulty: start stable; add ±1–2% random walk per in-game hour (seeded).
 	•	GPU tiers (example):
@@ -67,7 +67,7 @@ Game Feel
 	•	Tween on cash changes (green up, red down).
 	•	Smooth placement with grid snap; invalid tiles show red outline.
 
-Data & State (Zustand slices)
+Data & State
 	•	buildSlice: mode, selected blueprint, placement/rotate.
 	•	worldSlice: tiles[], entities[], rooms[].
 	•	economySlice: cash, incomeRate, costs, prices (power, coin, difficulty).
@@ -77,7 +77,7 @@ Data & State (Zustand slices)
 
 Deterministic Sim
 	•	Single fixed tick (e.g., 10 ticks/sec); accumulate delta for render.
-	•	Use a seeded RNG (Mulberry32) for events/random walks; store seed in save.
+	•	Use a seeded RNG for events/random walks; store seed in save.
 	•	All sim updates pure and time-step deterministic; rendering is separate.
 
 Acceptance Criteria
