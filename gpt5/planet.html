@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Procedural 3D Planet (Three.js r128, no OrbitControls)</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#02030a; color:#ddd; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #app { position: fixed; inset: 0; overflow: hidden; }
+    canvas { display:block; }
+    .ui { position: fixed; left: 12px; top: 12px; padding: 12px 14px; background: rgba(10,12,20,0.6); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.35); max-height: calc(100vh - 24px); overflow: auto; }
+    .row { display:flex; align-items:center; gap:10px; margin:8px 0; }
+    .ui label { font-size: 12px; opacity: .85; width: 150px; }
+    .ui input[type=range] { width: 220px; }
+    .ui button { background:#1b2345; color:#e6e8ff; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 6px 10px; cursor:pointer; font-weight:600; }
+    .ui button:active { transform: translateY(1px); }
+    .hint { font-size: 11px; opacity: .7; max-width: 420px; line-height: 1.35; }
+    .badge { display:inline-block; padding:2px 6px; border-radius:6px; background:#0a1530; border:1px solid rgba(255,255,255,.1); font-size:11px; opacity:.9 }
+    .corner { position: fixed; right: 12px; bottom: 12px; padding: 8px 10px; background: rgba(10,12,20,0.5); border:1px solid rgba(255,255,255,.08); border-radius:10px; font-size:12px; opacity:.9 }
+    .val { width: 46px; text-align: right; opacity:.8; font-size:12px; }
+    .subhead { margin-top:10px; font-size:11px; opacity:.75; letter-spacing:.04em; }
+    hr { border:0; height:1px; background:rgba(255,255,255,.08); margin:8px 0; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div class="ui" id="ui">
+    <div class="row" style="margin-top:0">
+      <span class="badge">Procedural Planet</span>
+    </div>
+
+    <div class="subhead">Camera & Motion</div>
+    <div class="row">
+      <label for="rot">Rotation speed</label>
+      <input id="rot" type="range" min="-0.6" max="0.6" step="0.002" value="0.06">
+      <span class="val" id="rotVal">0.06</span>
+    </div>
+    <div class="row">
+      <label for="zoom">Zoom</label>
+      <input id="zoom" type="range" min="1.10" max="10" step="0.02" value="5.20">
+      <span class="val" id="zoomVal">5.20</span>
+    </div>
+
+    <hr>
+    <div class="subhead">Water / Atmosphere / Clouds</div>
+    <div class="row">
+      <label for="clouds">Cloud speed</label>
+      <input id="clouds" type="range" min="0" max="0.6" step="0.002" value="0.04">
+      <span class="val" id="cloudVal">0.04</span>
+    </div>
+    <div class="row">
+      <label for="cloudCov">Cloud coverage</label>
+      <input id="cloudCov" type="range" min="0" max="1" step="0.01" value="0.50">
+      <span class="val" id="cloudCovVal">0.50</span>
+    </div>
+    <div class="row">
+      <label for="cloudH">Cloud height</label>
+      <input id="cloudH" type="range" min="1.01" max="1.08" step="0.001" value="1.030">
+      <span class="val" id="cloudHVal">1.03×</span>
+    </div>
+    <div class="row">
+      <label for="atmoH">Atmosphere height</label>
+      <input id="atmoH" type="range" min="1.02" max="1.12" step="0.001" value="1.060">
+      <span class="val" id="atmoHVal">1.06×</span>
+    </div>
+
+    <hr>
+    <div class="subhead">Terrain & Biomes</div>
+    <div class="row">
+      <label for="sea">Sea level</label>
+      <input id="sea" type="range" min="-0.12" max="0.08" step="0.002" value="-0.02">
+      <span class="val" id="seaVal">-0.02</span>
+    </div>
+    <div class="row">
+      <label for="elev">Elevation amplitude</label>
+      <input id="elev" type="range" min="0.00" max="0.25" step="0.002" value="0.16">
+      <span class="val" id="elevVal">0.16</span>
+    </div>
+    <div class="row">
+      <label for="contFreq">Continent scale</label>
+      <input id="contFreq" type="range" min="0.50" max="2.50" step="0.01" value="1.10">
+      <span class="val" id="contFreqVal">1.10</span>
+    </div>
+    <div class="row">
+      <label for="mntFreq">Mountain freq</label>
+      <input id="mntFreq" type="range" min="3.0" max="10.0" step="0.1" value="6.0">
+      <span class="val" id="mntFreqVal">6.0</span>
+    </div>
+    <div class="row">
+      <label for="mntAmp">Mountain strength</label>
+      <input id="mntAmp" type="range" min="0.0" max="0.8" step="0.01" value="0.45">
+      <span class="val" id="mntAmpVal">0.45</span>
+    </div>
+    <div class="row">
+      <label for="detFreq">Detail freq</label>
+      <input id="detFreq" type="range" min="8.0" max="24.0" step="0.5" value="14.0">
+      <span class="val" id="detFreqVal">14.0</span>
+    </div>
+    <div class="row">
+      <label for="detAmp">Detail strength</label>
+      <input id="detAmp" type="range" min="0.0" max="0.5" step="0.01" value="0.22">
+      <span class="val" id="detAmpVal">0.22</span>
+    </div>
+    <div class="row">
+      <label for="terrSteps">Terrace steps</label>
+      <input id="terrSteps" type="range" min="0" max="16" step="1" value="8">
+      <span class="val" id="terrStepsVal">8</span>
+    </div>
+    <div class="row">
+      <label for="terrStr">Terrace strength</label>
+      <input id="terrStr" type="range" min="0.0" max="1.0" step="0.01" value="0.30">
+      <span class="val" id="terrStrVal">0.30</span>
+    </div>
+    <div class="row">
+      <label for="rockiness">Rockiness (slope)</label>
+      <input id="rockiness" type="range" min="0.0" max="1.0" step="0.01" value="0.25">
+      <span class="val" id="rockinessVal">0.25</span>
+    </div>
+
+    <div class="row" style="margin-top:6px">
+      <label for="pause"></label>
+      <button id="pause">Pause</button>
+      <button id="resetCam">Reset Camera</button>
+    </div>
+    <div class="hint" style="margin-top:6px">
+      Drag to orbit · Wheel/Pinch to zoom (can get close to the surface) · <b>R</b> resets camera · <b>Space</b> pause/resume.<br>
+      Terrain uses low-freq continents with masked ridges + gentle detail, optional terracing, and slope-aware biomes. Defaults chosen to avoid spikes; tweak “Mountain strength/freq” and “Terrace strength” for different worlds.
+    </div>
+  </div>
+
+  <div class="corner">Three.js r128 · No OrbitControls</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+  <script>
+  // ===== Scene Setup =====
+  const app = document.getElementById('app');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x010208, 1);
+  app.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2000);
+  camera.position.set(0, 0.25, 5.2);
+
+  // Minimal starfield background
+  {
+    const stars = new THREE.BufferGeometry();
+    const starCnt = 2000;
+    const pos = new Float32Array(starCnt * 3);
+    for (let i=0;i<starCnt;i++) {
+      const r = 120 + Math.random()*200;
+      const theta = Math.random()*Math.PI*2;
+      const phi = Math.acos(THREE.MathUtils.randFloatSpread(2));
+      pos[i*3+0] = r*Math.sin(phi)*Math.cos(theta);
+      pos[i*3+1] = r*Math.cos(phi)*0.65; // subtle banding
+      pos[i*3+2] = r*Math.sin(phi)*Math.sin(theta);
+    }
+    stars.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const starMat = new THREE.PointsMaterial({ size: 0.7, sizeAttenuation: true, color: 0x88aaff, transparent: true, opacity: 0.65 });
+    scene.add(new THREE.Points(stars, starMat));
+  }
+
+  // ===== Lighting (Sun + Ambient) =====
+  const ambient = new THREE.AmbientLight(0x334466, 0.38);
+  scene.add(ambient);
+
+  const sun = new THREE.DirectionalLight(0xffffff, 1.25);
+  sun.position.set(8, 4, 3);
+  scene.add(sun);
+
+  // Tiny visible "sun" helper
+  const sunHelper = new THREE.Mesh(new THREE.SphereBufferGeometry(0.1, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffe09a }));
+  sunHelper.position.copy(sun.position.clone().normalize().multiplyScalar(30));
+  scene.add(sunHelper);
+
+  // ===== Common GLSL (3D Simplex Noise + helpers) =====
+  const NOISE_GLSL = `
+  // — Ashima 3D simplex noise (public domain) —
+  vec3 mod289(vec3 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+  vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+  vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+  vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+  float snoise(vec3 v){
+    const vec2  C = vec2(1.0/6.0, 1.0/3.0);
+    const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i  = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+    i = mod289(i);
+    vec4 p = permute( permute( permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857; // 1/7
+    vec3  ns = n_ * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+    vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ));
+  }
+
+  float fbm(vec3 p){
+    float f=0.0; float amp=0.5; float freq=1.0;
+    for(int i=0;i<6;i++){
+      f += amp * snoise(p*freq);
+      freq *= 2.0; amp *= 0.5;
+    }
+    return f;
+  }
+
+  float ridged(vec3 p){
+    return 1.0 - abs(snoise(p)); // 0..1 (ridges bright)
+  }
+
+  float terrace(float h, float steps, float sharp){
+    float t = clamp(h*0.5+0.5, 0.0, 1.0);
+    if (steps < 1.0) return h;
+    float cell = floor(t*steps);
+    float frac = t*steps - cell;
+    float eased = smoothstep(0.0,1.0,pow(frac, sharp));
+    float terr = (cell + eased) / steps;
+    return terr*2.0 - 1.0;
+  }
+  `;
+
+  // ===== Planet (Terrain) =====
+  const planetGeom = new THREE.SphereBufferGeometry(1.0, 256, 256);
+
+  const planetUniforms = {
+    uTime: { value: 0 },
+    uLightDir: { value: new THREE.Vector3().copy(sun.position).normalize() },
+
+    // biome/lighting
+    uAmbient: { value: 0.27 },
+
+    // sea / elevation
+    uSeaLevel: { value: -0.02 },
+    uElevAmp: { value: 0.16 },
+
+    // noise controls
+    uContFreq: { value: 1.10 },
+    uMntFreq:  { value: 6.0 },
+    uDetFreq:  { value: 14.0 },
+    uMntAmp:   { value: 0.45 },
+    uDetAmp:   { value: 0.22 },
+
+    // terracing
+    uTerraceSteps:   { value: 8.0 },
+    uTerraceStrength:{ value: 0.30 },
+
+    // material controls
+    uRockiness: { value: 0.25 }
+  };
+
+  const planetMat = new THREE.ShaderMaterial({
+    uniforms: planetUniforms,
+    vertexShader: `
+      precision highp float;
+      uniform float uElevAmp;
+      uniform float uContFreq, uMntFreq, uDetFreq;
+      uniform float uMntAmp,  uDetAmp;
+      uniform float uTerraceSteps, uTerraceStrength;
+
+      varying vec3 vPosW;
+      varying vec3 vNBase;
+      varying float vElev;
+
+      ${NOISE_GLSL}
+
+      float baseHeight(vec3 n){
+        // gentle domain warp to break spherical uniformity
+        vec3 warp = vec3(fbm(n*3.0), fbm(n*3.0 + vec3(4.7,2.1,1.3)), fbm(n*3.0 + vec3(9.1,5.2,3.8)));
+        n += warp * 0.15;
+
+        float continents = fbm(n * uContFreq);
+        // Mask mountains to land so oceans aren't spiky
+        float landMask = smoothstep(-0.10, 0.35, continents);
+        float mountains = pow(ridged(n * uMntFreq), 1.3) * uMntAmp * landMask;
+        float detail    = fbm(n * uDetFreq) * uDetAmp;
+
+        float h = continents * 0.60 + mountains + detail - 0.22;
+        // adaptive terracing: fades in with height so shores stay smooth
+        float terr = terrace(h, uTerraceSteps, 0.6);
+        float tW = uTerraceStrength * smoothstep(0.10, 0.55, h);
+        h = mix(h, terr, tW);
+        return h;
+      }
+
+      void main(){
+        vec3 n = normalize(position);
+        float h = baseHeight(n);
+        float elev = h * uElevAmp;
+
+        vElev = elev;
+        vNBase = n;
+
+        vec3 displaced = n * (1.0 + elev);
+        vec4 wp = modelMatrix * vec4(displaced, 1.0);
+        vPosW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform vec3 uLightDir;
+      uniform float uAmbient;
+      uniform float uSeaLevel;
+      uniform float uRockiness;
+      uniform float uElevAmp; // for thresholds that scale with elev range
+
+      varying vec3 vPosW;
+      varying vec3 vNBase;   // base sphere normal (stable)
+      varying float vElev;   // elevation (after amp)
+
+      ${NOISE_GLSL}
+
+      vec3 biomeColor(float elev, vec3 nBase, float slope){
+        // Temperature ~ latitude + elevation
+        float lat = abs(nBase.y);
+        float height = (elev + 0.25) / 0.5;
+        float temperature = clamp(1.0 - lat*1.05 - height*0.35, 0.0, 1.0);
+        // Moisture ~ noise + latitude bias
+        float moisture = clamp(0.55 + 0.5*fbm(nBase*2.0) - lat*0.25, 0.0, 1.0);
+
+        // Palettes
+        vec3 desert   = vec3(0.86, 0.76, 0.46);
+        vec3 savanna  = vec3(0.74, 0.70, 0.36);
+        vec3 grass    = vec3(0.16, 0.45, 0.20);
+        vec3 forest   = vec3(0.10, 0.35, 0.15);
+        vec3 tundra   = vec3(0.65, 0.68, 0.62);
+        vec3 taiga    = vec3(0.22, 0.38, 0.26);
+        vec3 rock     = vec3(0.45, 0.42, 0.40);
+        vec3 snow     = vec3(0.96, 0.97, 0.98);
+        vec3 beach    = vec3(0.90, 0.82, 0.58);
+        vec3 shallow  = vec3(0.16, 0.45, 0.55);
+
+        // Climate grid
+        vec3 hotDry     = desert;
+        vec3 hotWet     = mix(forest, grass, 0.15);
+        vec3 warmDry    = savanna;
+        vec3 warmWet    = forest;
+        vec3 coolDry    = tundra;
+        vec3 coolWet    = taiga;
+        vec3 climateA = mix(hotDry, hotWet, moisture);
+        vec3 climateB = mix(warmDry, warmWet, moisture);
+        vec3 climateC = mix(coolDry, coolWet, moisture);
+        vec3 climate  = mix(mix(climateA, climateB, smoothstep(0.3, 0.6, temperature)),
+                            climateC, smoothstep(0.65, 0.95, 1.0 - temperature));
+
+        // Elevation masks (proportional to amp so they adapt when user tweaks)
+        float snowLine = 0.65 * uElevAmp; // higher amp => reach snow sooner
+        float rockLine = 0.35 * uElevAmp;
+        float snowMask = smoothstep(snowLine-0.02, snowLine+0.04, elev);
+        float rockMask = smoothstep(rockLine-0.02, rockLine+0.02, elev) * (1.0 - snowMask);
+
+        // Beach near sea level
+        float beachMask = 1.0 - smoothstep(0.0, 0.03, abs(elev - uSeaLevel));
+
+        vec3 base = climate;
+        base = mix(base, rock, max(rockMask*0.7, slope * uRockiness));
+        base = mix(base, snow, snowMask);
+        base = mix(base, beach, beachMask * (1.0 - snowMask));
+
+        // Underwater tint if below sea level (visible through water)
+        vec3 under = mix(vec3(0.02,0.06,0.12), shallow, smoothstep(uSeaLevel-0.05, uSeaLevel+0.02, elev));
+        return elev < uSeaLevel ? under : base;
+      }
+
+      // Estimate slope from screen-space derivatives of elevation.
+      float elevationSlope(){
+        // derivatives require OES_standard_derivatives (WebGL1) or are core in WebGL2.
+        // Enabled via material.extensions.derivatives = true.
+        float sx = abs(dFdx(vElev));
+        float sy = abs(dFdy(vElev));
+        return clamp(4.0 * (sx + sy), 0.0, 1.0);
+      }
+
+      void main(){
+        vec3 N = normalize(vNBase); // stable, non-spiky lighting
+        vec3 L = normalize(uLightDir);
+        vec3 V = normalize(cameraPosition - vPosW);
+
+        // Lighting (Lambert + wrap) + gentle specular
+        float diff = max(dot(N,L), 0.0);
+        float wrap = 0.45;
+        diff = ((diff + wrap) / (1.0 + wrap));
+        float spec = pow(max(dot(normalize(N+L), V), 0.0), 24.0) * 0.03;
+
+        float slope = elevationSlope();
+        vec3 albedo = biomeColor(vElev, N, slope);
+        vec3 color = albedo * (uAmbient + diff*0.95) + spec;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  });
+  // IMPORTANT: Let three.js inject the derivatives extension in the right place
+  planetMat.extensions = { derivatives: true };
+
+  const planet = new THREE.Mesh(planetGeom, planetMat);
+  scene.add(planet);
+
+  // ===== Water (separate sphere; scale with sea level) =====
+  const initialSea = planetUniforms.uSeaLevel.value;
+  const baseWaterRadius = 1.0 + initialSea + 0.01;
+
+  const waterGeom = new THREE.SphereBufferGeometry(baseWaterRadius, 192, 192);
+  const waterUniforms = {
+    uTime: { value: 0 },
+    uLightDir: { value: new THREE.Vector3().copy(sun.position).normalize() },
+    uOpacity: { value: 0.78 },
+  };
+  const waterMat = new THREE.ShaderMaterial({
+    uniforms: waterUniforms,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: `
+      precision highp float;
+      uniform float uTime;
+      varying vec3 vNormalW;
+      varying vec3 vPosW;
+      ${NOISE_GLSL}
+      void main(){
+        vec3 n = normalize(position);
+        // subtle animated waves (very small to avoid aliasing up close)
+        float w = fbm(n*8.0 + vec3(0.0, uTime*0.15, uTime*0.07)) * 0.002;
+        vec3 displaced = n * (length(position) + w);
+        vNormalW = normalize(n);
+        vec4 wp = modelMatrix * vec4(displaced, 1.0);
+        vPosW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform vec3 uLightDir;
+      uniform float uOpacity;
+      varying vec3 vNormalW;
+      varying vec3 vPosW;
+
+      vec3 waterDeep = vec3(0.015, 0.066, 0.12);
+      vec3 waterShal = vec3(0.07, 0.32, 0.45);
+      vec3 skyTint   = vec3(0.25, 0.45, 0.8);
+
+      void main(){
+        vec3 N = normalize(vNormalW);
+        vec3 L = normalize(uLightDir);
+        vec3 V = normalize(cameraPosition - vPosW);
+        float diff = max(dot(N, L), 0.0);
+        float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+        float spec = pow(max(dot(normalize(N+L), V), 0.0), 96.0) * 0.20;
+        vec3 base = mix(waterDeep, waterShal, diff*0.6 + 0.2);
+        vec3 refl = mix(base, skyTint, fres);
+        vec3 color = refl + spec;
+        gl_FragColor = vec4(color, uOpacity);
+      }
+    `,
+  });
+  const water = new THREE.Mesh(waterGeom, waterMat);
+  scene.add(water);
+
+  // ===== Clouds (coverage + adjustable height) =====
+  const cloudsGeom = new THREE.SphereBufferGeometry(1.03, 192, 192);
+  const cloudsUniforms = {
+    uTime: { value: 0 },
+    uLightDir: { value: new THREE.Vector3().copy(sun.position).normalize() },
+    uSpeed: { value: 0.04 },
+    uCoverage: { value: 0.50 }, // 0..1
+  };
+  const cloudsMat = new THREE.ShaderMaterial({
+    uniforms: cloudsUniforms,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.FrontSide,
+    blending: THREE.NormalBlending,
+    vertexShader: `
+      precision highp float;
+      varying vec3 vN;
+      varying vec3 vPosW;
+      void main(){
+        vec3 n = normalize(position);
+        vN = n;
+        vec4 wp = modelMatrix * vec4(n, 1.0); // height via mesh scale
+        vPosW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform float uTime;
+      uniform vec3 uLightDir;
+      uniform float uSpeed;
+      uniform float uCoverage;
+      varying vec3 vN;
+      varying vec3 vPosW;
+      ${NOISE_GLSL}
+      void main(){
+        vec3 p = normalize(vN) * 6.0 + vec3(uTime * uSpeed, 0.0, uTime * uSpeed*0.6);
+        float n = fbm(p);
+        float t = n * 0.5 + 0.5;
+        float thresh = mix(0.85, 0.20, clamp(uCoverage, 0.0, 1.0)); // higher coverage => lower threshold
+        float c = smoothstep(thresh-0.05, thresh+0.05, t);
+        float diff = max(dot(normalize(vN), normalize(uLightDir)), 0.0);
+        vec3 col = vec3(1.0) * (0.70 + 0.50 * diff);
+        float alpha = c * 0.42;
+        if (alpha < 0.02) discard;
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+  });
+  const clouds = new THREE.Mesh(cloudsGeom, cloudsMat);
+  clouds.scale.setScalar(1.03);
+  scene.add(clouds);
+
+  // ===== Atmosphere (backface/fresnel glow) with adjustable height =====
+  const atmoGeom = new THREE.SphereBufferGeometry(1.06, 128, 128);
+  const atmoUniforms = { uIntensity: { value: 0.9 } };
+  const atmoMat = new THREE.ShaderMaterial({
+    uniforms: atmoUniforms,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.BackSide,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      varying vec3 vN;
+      varying vec3 vPosW;
+      void main(){
+        vec3 n = normalize(position);
+        vN = n;
+        vec4 wp = modelMatrix * vec4(n, 1.0); // height via mesh scale
+        vPosW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform float uIntensity;
+      varying vec3 vN;
+      varying vec3 vPosW;
+      void main(){
+        vec3 V = normalize(cameraPosition - vPosW);
+        float fres = pow(1.0 - max(dot(normalize(vN), V), 0.0), 2.4);
+        vec3 sky = vec3(0.24, 0.46, 0.96);
+        vec3 col = sky * fres * uIntensity;
+        gl_FragColor = vec4(col, fres*0.8);
+      }
+    `,
+  });
+  const atmosphere = new THREE.Mesh(atmoGeom, atmoMat);
+  atmosphere.scale.setScalar(1.06);
+  scene.add(atmosphere);
+
+  // ===== Camera Controls (custom orbit: drag + wheel) =====
+  const controls = {
+    target: new THREE.Vector3(0,0,0),
+    radius: 5.2,
+    minRadius: 1.10,   // close to surface, but not inside it
+    maxRadius: 10,
+    theta: 0.6, // azimuth
+    phi: 0.9,   // polar [0, PI]
+    damp: 0.1,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    vTheta: 0,
+    vPhi: 0,
+  };
+
+  function updateCamera(){
+    controls.theta += controls.vTheta; controls.vTheta *= (1.0 - controls.damp);
+    controls.phi   += controls.vPhi;   controls.vPhi   *= (1.0 - controls.damp);
+    const eps = 0.0001;
+    controls.phi = Math.min(Math.max(eps, controls.phi), Math.PI - eps);
+    const r = controls.radius;
+    const x = r * Math.sin(controls.phi) * Math.cos(controls.theta);
+    const y = r * Math.cos(controls.phi);
+    const z = r * Math.sin(controls.phi) * Math.sin(controls.theta);
+    camera.position.set(x, y, z);
+    camera.lookAt(controls.target);
+  }
+
+  function onPointerDown(e){ controls.dragging = true; controls.lastX = e.clientX; controls.lastY = e.clientY; }
+  function onPointerMove(e){
+    if (!controls.dragging) return;
+    const dx = e.clientX - controls.lastX; const dy = e.clientY - controls.lastY;
+    controls.lastX = e.clientX; controls.lastY = e.clientY;
+    controls.vTheta += -dx * 0.005;
+    controls.vPhi   +=  dy * 0.005;
+  }
+  function onPointerUp(){ controls.dragging = false; }
+  function onWheel(e){
+    e.preventDefault();
+    const s = Math.exp(-e.deltaY * 0.0015);
+    controls.radius = THREE.MathUtils.clamp(controls.radius * s, controls.minRadius, controls.maxRadius);
+    zoomInput.value = controls.radius.toFixed(2);
+    zoomVal.textContent = zoomInput.value;
+  }
+  renderer.domElement.addEventListener('mousedown', onPointerDown);
+  window.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+  renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+
+  // ===== UI Wiring =====
+  const rotInput = document.getElementById('rot');
+  const rotVal   = document.getElementById('rotVal');
+  const cloudInput = document.getElementById('clouds');
+  const cloudVal   = document.getElementById('cloudVal');
+  const cloudCov   = document.getElementById('cloudCov');
+  const cloudCovVal= document.getElementById('cloudCovVal');
+  const cloudH     = document.getElementById('cloudH');
+  const cloudHVal  = document.getElementById('cloudHVal');
+  const atmoH      = document.getElementById('atmoH');
+  const atmoHVal   = document.getElementById('atmoHVal');
+  const zoomInput  = document.getElementById('zoom');
+  const zoomVal    = document.getElementById('zoomVal');
+  const pauseBtn   = document.getElementById('pause');
+  const resetCamBtn= document.getElementById('resetCam');
+
+  // Terrain sliders
+  const sea = document.getElementById('sea');         const seaVal = document.getElementById('seaVal');
+  const elev = document.getElementById('elev');       const elevVal = document.getElementById('elevVal');
+  const contFreq = document.getElementById('contFreq'); const contFreqVal = document.getElementById('contFreqVal');
+  const mntFreq = document.getElementById('mntFreq');   const mntFreqVal = document.getElementById('mntFreqVal');
+  const mntAmp = document.getElementById('mntAmp');     const mntAmpVal = document.getElementById('mntAmpVal');
+  const detFreq = document.getElementById('detFreq');   const detFreqVal = document.getElementById('detFreqVal');
+  const detAmp = document.getElementById('detAmp');     const detAmpVal = document.getElementById('detAmpVal');
+  const terrSteps = document.getElementById('terrSteps'); const terrStepsVal = document.getElementById('terrStepsVal');
+  const terrStr = document.getElementById('terrStr');     const terrStrVal = document.getElementById('terrStrVal');
+  const rockiness = document.getElementById('rockiness'); const rockinessVal = document.getElementById('rockinessVal');
+
+  let paused = false;
+  let rotSpeed = 0.06;
+
+  rotInput.addEventListener('input', ()=>{ rotSpeed = +rotInput.value; rotVal.textContent = (+rotInput.value).toFixed(2); });
+  cloudInput.addEventListener('input', ()=>{ cloudsUniforms.uSpeed.value = +cloudInput.value; cloudVal.textContent = (+cloudInput.value).toFixed(2); });
+  cloudCov.addEventListener('input', ()=>{ cloudsUniforms.uCoverage.value = +cloudCov.value; cloudCovVal.textContent = (+cloudCov.value).toFixed(2); });
+  cloudH.addEventListener('input', ()=>{ const s = +cloudH.value; clouds.scale.setScalar(s); cloudHVal.textContent = s.toFixed(2)+'×'; });
+  atmoH.addEventListener('input', ()=>{ const s = +atmoH.value; atmosphere.scale.setScalar(s); atmoHVal.textContent = s.toFixed(2)+'×'; });
+
+  zoomInput.addEventListener('input', ()=>{ controls.radius = +zoomInput.value; zoomVal.textContent = (+zoomInput.value).toFixed(2); });
+
+  pauseBtn.addEventListener('click', ()=>{ paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
+  resetCamBtn.addEventListener('click', ()=>{
+    controls.radius = 5.2; controls.theta = 0.6; controls.phi = 0.9;
+    zoomInput.value = controls.radius.toFixed(2); zoomVal.textContent = zoomInput.value;
+  });
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === ' ') { paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; }
+    if (e.key.toLowerCase() === 'r') { controls.radius = 5.2; controls.theta = 0.6; controls.phi = 0.9;
+      zoomInput.value = controls.radius.toFixed(2); zoomVal.textContent = zoomInput.value; }
+  });
+
+  // Terrain bindings
+  sea.addEventListener('input', ()=>{
+    const s = +sea.value;
+    planetUniforms.uSeaLevel.value = s;
+    seaVal.textContent = s.toFixed(2);
+    // scale water shell to match sea level without rebuilding geometry
+    const targetRadius = 1.0 + s + 0.01;
+    const scale = targetRadius / baseWaterRadius;
+    water.scale.setScalar(scale);
+  });
+  elev.addEventListener('input', ()=>{ const v=+elev.value; planetUniforms.uElevAmp.value=v; elevVal.textContent=v.toFixed(2); });
+  contFreq.addEventListener('input', ()=>{ const v=+contFreq.value; planetUniforms.uContFreq.value=v; contFreqVal.textContent=v.toFixed(2); });
+  mntFreq.addEventListener('input', ()=>{ const v=+mntFreq.value; planetUniforms.uMntFreq.value=v; mntFreqVal.textContent=v.toFixed(1); });
+  mntAmp.addEventListener('input', ()=>{ const v=+mntAmp.value; planetUniforms.uMntAmp.value=v; mntAmpVal.textContent=v.toFixed(2); });
+  detFreq.addEventListener('input', ()=>{ const v=+detFreq.value; planetUniforms.uDetFreq.value=v; detFreqVal.textContent=v.toFixed(1); });
+  detAmp.addEventListener('input', ()=>{ const v=+detAmp.value; planetUniforms.uDetAmp.value=v; detAmpVal.textContent=v.toFixed(2); });
+  terrSteps.addEventListener('input', ()=>{ const v=+terrSteps.value; planetUniforms.uTerraceSteps.value=v; terrStepsVal.textContent=v.toFixed(0); });
+  terrStr.addEventListener('input', ()=>{ const v=+terrStr.value; planetUniforms.uTerraceStrength.value=v; terrStrVal.textContent=v.toFixed(2); });
+  rockiness.addEventListener('input', ()=>{ const v=+rockiness.value; planetUniforms.uRockiness.value=v; rockinessVal.textContent=v.toFixed(2); });
+
+  // ===== Resize =====
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ===== Animate =====
+  const clock = new THREE.Clock();
+  function animate(){
+    const dt = clock.getDelta();
+    if (!paused){
+      planet.rotation.y += rotSpeed * dt;
+      clouds.rotation.y += rotSpeed * dt * 1.3;
+
+      const t = clock.elapsedTime;
+      planetUniforms.uTime.value = t;
+      waterUniforms.uTime.value = t;
+      cloudsUniforms.uTime.value = t;
+    }
+    updateCamera();
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+  animate();
+  </script>
+</body>
+</html>

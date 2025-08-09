@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Procedural 3D Planet · First-Person + Props (Three.js r128)</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#02030a; color:#ddd; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
+    #app { position: fixed; inset: 0; overflow: hidden; }
+    canvas { display:block; }
+
+    /* UI panel (sliders) */
+    .ui { position: fixed; left: 12px; top: 12px; padding: 12px 14px; background: rgba(10,12,20,0.62);
+      backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.35); max-height: calc(100vh - 24px); overflow: auto; }
+    .row { display:flex; align-items:center; gap:10px; margin:8px 0; }
+    .ui label { font-size: 12px; opacity:.85; width: 150px; }
+    .ui input[type=range] { width: 220px; }
+    .ui button { background:#1b2345; color:#e6e8ff; border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+      padding: 6px 10px; cursor:pointer; font-weight:600; }
+    .ui button:active { transform: translateY(1px); }
+    .badge { display:inline-block; padding:2px 6px; border-radius:6px; background:#0a1530; border:1px solid rgba(255,255,255,.1); font-size:11px; opacity:.9 }
+    .subhead { margin-top:8px; font-size:11px; opacity:.75; letter-spacing:.04em; }
+    .val { width: 46px; text-align:right; opacity:.8; font-size:12px; }
+    hr { border:0; height:1px; background:rgba(255,255,255,.08); margin:8px 0; }
+    .hint { font-size: 11px; opacity:.7; max-width: 420px; line-height: 1.35; }
+
+    /* HUD + onboarding */
+    .hud { position: fixed; right: 12px; top: 12px; padding: 10px 12px; background: rgba(10,12,20,0.55);
+      border:1px solid rgba(255,255,255,.08); border-radius:10px; font-size:12px; }
+    .reticle { position: fixed; left:50%; top:50%; width:6px; height:6px; margin-left:-3px; margin-top:-3px;
+      border-radius:50%; background:#fff; opacity:.6; pointer-events:none; }
+    .corner { position: fixed; right: 12px; bottom: 12px; padding: 8px 10px; background: rgba(10,12,20,0.5);
+      border:1px solid rgba(255,255,255,.08); border-radius:10px; font-size:12px; opacity:.9 }
+    .lockOverlay {
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background: radial-gradient(1200px 600px at 50% 30%, rgba(21,25,45,.28), rgba(2,3,10,.9));
+      color:#e7ebff; z-index: 2; cursor:pointer; user-select:none;
+    }
+    .lockInner { padding:18px 22px; border:1px solid rgba(255,255,255,.12); background: rgba(12,14,25,.6);
+      border-radius:14px; text-align:center; max-width:560px; }
+    .lockInner b { background:#152a62; border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:1px 6px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Onboarding / Pointer lock -->
+  <div class="lockOverlay" id="lock">
+    <div class="lockInner">
+      <h3 style="margin:0 0 6px 0">Click to enter First-Person</h3>
+      <div style="opacity:.9;margin-bottom:8px">WASD to move · Mouse to look · <b>Shift</b> sprint · <b>Esc</b> to release mouse</div>
+      <div style="font-size:12px;opacity:.8">Collect <b>trees</b> and <b>rocks</b> scattered on land. You’re glued to the surface — it’s a tiny planet!</div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div class="hud" id="hud">🌲 Trees: <b id="treeCt">0</b> &nbsp; 🪨 Rocks: <b id="rockCt">0</b></div>
+  <div class="reticle" id="reticle"></div>
+
+  <!-- Controls -->
+  <div class="ui" id="ui">
+    <div class="row" style="margin-top:0">
+      <span class="badge">Procedural Planet</span>
+    </div>
+
+    <div class="subhead">Camera & Motion</div>
+    <div class="row">
+      <label for="rot">Planet rotation</label>
+      <input id="rot" type="range" min="-0.6" max="0.6" step="0.002" value="0.04">
+      <span class="val" id="rotVal">0.04</span>
+    </div>
+    <div class="row">
+      <label for="speed">Run speed</label>
+      <input id="speed" type="range" min="0.1" max="1.2" step="0.02" value="0.55">
+      <span class="val" id="speedVal">0.55</span>
+    </div>
+
+    <hr>
+    <div class="subhead">Water / Atmosphere / Clouds</div>
+    <div class="row">
+      <label for="clouds">Cloud speed</label>
+      <input id="clouds" type="range" min="0" max="0.6" step="0.002" value="0.04">
+      <span class="val" id="cloudVal">0.04</span>
+    </div>
+    <div class="row">
+      <label for="cloudCov">Cloud coverage</label>
+      <input id="cloudCov" type="range" min="0" max="1" step="0.01" value="0.50">
+      <span class="val" id="cloudCovVal">0.50</span>
+    </div>
+    <div class="row">
+      <label for="cloudH">Cloud height</label>
+      <input id="cloudH" type="range" min="1.01" max="1.08" step="0.001" value="1.030">
+      <span class="val" id="cloudHVal">1.03×</span>
+    </div>
+    <div class="row">
+      <label for="atmoH">Atmosphere height</label>
+      <input id="atmoH" type="range" min="1.02" max="1.12" step="0.001" value="1.060">
+      <span class="val" id="atmoHVal">1.06×</span>
+    </div>
+
+    <hr>
+    <div class="subhead">Terrain & Biomes</div>
+    <div class="row">
+      <label for="sea">Sea level</label>
+      <input id="sea" type="range" min="-0.12" max="0.08" step="0.002" value="-0.02">
+      <span class="val" id="seaVal">-0.02</span>
+    </div>
+    <div class="row">
+      <label for="elev">Elevation amplitude</label>
+      <input id="elev" type="range" min="0.00" max="0.25" step="0.002" value="0.16">
+      <span class="val" id="elevVal">0.16</span>
+    </div>
+    <div class="row">
+      <label for="contFreq">Continent scale</label>
+      <input id="contFreq" type="range" min="0.50" max="2.50" step="0.01" value="1.10">
+      <span class="val" id="contFreqVal">1.10</span>
+    </div>
+    <div class="row">
+      <label for="mntFreq">Mountain freq</label>
+      <input id="mntFreq" type="range" min="3.0" max="10.0" step="0.1" value="6.0">
+      <span class="val" id="mntFreqVal">6.0</span>
+    </div>
+    <div class="row">
+      <label for="mntAmp">Mountain strength</label>
+      <input id="mntAmp" type="range" min="0.0" max="0.8" step="0.01" value="0.45">
+      <span class="val" id="mntAmpVal">0.45</span>
+    </div>
+    <div class="row">
+      <label for="detFreq">Detail freq</label>
+      <input id="detFreq" type="range" min="8.0" max="24.0" step="0.5" value="14.0">
+      <span class="val" id="detFreqVal">14.0</span>
+    </div>
+    <div class="row">
+      <label for="detAmp">Detail strength</label>
+      <input id="detAmp" type="range" min="0.0" max="0.5" step="0.01" value="0.22">
+      <span class="val" id="detAmpVal">0.22</span>
+    </div>
+    <div class="row">
+      <label for="terrSteps">Terrace steps</label>
+      <input id="terrSteps" type="range" min="0" max="16" step="1" value="8">
+      <span class="val" id="terrStepsVal">8</span>
+    </div>
+    <div class="row">
+      <label for="terrStr">Terrace strength</label>
+      <input id="terrStr" type="range" min="0.0" max="1.0" step="0.01" value="0.30">
+      <span class="val" id="terrStrVal">0.30</span>
+    </div>
+    <div class="row">
+      <label for="rockiness">Rockiness (slope)</label>
+      <input id="rockiness" type="range" min="0.0" max="1.0" step="0.01" value="0.25">
+      <span class="val" id="rockinessVal">0.25</span>
+    </div>
+
+    <div class="row" style="margin-top:6px">
+      <label for="pause"></label>
+      <button id="pause">Pause</button>
+      <button id="resetCam">Reset Camera</button>
+    </div>
+    <div class="hint" style="margin-top:6px">
+      Click the screen to capture the mouse. Run around the planet and auto-collect props when you’re close.
+    </div>
+  </div>
+
+  <div class="corner">Three.js r128 · No OrbitControls</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+  <script>
+  // ===== Boilerplate =====
+  const app = document.getElementById('app');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x010208, 1);
+  app.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.02, 2000);
+  camera.position.set(0, 0.25, 5.2);
+
+  // Starfield
+  {
+    const g = new THREE.BufferGeometry();
+    const N = 2000, pos = new Float32Array(N*3);
+    for (let i=0;i<N;i++){
+      const r = 120 + Math.random()*200;
+      const th = Math.random()*Math.PI*2;
+      const ph = Math.acos(THREE.MathUtils.randFloatSpread(2));
+      pos[i*3+0] = r*Math.sin(ph)*Math.cos(th);
+      pos[i*3+1] = r*Math.cos(ph)*0.65;
+      pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size:0.7, sizeAttenuation:true, color:0x88aaff, transparent:true, opacity:0.65 })));
+  }
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x334466, 0.38));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.25); sun.position.set(8,4,3); scene.add(sun);
+  const sunHelper = new THREE.Mesh(new THREE.SphereBufferGeometry(0.1,16,16), new THREE.MeshBasicMaterial({ color:0xffe09a }));
+  sunHelper.position.copy(sun.position.clone().normalize().multiplyScalar(30)); scene.add(sunHelper);
+
+  // ===== Shared GLSL =====
+  const NOISE_GLSL = `
+  vec3 mod289(vec3 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+  vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0;}
+  vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+  vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+  float snoise(vec3 v){
+    const vec2 C = vec2(1.0/6.0, 1.0/3.0); const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i  = floor(v + dot(v, C.yyy)); vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz); vec3 l = 1.0 - g; vec3 i1 = min(g.xyz, l.zxy); vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx; vec3 x2 = x0 - i2 + C.yyy; vec3 x3 = x0 - D.yyy;
+    i = mod289(i); vec4 p = permute( permute( permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857; vec3 ns = n_ * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z); vec4 x_ = floor(j * ns.z); vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy; vec4 y = y_ * ns.x + ns.yyyy; vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy); vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0) * 2.0 + 1.0; vec4 s1 = floor(b1) * 2.0 + 1.0; vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy; vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+    vec3 p0 = vec3(a0.xy, h.x); vec3 p1 = vec3(a0.zw, h.y); vec3 p2 = vec3(a1.xy, h.z); vec3 p3 = vec3(a1.zw, h.w);
+    vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0); m = m*m;
+    return 42.0 * dot(m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ));
+  }
+  float fbm(vec3 p){ float f=0.0, a=0.5, fr=1.0; for(int i=0;i<6;i++){ f += a * snoise(p*fr); fr*=2.0; a*=0.5; } return f; }
+  float ridged(vec3 p){ return 1.0 - abs(snoise(p)); }
+  float terrace(float h, float steps, float sharp){
+    float t = clamp(h*0.5+0.5, 0.0, 1.0); if (steps<1.0) return h;
+    float cell=floor(t*steps), frac=t*steps-cell; float eased=smoothstep(0.0,1.0,pow(frac,sharp));
+    return ( (cell+eased)/steps )*2.0-1.0;
+  }
+  `;
+
+  // ===== Planet shaders (unchanged look from last good version) =====
+  const planetUniforms = {
+    uTime: { value: 0 },
+    uLightDir: { value: new THREE.Vector3().copy(sun.position).normalize() },
+    uAmbient: { value: 0.27 },
+    uSeaLevel: { value: -0.02 },
+    uElevAmp: { value: 0.16 },
+    uContFreq: { value: 1.10 },
+    uMntFreq:  { value: 6.0 },
+    uDetFreq:  { value: 14.0 },
+    uMntAmp:   { value: 0.45 },
+    uDetAmp:   { value: 0.22 },
+    uTerraceSteps:   { value: 8.0 },
+    uTerraceStrength:{ value: 0.30 },
+    uRockiness: { value: 0.25 }
+  };
+
+  const planetMat = new THREE.ShaderMaterial({
+    uniforms: planetUniforms,
+    vertexShader: `
+      precision highp float;
+      uniform float uElevAmp, uContFreq, uMntFreq, uDetFreq, uMntAmp, uDetAmp, uTerraceSteps, uTerraceStrength;
+      varying vec3 vPosW; varying vec3 vNBase; varying float vElev;
+      ${NOISE_GLSL}
+      float baseHeight(vec3 n){
+        vec3 warp = vec3(fbm(n*3.0), fbm(n*3.0+vec3(4.7,2.1,1.3)), fbm(n*3.0+vec3(9.1,5.2,3.8)));
+        n += warp * 0.15;
+        float continents = fbm(n * uContFreq);
+        float landMask = smoothstep(-0.10, 0.35, continents);
+        float mountains = pow(ridged(n * uMntFreq), 1.3) * uMntAmp * landMask;
+        float detail    = fbm(n * uDetFreq) * uDetAmp;
+        float h = continents * 0.60 + mountains + detail - 0.22;
+        float terr = terrace(h, uTerraceSteps, 0.6);
+        float tW = uTerraceStrength * smoothstep(0.10, 0.55, h);
+        return mix(h, terr, tW);
+      }
+      void main(){
+        vec3 n = normalize(position);
+        float h = baseHeight(n);
+        vElev = h * uElevAmp;
+        vNBase = n;
+        vec4 wp = modelMatrix * vec4(n * (1.0 + vElev), 1.0);
+        vPosW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform vec3 uLightDir; uniform float uAmbient, uSeaLevel, uRockiness, uElevAmp;
+      varying vec3 vPosW; varying vec3 vNBase; varying float vElev;
+      ${NOISE_GLSL}
+      float slopeFromElev(){ float sx=abs(dFdx(vElev)), sy=abs(dFdy(vElev)); return clamp(4.0*(sx+sy),0.0,1.0); }
+      vec3 biome(float elev, vec3 n, float slope){
+        float lat = abs(n.y);
+        float height = (elev + 0.25)/0.5;
+        float temperature = clamp(1.0 - lat*1.05 - height*0.35, 0.0, 1.0);
+        float moisture = clamp(0.55 + 0.5*fbm(n*2.0) - lat*0.25, 0.0, 1.0);
+        vec3 desert=vec3(0.86,0.76,0.46), savanna=vec3(0.74,0.70,0.36), grass=vec3(0.16,0.45,0.20),
+             forest=vec3(0.10,0.35,0.15), tundra=vec3(0.65,0.68,0.62), taiga=vec3(0.22,0.38,0.26),
+             rock=vec3(0.45,0.42,0.40), snow=vec3(0.96,0.97,0.98), beach=vec3(0.90,0.82,0.58),
+             shallow=vec3(0.16,0.45,0.55);
+        vec3 hotDry=desert, hotWet=mix(forest,grass,0.15), warmDry=savanna, warmWet=forest, coolDry=tundra, coolWet=taiga;
+        vec3 climateA = mix(hotDry, hotWet, moisture);
+        vec3 climateB = mix(warmDry, warmWet, moisture);
+        vec3 climateC = mix(coolDry, coolWet, moisture);
+        vec3 climate  = mix(mix(climateA, climateB, smoothstep(0.3,0.6,temperature)),
+                            climateC, smoothstep(0.65,0.95,1.0-temperature));
+        float snowLine = 0.65*uElevAmp, rockLine=0.35*uElevAmp;
+        float snowMask = smoothstep(snowLine-0.02, snowLine+0.04, elev);
+        float rockMask = smoothstep(rockLine-0.02, rockLine+0.02, elev) * (1.0-snowMask);
+        float beachMask = 1.0 - smoothstep(0.0,0.03,abs(elev-uSeaLevel));
+        vec3 base = climate;
+        base = mix(base, rock, max(rockMask*0.7, slope*uRockiness));
+        base = mix(base, snow, snowMask);
+        base = mix(base, beach, beachMask*(1.0-snowMask));
+        vec3 under = mix(vec3(0.02,0.06,0.12), shallow, smoothstep(uSeaLevel-0.05, uSeaLevel+0.02, elev));
+        return elev < uSeaLevel ? under : base;
+      }
+      void main(){
+        vec3 N = normalize(vNBase), L=normalize(uLightDir), V=normalize(cameraPosition - vPosW);
+        float diff = ((max(dot(N,L),0.0)+0.45)/(1.45));
+        float spec = pow(max(dot(normalize(N+L), V),0.0), 24.0) * 0.03;
+        vec3 color = biome(vElev, N, slopeFromElev()) * (uAmbient + diff*0.95) + spec;
+        gl_FragColor = vec4(color,1.0);
+      }
+    `
+  });
+  planetMat.extensions = { derivatives: true };
+  const planet = new THREE.Mesh(new THREE.SphereBufferGeometry(1.0,256,256), planetMat);
+  scene.add(planet);
+
+  // Water
+  const baseWaterRadius = 1.0 + planetUniforms.uSeaLevel.value + 0.01;
+  const water = new THREE.Mesh(
+    new THREE.SphereBufferGeometry(baseWaterRadius,192,192),
+    new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uLightDir: { value: new THREE.Vector3().copy(sun.position).normalize() },
+        uOpacity: { value: 0.78 },
+      },
+      transparent:true, depthWrite:false,
+      vertexShader: `
+        precision highp float; uniform float uTime; varying vec3 vN; varying vec3 vPos;
+        ${NOISE_GLSL}
+        void main(){ vN = normalize(position);
+          float w = fbm(vN*8.0 + vec3(0.0,uTime*0.15,uTime*0.07))*0.002;
+          vec3 d = vN * (length(position)+w);
+          vec4 wp = modelMatrix * vec4(d,1.0); vPos = wp.xyz; gl_Position = projectionMatrix*viewMatrix*wp; }
+      `,
+      fragmentShader: `
+        precision highp float; uniform vec3 uLightDir; uniform float uOpacity; varying vec3 vN; varying vec3 vPos;
+        void main(){
+          vec3 N=normalize(vN), L=normalize(uLightDir), V=normalize(cameraPosition-vPos);
+          float diff=max(dot(N,L),0.0); float fres=pow(1.0-max(dot(N,V),0.0),3.0);
+          float spec=pow(max(dot(normalize(N+L),V),0.0),96.0)*0.20;
+          vec3 deep=vec3(0.015,0.066,0.12), sh=vec3(0.07,0.32,0.45), sky=vec3(0.25,0.45,0.8);
+          vec3 base=mix(deep,sh,diff*0.6+0.2); vec3 col=mix(base,sky,fres)+spec;
+          gl_FragColor=vec4(col,uOpacity);
+        }`
+    })
+  );
+  scene.add(water);
+
+  // Clouds
+  const cloudsUniforms = {
+    uTime:{value:0}, uLightDir:{value:new THREE.Vector3().copy(sun.position).normalize()},
+    uSpeed:{value:0.04}, uCoverage:{value:0.50}
+  };
+  const clouds = new THREE.Mesh(
+    new THREE.SphereBufferGeometry(1.03,192,192),
+    new THREE.ShaderMaterial({
+      uniforms: cloudsUniforms, transparent:true, depthWrite:false, side:THREE.FrontSide,
+      vertexShader:`varying vec3 vN; varying vec3 vPos; void main(){ vN=normalize(position); vec4 wp=modelMatrix*vec4(vN,1.0); vPos=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp; }`,
+      fragmentShader:`
+        precision highp float; uniform float uTime, uCoverage; uniform vec3 uLightDir; uniform float uSpeed; varying vec3 vN; ${NOISE_GLSL}
+        void main(){
+          vec3 p=normalize(vN)*6.0 + vec3(uTime*uSpeed,0.0,uTime*uSpeed*0.6);
+          float t = fbm(p)*0.5+0.5; float thr=mix(0.85,0.20, clamp(uCoverage,0.0,1.0));
+          float c=smoothstep(thr-0.05,thr+0.05,t); float diff=max(dot(normalize(vN), normalize(uLightDir)),0.0);
+          vec3 col=vec3(1.0)*(0.70+0.50*diff); float a=c*0.42; if(a<0.02) discard; gl_FragColor=vec4(col,a);
+        }`
+    })
+  );
+  clouds.scale.setScalar(1.03); scene.add(clouds);
+
+  // Atmosphere
+  const atmosphere = new THREE.Mesh(
+    new THREE.SphereBufferGeometry(1.06,128,128),
+    new THREE.ShaderMaterial({
+      uniforms:{ uIntensity:{value:0.9} }, transparent:true, depthWrite:false, side:THREE.BackSide, blending:THREE.AdditiveBlending,
+      vertexShader:`varying vec3 vN; varying vec3 vPos; void main(){ vN=normalize(position); vec4 wp=modelMatrix*vec4(vN,1.0); vPos=wp.xyz; gl_Position=projectionMatrix*viewMatrix*wp; }`,
+      fragmentShader:`precision highp float; uniform float uIntensity; varying vec3 vN; varying vec3 vPos;
+        void main(){ vec3 V=normalize(cameraPosition-vPos); float f=pow(1.0-max(dot(normalize(vN),V),0.0),2.4);
+        vec3 sky=vec3(0.24,0.46,0.96); gl_FragColor=vec4(sky*f*uIntensity, f*0.8); }`
+    })
+  );
+  atmosphere.scale.setScalar(1.06); scene.add(atmosphere);
+
+  // ===== UI wires =====
+  const lock = document.getElementById('lock'); const reticle = document.getElementById('reticle');
+  const rotInput = byId('rot'), rotVal = byId('rotVal');
+  const speedInput = byId('speed'), speedVal = byId('speedVal');
+  const cloudInput = byId('clouds'), cloudVal = byId('cloudVal');
+  const cloudCov = byId('cloudCov'), cloudCovVal = byId('cloudCovVal');
+  const cloudH = byId('cloudH'), cloudHVal = byId('cloudHVal');
+  const atmoH = byId('atmoH'), atmoHVal = byId('atmoHVal');
+  const sea = byId('sea'), seaVal = byId('seaVal');
+  const elev = byId('elev'), elevVal = byId('elevVal');
+  const contFreq = byId('contFreq'), contFreqVal = byId('contFreqVal');
+  const mntFreq = byId('mntFreq'), mntFreqVal = byId('mntFreqVal');
+  const mntAmp = byId('mntAmp'), mntAmpVal = byId('mntAmpVal');
+  const detFreq = byId('detFreq'), detFreqVal = byId('detFreqVal');
+  const detAmp = byId('detAmp'), detAmpVal = byId('detAmpVal');
+  const terrSteps = byId('terrSteps'), terrStepsVal = byId('terrStepsVal');
+  const terrStr = byId('terrStr'), terrStrVal = byId('terrStrVal');
+  const rockiness = byId('rockiness'), rockinessVal = byId('rockinessVal');
+  const pauseBtn = byId('pause'), resetCamBtn = byId('resetCam');
+
+  function byId(id){ return document.getElementById(id); }
+
+  let paused=false, rotSpeed=+rotInput.value, runSpeed=+speedInput.value;
+  rotInput.oninput=()=>{ rotSpeed=+rotInput.value; rotVal.textContent=rotSpeed.toFixed(2); };
+  speedInput.oninput=()=>{ runSpeed=+speedInput.value; speedVal.textContent=runSpeed.toFixed(2); };
+
+  cloudInput.oninput=()=>{ cloudsUniforms.uSpeed.value=+cloudInput.value; cloudVal.textContent=cloudInput.value; };
+  cloudCov.oninput=()=>{ cloudsUniforms.uCoverage.value=+cloudCov.value; cloudCovVal.textContent=(+cloudCov.value).toFixed(2); };
+  cloudH.oninput=()=>{ const s=+cloudH.value; clouds.scale.setScalar(s); cloudHVal.textContent=s.toFixed(2)+'×'; };
+  atmoH.oninput=()=>{ const s=+atmoH.value; atmosphere.scale.setScalar(s); atmoHVal.textContent=s.toFixed(2)+'×'; };
+
+  sea.oninput=()=>{ const s=+sea.value; planetUniforms.uSeaLevel.value=s; seaVal.textContent=s.toFixed(2); const target=1.0+s+0.01; water.scale.setScalar(target/baseWaterRadius); reprojectEverything();};
+  elev.oninput=()=>{ planetUniforms.uElevAmp.value=+elev.value; elevVal.textContent=elev.value; reprojectEverything(); };
+  contFreq.oninput=()=>{ planetUniforms.uContFreq.value=+contFreq.value; contFreqVal.textContent=contFreq.value; reprojectEverything(); };
+  mntFreq.oninput=()=>{ planetUniforms.uMntFreq.value=+mntFreq.value; mntFreqVal.textContent=mntFreq.value; reprojectEverything(); };
+  mntAmp.oninput=()=>{ planetUniforms.uMntAmp.value=+mntAmp.value; mntAmpVal.textContent=mntAmp.value; reprojectEverything(); };
+  detFreq.oninput=()=>{ planetUniforms.uDetFreq.value=+detFreq.value; detFreqVal.textContent=detFreq.value; reprojectEverything(); };
+  detAmp.oninput=()=>{ planetUniforms.uDetAmp.value=+detAmp.value; detAmpVal.textContent=detAmp.value; reprojectEverything(); };
+  terrSteps.oninput=()=>{ planetUniforms.uTerraceSteps.value=+terrSteps.value; terrStepsVal.textContent=terrSteps.value; reprojectEverything(); };
+  terrStr.oninput=()=>{ planetUniforms.uTerraceStrength.value=+terrStr.value; terrStrVal.textContent=terrStr.value; reprojectEverything(); };
+  rockiness.oninput=()=>{ planetUniforms.uRockiness.value=+rockiness.value; rockinessVal.textContent=rockiness.value; };
+
+  pauseBtn.onclick=()=>{ paused=!paused; pauseBtn.textContent=paused?'Resume':'Pause'; };
+  resetCamBtn.onclick=()=>{ yaw=0; pitch=0; }; // for FPS, this resets look only
+
+  // ===== CPU noise mirror for gameplay (height sampling) =====
+  const simplex = new SimplexNoise('planet-seed');
+  const NO = {
+    noise3: (x,y,z)=> simplex.noise3D(x,y,z),
+    fbm: (p, oct=6)=>{ let a=0.5, fr=1, f=0; for(let i=0;i<oct;i++){ f+=a*NO.noise3(p.x*fr,p.y*fr,p.z*fr); fr*=2; a*=0.5; } return f; },
+    ridged: (p)=> 1 - Math.abs(NO.noise3(p.x,p.y,p.z)),
+    terrace: (h, steps, sharp)=>{ if(steps<1) return h; const t=Math.max(0,Math.min(1,h*0.5+0.5)); const cell=Math.floor(t*steps); const frac=t*steps-cell; const eased=smoothstep(0,1, Math.pow(frac, sharp)); return ((cell+eased)/steps)*2-1; }
+  };
+  function smoothstep(a,b,x){ const t=Math.max(0,Math.min(1,(x-a)/(b-a))); return t*t*(3-2*t); }
+  function baseHeightCPU(n){
+    // mirror shader baseHeight()
+    const warp = new THREE.Vector3(
+      NO.fbm(n.clone().multiplyScalar(3.0)),
+      NO.fbm(n.clone().multiplyScalar(3.0).add(new THREE.Vector3(4.7,2.1,1.3))),
+      NO.fbm(n.clone().multiplyScalar(3.0).add(new THREE.Vector3(9.1,5.2,3.8)))
+    ).multiplyScalar(0.15);
+    n = n.clone().add(warp);
+
+    const continents = NO.fbm(n.clone().multiplyScalar(planetUniforms.uContFreq.value));
+    const landMask = smoothstep(-0.10, 0.35, continents);
+    const mountains = Math.pow(NO.ridged(n.clone().multiplyScalar(planetUniforms.uMntFreq.value)), 1.3) * planetUniforms.uMntAmp.value * landMask;
+    const detail = NO.fbm(n.clone().multiplyScalar(planetUniforms.uDetFreq.value)) * planetUniforms.uDetAmp.value;
+
+    let h = continents*0.60 + mountains + detail - 0.22;
+    const terr = NO.terrace(h, planetUniforms.uTerraceSteps.value, 0.6);
+    const tW = planetUniforms.uTerraceStrength.value * smoothstep(0.10, 0.55, h);
+    h = h*(1-tW) + terr*tW;
+    return h;
+  }
+  function groundRadiusAt(n){
+    return 1.0 + planetUniforms.uElevAmp.value * baseHeightCPU(n);
+  }
+
+  // ===== First-person controller on a sphere =====
+  const keys = { w:false, a:false, s:false, d:false, shift:false };
+  window.addEventListener('keydown', e=>{
+    if (['w','a','s','d','shift'].includes(e.key.toLowerCase())) e.preventDefault();
+    switch(e.key.toLowerCase()){
+      case 'w': keys.w=true; break; case 'a': keys.a=true; break; case 's': keys.s=true; break; case 'd': keys.d=true; break; case 'shift': keys.shift=true; break;
+    }
+  });
+  window.addEventListener('keyup', e=>{
+    switch(e.key.toLowerCase()){
+      case 'w': keys.w=false; break; case 'a': keys.a=false; break; case 's': keys.s=false; break; case 'd': keys.d=false; break; case 'shift': keys.shift=false; break;
+    }
+  });
+
+  let yaw = 0, pitch = 0; // radians
+  const lookSpeed = 0.0022;
+  lock.addEventListener('click', ()=> renderer.domElement.requestPointerLock());
+  document.addEventListener('pointerlockchange', ()=>{
+    const locked = document.pointerLockElement === renderer.domElement;
+    lock.style.display = locked ? 'none' : 'flex';
+    reticle.style.display = locked ? 'block' : 'none';
+  });
+  document.addEventListener('mousemove', (e)=>{
+    if (document.pointerLockElement !== renderer.domElement) return;
+    yaw += e.movementX * lookSpeed;
+    pitch += e.movementY * lookSpeed;
+    const lim = THREE.MathUtils.degToRad(85);
+    pitch = Math.max(-lim, Math.min(lim, pitch));
+  });
+
+  // Player state
+  const player = {
+    n: new THREE.Vector3(0, 0.15, 1).normalize(), // surface normal where the player stands
+    eye: 0.035, // eye height above ground
+    pos: new THREE.Vector3(),
+  };
+  function snapToGround(){
+    const r = groundRadiusAt(player.n) + player.eye;
+    player.pos.copy(player.n).multiplyScalar(r);
+  }
+  snapToGround();
+
+  // Movement on tangent
+  function stepPlayer(dt){
+    // Local frame
+    const up = player.n.clone();
+    let east = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), up);
+    if (east.lengthSq() < 1e-6) east = new THREE.Vector3().crossVectors(new THREE.Vector3(1,0,0), up);
+    east.normalize();
+    const north = new THREE.Vector3().crossVectors(up, east).normalize();
+
+    const forward2D = north.clone().multiplyScalar(Math.cos(yaw)).add(east.clone().multiplyScalar(Math.sin(yaw))).normalize();
+    const right2D = new THREE.Vector3().crossVectors(forward2D, up).normalize().negate();
+
+    let move = new THREE.Vector3();
+    if (keys.w) move.add(forward2D);
+    if (keys.s) move.add(forward2D.clone().multiplyScalar(-1));
+    if (keys.a) move.add(right2D.clone().multiplyScalar(-1));
+    if (keys.d) move.add(right2D);
+
+    const speed = runSpeed * (keys.shift ? 1.65 : 1.0); // units/sec on tiny planet
+    if (move.lengthSq()>0){
+      move.normalize().multiplyScalar(speed * dt);
+      // Move along surface then reproject to new normal
+      const tentative = player.pos.clone().add(move);
+      player.n.copy(tentative.clone().normalize());
+    }
+    // Keep the player attached to ground at current location
+    snapToGround();
+
+    // Aim camera with pitch around local tangent
+    const viewDir = forward2D.clone().multiplyScalar(Math.cos(pitch)).add(up.clone().multiplyScalar(Math.sin(pitch))).normalize();
+    camera.position.copy(player.pos);
+    camera.lookAt(player.pos.clone().add(viewDir));
+  }
+
+  // ===== Props (trees & rocks) =====
+  const props = [];
+  const counts = { tree:0, rock:0 }; const treeCt = byId('treeCt'), rockCt = byId('rockCt');
+
+  function makeTree(scale=1){
+    const g1 = new THREE.CylinderBufferGeometry(0.01, 0.015, 0.10, 6);
+    const trunk = new THREE.Mesh(g1, new THREE.MeshStandardMaterial({ color:0x7a5a3a, roughness:0.9, metalness:0.0 }));
+    const g2 = new THREE.ConeBufferGeometry(0.07, 0.18, 7);
+    const leaves = new THREE.Mesh(g2, new THREE.MeshStandardMaterial({ color:0x1a7a3b, roughness:1.0 }));
+    leaves.position.y = 0.12;
+    const grp = new THREE.Group(); grp.add(trunk); grp.add(leaves); grp.scale.setScalar(scale);
+    return grp;
+  }
+  function makeRock(scale=1){
+    const g = new THREE.IcosahedronBufferGeometry(0.05, 0);
+    const m = new THREE.MeshStandardMaterial({ color:0x6f6f6f, roughness:1.0, metalness:0.0 });
+    const rock = new THREE.Mesh(g,m); rock.scale.setScalar(scale*(0.6+Math.random()*0.9));
+    return rock;
+  }
+
+  function randomOnUnitSphere(){
+    const u = Math.random()*2-1; const t = Math.random()*Math.PI*2;
+    const s = Math.sqrt(1-u*u);
+    return new THREE.Vector3(s*Math.cos(t), u, s*Math.sin(t));
+  }
+
+  function scatterProps(){
+    // Clear old
+    for (const p of props){ scene.remove(p.mesh); }
+    props.length=0;
+
+    const targetTrees = 80, targetRocks = 70;
+    let tries = 0;
+    function placeOne(kind){
+      for(let k=0;k<1000;k++){
+        const n = randomOnUnitSphere();
+        const h = baseHeightCPU(n) * planetUniforms.uElevAmp.value;
+        if (h <= planetUniforms.uSeaLevel.value + 0.005) { tries++; continue; } // keep on land
+        const r = 1.0 + h;
+        const pos = n.clone().multiplyScalar(r + (kind==='tree'?0.0015:0.0005));
+        const mesh = (kind==='tree' ? makeTree(0.8+Math.random()*0.6) : makeRock(1.0)).clone();
+        // align "up" to normal
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), n);
+        mesh.position.copy(pos);
+        scene.add(mesh);
+        props.push({ kind, mesh, n });
+        return true;
+      }
+      return false;
+    }
+    let t=0,r=0;
+    while (t<targetTrees && placeOne('tree')) t++;
+    while (r<targetRocks && placeOne('rock')) r++;
+  }
+
+  function reprojectEverything(){
+    // Re-seat player and props after terrain params change
+    snapToGround();
+    for(const p of props){
+      const h = baseHeightCPU(p.n) * planetUniforms.uElevAmp.value;
+      const r = 1.0 + h;
+      p.mesh.position.copy(p.n).multiplyScalar(r + (p.kind==='tree'?0.0015:0.0005));
+      // keep orientation
+    }
+  }
+
+  // Auto-collect near player
+  function checkCollect(){
+    const threshold = 0.09; // distance
+    for (let i=props.length-1;i>=0;i--){
+      const p = props[i];
+      if (!p.mesh.visible) continue;
+      const d = p.mesh.position.distanceTo(player.pos);
+      if (d < threshold){
+        p.mesh.visible=false;
+        if (p.kind==='tree'){ counts.tree++; treeCt.textContent = counts.tree; }
+        else { counts.rock++; rockCt.textContent = counts.rock; }
+      }
+    }
+  }
+
+  scatterProps();
+
+  // ===== Camera orbit fallback (mouse wheel zoom disabled for FPS) =====
+  const controls = { radius: 5.2, theta: 0.6, phi: 0.9 }; // kept for planet spin & consistency; camera ignored by FPS
+
+  // ===== Resize =====
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ===== Animate =====
+  const clock = new THREE.Clock();
+  function animate(){
+    const dt = Math.min(0.05, clock.getDelta());
+    if (!paused){
+      planet.rotation.y += rotSpeed * dt;
+      clouds.rotation.y += rotSpeed * dt * 1.3;
+
+      const t = clock.elapsedTime;
+      planetUniforms.uTime.value = t;
+      cloudsUniforms.uTime.value = t;
+      water.material.uniforms.uTime.value = t;
+
+      // First-person update
+      stepPlayer(dt);
+      checkCollect();
+    }
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  // ===== Helpers =====
+  // Prevent wheel-zoom scrolling the page while pointer-locked
+  renderer.domElement.addEventListener('wheel', (e)=>{ if (document.pointerLockElement===renderer.domElement) e.preventDefault(); }, { passive:false });
+
+  </script>
+</body>
+</html>
