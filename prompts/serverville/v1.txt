@@ -1,0 +1,100 @@
+You are an expert game engineer and designer. Build a FarmVille-inspired idle/management game where the player manages a GPU server farm instead of crops. The game should be web-based, responsive, and fun in 5 minutes with depth for longer play.
+
+Core Loop
+	1.	Place racks on a tile grid in a data center room.
+	2.	Install GPUs in racks; each GPU yields hashpower → revenue per tick.
+	3.	Manage power & cooling: each rack consumes kW and generates heat; exceed thresholds → throttling or failures.
+	4.	Reinvest to expand capacity; unlock new rooms and power/cooling upgrades.
+	5.	Respond to events (hardware failures, power price spikes, “hot day”, flash sale on GPUs).
+
+World Model
+	•	Grid: isometric tiles (floor, wall, door, HVAC, power trunk). 16×12 room for MVP, scroll/pan with WASD or drag. Zoom with wheel.
+	•	Entities:
+	•	Rack: slots=8 (MVP), power bus connection, cooling zone link.
+	•	GPU (item): tiered (Gen1–Gen5), attributes: hashrate, powerDraw, heat, cost, reliability.
+	•	Cooling Unit (CRAC): removes heat up to capacity; consumes power; noise/happiness ignored for MVP.
+	•	Power Trunk: sets max kW for room.
+	•	UPS/Battery (optional stretch): buffers power price spikes.
+	•	Economy Tick: 1s real-time = 1 min game-time. Offline progress: on load, compute elapsed and apply capped gains (max 12h).
+
+Systems
+	•	Economy:
+	•	Revenue = Σ(GPU.hashrate) × coinPrice × difficultyFactor.
+	•	Operating Cost = powerUsed(kWh) × powerPrice + cooling power.
+	•	Net/Min displayed live; trend sparkline last 10m.
+	•	Power & Heat:
+	•	totalPower = Σ(rack.gpus.powerDraw) + Σ(cooling.power).
+	•	Heat budget per room; if heat > coolingCapacity → throttling (hashrate *= clamp).
+	•	If power > trunkCapacity → brownout event → auto-throttle to fit.
+	•	Events (random + conditional, 2–4/hr):
+	•	GPU failure (MTBF by tier) → 5m repair or pay instant fix.
+	•	Power price surge for 10m.
+	•	Hot day: cooling effectiveness −20%.
+	•	Vendor flash sale: specific GPU −25% for 15m.
+	•	Progression & Unlocks:
+	•	Milestones on total hash and profit unlock:
+	•	Gen2..Gen5 GPUs, larger racks (10–12 slots), better CRACs, bigger room, second room (new scene).
+	•	Quests (lightweight):
+	•	“Bring net profit to $1,000/hr.”
+	•	“Stabilize at ≤80% heat for 5 minutes.”
+	•	Rewards: cash, discount tokens, free unit.
+
+UI/UX
+	•	HUD (top): cash, net/hr (color-coded), power used/limit, heat used/limit, time controls (pause ×1 ×2 ×4), Save, Settings.
+	•	Left Build Panel: tabs: Racks, GPUs, Cooling, Utilities (Power Trunk). Drag-to-place with ghost preview, cost shown.
+	•	Right Inspect Panel: context stats for selected item (per-rack and per-GPU), buttons: upgrade, remove, repair.
+	•	Bottom Notifications: toasts for events; click to open details modal.
+	•	Tooltips for all stats; number formatting (k/M/B), power in kW, heat in BTU/h.
+	•	Keyboard: 1=Build, 2=Move, 3=Sell; WASD pan, Q/E rotate, Z/X zoom, Space pause.
+
+Balancing (MVP constants—put in /src/data/balance.ts)
+	•	Power price: $0.11/kWh base; surge 1.6–2.2×.
+	•	Coin price/difficulty: start stable; add ±1–2% random walk per in-game hour (seeded).
+	•	GPU tiers (example):
+	•	Gen1: $500, 50 MH/s, 120 W, 90 heat, MTBF 40h.
+	•	Gen2: $1,200, 140 MH/s, 280 W, 200 heat, MTBF 60h.
+	•	Gen3: $3,000, 400 MH/s, 700 W, 550 heat, MTBF 80h.
+	•	Gen4: $7,000, 1,100 MH/s, 1.6 kW, 1,200 heat, MTBF 100h.
+	•	Gen5: $16,000, 2,600 MH/s, 3.6 kW, 2,700 heat, MTBF 120h.
+	•	Cooling units:
+	•	CRAC-A: $4,000, removes 2,000 heat, uses 600 W.
+	•	CRAC-B: $10,000, removes 6,000 heat, uses 1.8 kW.
+	•	Power trunks:
+	•	T1: $8,000 @ 20 kW, T2: $18,000 @ 60 kW, T3: $40,000 @ 200 kW.
+
+Game Feel
+	•	Subtle idle sounds; hover and placement SFX (generated bleeps ok).
+	•	Tween on cash changes (green up, red down).
+	•	Smooth placement with grid snap; invalid tiles show red outline.
+
+Data & State (Zustand slices)
+	•	buildSlice: mode, selected blueprint, placement/rotate.
+	•	worldSlice: tiles[], entities[], rooms[].
+	•	economySlice: cash, incomeRate, costs, prices (power, coin, difficulty).
+	•	timeSlice: tickRate, paused, lastSave, offlineGrant logic.
+	•	eventsSlice: queue, active, resolver.
+	•	Derive selectors for KPI (net/hr, utilization %, heat headroom).
+
+Deterministic Sim
+	•	Single fixed tick (e.g., 10 ticks/sec); accumulate delta for render.
+	•	Use a seeded RNG (Mulberry32) for events/random walks; store seed in save.
+	•	All sim updates pure and time-step deterministic; rendering is separate.
+
+Acceptance Criteria
+	•	Place racks, add GPUs, add cooling, upgrade power trunk.
+	•	Clear net profit readout updates each second.
+	•	Heat/power caps cause visible throttling and warnings.
+	•	At least 5 event types implemented and impactful.
+	•	Save/Load works; offline progress on reload (capped at 12h).
+	•	Tutorial tooltips (4–6 steps) teach basics in < 60s.
+	•	Balanced so a new player reaches Gen3 within 10–15 minutes.
+
+Stretch Goals
+	•	Research tree (automation, predictive throttling, bulk buying).
+	•	Multiple rooms with power sharing.
+	•	Vendor market with limited stock; resale value & depreciation.
+	•	Prestige (sell facility for multipliers + a rare “founder GPU”).
+
+Deliverables
+	1.	A single self contained html file that renders the game in a browser.
+Note: any assets must be generated procedurally at runtime.
