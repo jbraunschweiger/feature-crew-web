@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>ServerVille — GPU Farm Tycoon (MVP)</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#10141d; --panel2:#0b0f16; --ink:#d9e2f1; --muted:#8da1bb;
+    --accent:#68f0a9; --accent2:#6dd0ff; --warn:#ffcf5b; --bad:#ff6b6b; --good:#69f59c;
+    --grid-a:#17202d; --grid-b:#131a25; --tile:#1b2433; --line:#223049;
+    --green:#3cd48b; --red:#ff6572;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; background:var(--bg); color:var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial; }
+  #root { position:fixed; inset:0; display:grid; grid-template-rows:auto 1fr auto; }
+  .hud { display:flex; gap:16px; align-items:center; padding:10px 12px; background:linear-gradient(180deg,#0e1320,rgba(14,19,32,0.6)); border-bottom:1px solid #1a2742; }
+  .pill { display:flex; gap:8px; align-items:center; padding:8px 10px; border:1px solid #23314f; border-radius:10px; background:rgba(24,32,49,0.75); backdrop-filter: blur(6px); font-weight:600; }
+  .kpi { display:flex; gap:6px; align-items:center; }
+  .kpi small { color:var(--muted); font-weight:500; }
+  .spark { width:120px; height:24px; display:inline-block; vertical-align:middle; }
+  .btn { cursor:pointer; user-select:none; padding:7px 10px; border-radius:8px; border:1px solid #284065; background:#122034; color:#d2e6ff; font-weight:600; }
+  .btn:hover { filter:brightness(1.1); }
+  .btn-row { display:flex; gap:8px; align-items:center; }
+  .seg { display:flex; border:1px solid #294262; border-radius:8px; overflow:hidden; }
+  .seg .btn { border:0; border-right:1px solid #294262; border-radius:0; background:#0f1c2e; }
+  .seg .btn:last-child { border-right:0; }
+  .seg .btn.active { background:#1a2b45; color:#8fe0ff; }
+  .label { color:var(--muted); font-size:12px; }
+  .main { position:relative; display:grid; grid-template-columns: 320px 1fr 320px; overflow:hidden; }
+  .left, .right { background:linear-gradient(180deg,#0c121f,#0a0f1a); border-right:1px solid #162544; }
+  .right { border-left:1px solid #162544; border-right:0; }
+  .panel { position:relative; height:100%; overflow:auto; padding:10px; }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; }
+  .tab { flex:1; text-align:center; padding:8px; background:#0f1829; border:1px solid #22324f; border-radius:9px; cursor:pointer; font-weight:700; color:#b9d1ff; }
+  .tab.active { background:#1a2742; }
+  .card { background:linear-gradient(180deg,#0f1624,#0e1421); border:1px solid #22324f; border-radius:12px; padding:10px; margin:8px 0; }
+  .grid2 { display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px; }
+  .price { font-weight:800; color:#a0ffcf; }
+  .muted { color:var(--muted); }
+  .warn { color:var(--warn); } .bad{ color:var(--bad);} .good{ color:var(--good); }
+  .title { font-weight:800; margin-bottom:6px; }
+  .tiny { font-size:11px; color:#9fb3d2; }
+  #game { position:relative; background: radial-gradient(1200px 800px at 50% 40%, #0f1a2a, #0c121c 60%, #0a0f17); }
+  canvas { display:block; width:100%; height:100%; cursor: crosshair; }
+  .toasts { position:fixed; left:340px; right:340px; bottom:10px; display:flex; gap:8px; flex-wrap:wrap; pointer-events:none; }
+  .toast { pointer-events:auto; background:#0f1726; border:1px solid #274067; padding:10px 12px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.35); }
+  .toast .title { margin:0 0 4px; }
+  .slot-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .slot { min-width:46px; padding:6px 8px; border:1px dashed #2a3e64; border-radius:8px; text-align:center; background:#0c1524; color:#a8c8ff; }
+  .slot.bad { border-color:#5b2430; color:#ff96a3; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .divider { height:1px; background:#1a2947; margin:10px 0; }
+  .tutorial { position:fixed; right:24px; top:80px; width:320px; background:#0f1726; border:1px solid #274067; padding:12px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.35);}
+  .tutorial .btn { width:100%; text-align:center; margin-top:8px; }
+  [data-tip] { position:relative; }
+  [data-tip]:hover::after {
+    content:attr(data-tip);
+    position:absolute; z-index:1000; left:0; top:100%; margin-top:6px; padding:6px 8px; white-space:nowrap;
+    background:#0b1220; border:1px solid #243b63; border-radius:8px; color:#cfe4ff; font-size:12px;
+  }
+  .foot { display:flex; justify-content:space-between; padding:8px 12px; border-top:1px solid #162544; background:#0b111c; color:#98b0d0; font-size:12px;}
+  .ghostCost { position:fixed; pointer-events:none; padding:4px 8px; background:#0b1423; border:1px solid #274067; border-radius:8px; font-weight:700; color:#a0ffcf; transform:translate(-50%,-140%); }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="hud">
+    <div class="pill kpi" id="cashPill" data-tip="Your available cash. Earn from hashrate revenue minus power & cooling costs.">
+      💵 <span id="cash">$0</span>
+    </div>
+    <div class="pill kpi" data-tip="Net per hour (revenue − costs). Color shows trend.">
+      📈 <small>Net/hr</small> <span id="netHr">$0</span>
+      <canvas id="spark" class="spark" width="120" height="24"></canvas>
+    </div>
+    <div class="pill kpi" data-tip="Power used vs. room capacity">
+      ⚡ <small>Power</small> <span id="powerUse">0</span>/<span id="powerCap">0</span> kW
+    </div>
+    <div class="pill kpi" data-tip="Heat load vs. cooling capacity">
+      🌡️ <small>Heat</small> <span id="heatUse">0</span>/<span id="heatCap">0</span> BTU/h
+    </div>
+    <div class="pill kpi" data-tip="Electric price per kWh">
+      🔌 <small>Power $/kWh</small> <span id="pPrice">$0.00</span>
+    </div>
+    <div class="pill kpi" data-tip="Coin price × Difficulty factor">
+      ⛏️ <small>Reward</small> <span id="reward">×1.00</span>
+    </div>
+    <div class="btn-row">
+      <div class="seg" id="timeSeg">
+        <div class="btn" data-speed="0">⏸</div>
+        <div class="btn active" data-speed="1">×1</div>
+        <div class="btn" data-speed="2">×2</div>
+        <div class="btn" data-speed="4">×4</div>
+      </div>
+      <button class="btn" id="saveBtn" title="Save">💾 Save</button>
+      <button class="btn" id="settingsBtn">⚙️ Settings</button>
+      <span class="label tiny">1=Build · 2=Move · 3=Sell · WASD/Drag pan · Q/E rotate · Wheel zoom · Space pause</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="left panel" id="buildPanel">
+      <div class="tabs" id="buildTabs">
+        <div class="tab active" data-tab="Racks">Racks</div>
+        <div class="tab" data-tab="GPUs">GPUs</div>
+        <div class="tab" data-tab="Cooling">Cooling</div>
+        <div class="tab" data-tab="Utilities">Utilities</div>
+      </div>
+      <div id="buildContent"></div>
+    </div>
+
+    <div id="game"><canvas id="canvas"></canvas></div>
+
+    <div class="right panel" id="inspectPanel">
+      <div class="title">Inspect</div>
+      <div id="inspectContent" class="tiny muted">Select a rack, CRAC, or trunk to view stats.</div>
+      <div class="divider"></div>
+      <div class="title">Quests</div>
+      <div id="quests"></div>
+      <div class="divider"></div>
+      <div class="title">Milestones</div>
+      <div id="milestones" class="tiny"></div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <div class="foot">
+    <div>ServerVille MVP • Deterministic 10 Hz sim • Seeded RNG</div>
+    <div id="saveInfo">Autosaves every minute</div>
+  </div>
+</div>
+
+<div class="ghostCost" id="ghostCost" style="display:none;">$0</div>
+
+<div class="tutorial" id="tutorial" style="display:none;">
+  <div class="title">Quick Start (60s)</div>
+  <ol class="tiny">
+    <li>Utilities → Place a <b>Power Trunk T1</b>.</li>
+    <li>Racks → Place a <b>Rack (8 slots)</b>.</li>
+    <li>Cooling → Place a <b>CRAC-A</b>.</li>
+    <li>GPUs → Select <b>Gen1</b>, then click your rack to install.</li>
+    <li>Hit <b>⏵</b> (×1) to unpause and watch profit.</li>
+  </ol>
+  <button class="btn" id="closeTutorial">Got it</button>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ========== Utils ========== */
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const fmtMoney=(n)=>{
+  const s=n<0?'-':''; const v=Math.abs(n);
+  if (v>=1e9) return s+'$'+(v/1e9).toFixed(2)+'B';
+  if (v>=1e6) return s+'$'+(v/1e6).toFixed(2)+'M';
+  if (v>=1e3) return s+'$'+(v/1e3).toFixed(2)+'k';
+  return s+'$'+v.toFixed(2);
+};
+const fmt=(n)=>{ const s=n<0?'-':''; const v=Math.abs(n);
+  if (v>=1e9) return s+(v/1e9).toFixed(2)+'B';
+  if (v>=1e6) return s+(v/1e6).toFixed(2)+'M';
+  if (v>=1e3) return s+(v/1e3).toFixed(1)+'k';
+  return s+v.toFixed(0);
+};
+function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;}}
+function seededShuffle(arr, rnd){for(let i=arr.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+const now=()=>Date.now();
+
+/* ========== Blueprints ========== */
+const ROOM_W = 16, ROOM_H = 12;
+const TILE_W = 64, TILE_H = 32;
+
+const RACKS = [
+  {id:'rack8', name:'Rack (8)', slots:8, size:{w:1,h:1}, cost:3000, color:'#7ea6ff'},
+  {id:'rack10', name:'Rack (10)', slots:10, size:{w:1,h:1}, cost:5500, color:'#a4c8ff', unlockCash:15000},
+  {id:'rack12', name:'Rack (12)', slots:12, size:{w:1,h:1}, cost:8000, color:'#cfe3ff', unlockCash:30000},
+];
+const GPUS = [
+  {id:'g1', gen:1, name:'Gen1', cost:500, mh:50, power:0.12, heat:90, mtbfH:40},
+  {id:'g2', gen:2, name:'Gen2', cost:1200, mh:140, power:0.28, heat:200, mtbfH:60, unlockHash:12000},
+  {id:'g3', gen:3, name:'Gen3', cost:3000, mh:400, power:0.7, heat:550, mtbfH:80, unlockCash:50000},
+  {id:'g4', gen:4, name:'Gen4', cost:7000, mh:1100, power:1.6, heat:1200, mtbfH:100, unlockCash:150000},
+  {id:'g5', gen:5, name:'Gen5', cost:16000, mh:2600, power:3.6, heat:2700, mtbfH:120, unlockCash:400000},
+];
+const CRACS = [
+  {id:'cracA', name:'CRAC-A', cap:2000, power:0.6, cost:4000, color:'#6ff0d0'},
+  {id:'cracB', name:'CRAC-B', cap:6000, power:1.8, cost:10000, color:'#6fe3ff', unlockCash:20000},
+];
+const TRUNKS = [
+  {id:'t1', name:'Power Trunk T1', capKW:20, cost:8000},
+  {id:'t2', name:'Power Trunk T2', capKW:60, cost:18000, unlockCash:30000},
+  {id:'t3', name:'Power Trunk T3', capKW:200, cost:40000, unlockCash:90000},
+];
+
+const BASE_POWER_PRICE = 0.11;
+const REWARD_PER_MH_PER_MIN_BASE = 0.001;
+const SURGE_MULT_MIN=1.6, SURGE_MULT_MAX=2.2;
+
+/* ========== State ========== */
+const state = {
+  version:2,
+  seed: Math.floor(Math.random()*1e9)>>>0,
+  rnd:null,
+  cam:{x:0,y:0, zoom:1},
+  input:{mx:0,my:0, down:false, dragging:false, last:{x:0,y:0}, buildMode:'build', rotate:0},
+  world:{ w:ROOM_W, h:ROOM_H, tiles:[], entities:[], trunkId:null },
+  econ:{
+    cash: 25000,
+    coin:1.0, diff:1.0, powerPrice:BASE_POWER_PRICE,
+    surgeUntil:0, hotUntil:0, flash:{gpuId:null, until:0, discount:0},
+    rebateUntil:0,
+    incomePerSec:0, costPerSec:0, netPerSec:0,
+    totals:{powerKW:0, powerCapKW:0, heat:0, coolCap:0, mh:0, mhEff:0},
+    history:[], lastNetMinute:0, cumulativeProfit:0, cumulativeHashMin:0,
+  },
+  time:{ paused:false, speed:1, acc:0, tickHz:10, last: now(), gameMinutes:0, lastSave: now()},
+  events:{ nextInMin: 20, active:[], toasts:[] },
+  build:{ tab:'Racks', selected:null, mode:1 },
+  selection:{ id:null, slotIdx:null },
+  tutorial:{ step:0, open:true },
+  quests:[
+    {id:'q1', text:'Bring net profit to $1,000/hr.', done:false, reward:2500},
+    {id:'q2', text:'Stabilize heat ≤ 80% for 5 min.', done:false, progress:0, needMin:5, reward:3000},
+  ],
+  milestones:[],
+};
+
+/* ========== Save/Load ========== */
+const SAVE_KEY='serverville_mvp_v2';
+function saveGame(manual=false){
+  state.time.lastSave = now();
+  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  document.getElementById('saveInfo').textContent = `Saved ${new Date(state.time.lastSave).toLocaleTimeString()}` + (manual?' (manual)':'');
+}
+function loadGame(){
+  const s = localStorage.getItem(SAVE_KEY);
+  if (!s) return false;
+  try{
+    const obj = JSON.parse(s);
+    Object.assign(state, obj);
+    state.rnd = mulberry32(state.seed);
+    const elapsedSec = Math.min(12*3600, Math.max(0, Math.floor((now()-state.time.lastSave)/1000)));
+    if (elapsedSec>0){
+      const snap = snapshotTotals();
+      const reward = REWARD_PER_MH_PER_MIN_BASE * state.econ.coin / state.econ.diff;
+      const incomePerSec = (snap.mhEff/60) * reward;
+      const powerCostPerSec = (snap.powerKW * state.econ.powerPrice)/3600;
+      const coolingCostPerSec = ((snap.coolCap>0? snap.coolPowerKW:0) * state.econ.powerPrice)/3600;
+      const netPS = incomePerSec - powerCostPerSec - coolingCostPerSec;
+      state.econ.cash += netPS * elapsedSec;
+      state.econ.cumulativeProfit += Math.max(0, netPS * elapsedSec);
+      state.econ.cumulativeHashMin += (snap.mhEff * (elapsedSec/60));
+      addToast('💤 Offline Earnings', `Applied ${Math.floor(elapsedSec/60)} min (capped at 12h).`, null);
+    }
+    return true;
+  }catch(e){ console.warn('Load failed', e); return false; }
+}
+
+/* ========== Init ========== */
+function init(){
+  state.rnd = mulberry32(state.seed);
+  state.world.tiles = [];
+  for (let y=0;y<ROOM_H;y++){
+    const row = [];
+    for (let x=0;x<ROOM_W;x++){
+      const t = {type:'floor'};
+      if (x===0||y===0||x===ROOM_W-1||y===ROOM_H-1) t.type='wall';
+      row.push(t);
+    }
+    state.world.tiles.push(row);
+  }
+  state.world.tiles[ROOM_H-1][Math.floor(ROOM_W/2)].type='door';
+
+  buildPanelRender();
+  renderQuests();
+
+  if (!loadGame()){
+    addToast('👋 Welcome', 'Place a Power Trunk, a Rack, a CRAC, then install GPUs. Hit play!', null);
+  }
+
+  state.tutorial.open = true;
+  document.getElementById('tutorial').style.display = 'block';
+
+  resizeCanvas();
+  requestAnimationFrame(loop);
+  setInterval(()=>saveGame(false), 60*1000);
+}
+
+/* ========== Canvas & Camera ========== */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const gameDiv = document.getElementById('game');
+
+function resizeCanvas(){
+  const r = gameDiv.getBoundingClientRect();
+  canvas.width = r.width * devicePixelRatio;
+  canvas.height = r.height * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+window.addEventListener('resize', resizeCanvas);
+
+/* Iso transforms */
+function worldToScreen(x,y){
+  const isoX = (x - y) * (TILE_W/2);
+  const isoY = (x + y) * (TILE_H/2);
+  return {
+    x: (isoX + state.cam.x) * state.cam.zoom + canvas.width/(2*devicePixelRatio),
+    y: (isoY + state.cam.y) * state.cam.zoom + canvas.height/(2*devicePixelRatio),
+  };
+}
+function screenToWorld(sx,sy){
+  const cx = (sx - canvas.width/(2*devicePixelRatio))/state.cam.zoom - state.cam.x;
+  const cy = (sy - canvas.height/(2*devicePixelRatio))/state.cam.zoom - state.cam.y;
+  const x = (cy/(TILE_H/2) + cx/(TILE_W/2)) / 2;
+  const y = (cy/(TILE_H/2) - cx/(TILE_W/2)) / 2;
+  return {x, y};
+}
+
+/* Drawing helpers */
+function drawTile(x,y, colorA, colorB){
+  const p = worldToScreen(x,y);
+  const w=TILE_W*state.cam.zoom, h=TILE_H*state.cam.zoom;
+  const t = ((x+y)&1)?colorA:colorB;
+  ctx.fillStyle=t;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y - h/2);
+  ctx.lineTo(p.x + w/2, p.y);
+  ctx.lineTo(p.x, p.y + h/2);
+  ctx.lineTo(p.x - w/2, p.y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle='#1f2a40';
+  ctx.lineWidth=1;
+  ctx.stroke();
+}
+function roundRect(ctx,x,y,w,h,r,fill){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  if (fill) ctx.fill(); else ctx.stroke();
+}
+
+/* ========== Input (fixed picking/placement) ========== */
+canvas.addEventListener('mousedown',(e)=>{
+  state.input.down=true; state.input.dragging=false;
+  state.input.last.x=e.clientX; state.input.last.y=e.clientY;
+});
+window.addEventListener('mouseup', ()=>{
+  state.input.down=false; state.input.dragging=false;
+});
+window.addEventListener('mousemove',(e)=>{
+  state.input.mx=e.clientX; state.input.my=e.clientY;
+  if (state.input.down){
+    const dx=e.clientX - state.input.last.x;
+    const dy=e.clientY - state.input.last.y;
+    if (Math.hypot(dx,dy)>3){
+      state.input.dragging=true;
+      state.cam.x += dx/(state.cam.zoom);
+      state.cam.y += dy/(state.cam.zoom);
+      state.input.last.x=e.clientX; state.input.last.y=e.clientY;
+    }
+  }
+});
+canvas.addEventListener('wheel',(e)=>{
+  const dir = e.deltaY<0?1:-1;
+  const pre = state.cam.zoom;
+  state.cam.zoom = clamp(state.cam.zoom * (1+dir*0.1), 0.5, 2.5);
+  // keep cursor focus point stable
+  const w1 = screenToWorld(e.clientX, e.clientY);
+  const w2 = screenToWorld(e.clientX, e.clientY);
+  state.cam.x += (w2.x - w1.x)*TILE_W/2;
+  state.cam.y += (w2.y - w1.y)*TILE_H/2;
+  e.preventDefault();
+},{passive:false});
+
+/* NEW: place on click reliably (even if tiny movement occurred) */
+canvas.addEventListener('click', (e)=>{
+  handleClick(e);
+});
+
+window.addEventListener('keydown', (e)=>{
+  const k = e.key.toLowerCase();
+  if (k===' ') { setSpeed(state.time.speed===0?1:0); e.preventDefault(); }
+  if (k==='1'){ setMode(1); }
+  if (k==='2'){ setMode(2); }
+  if (k==='3'){ setMode(3); }
+  if (k==='q'){ state.input.rotate=(state.input.rotate+3)&3; }
+  if (k==='e'){ state.input.rotate=(state.input.rotate+1)&3; }
+  if (k==='w'){ state.cam.y += 30; }
+  if (k==='s'){ state.cam.y -= 30; }
+  if (k==='a'){ state.cam.x += 30; }
+  if (k==='d'){ state.cam.x -= 30; }
+  if (k==='z'){ state.cam.zoom=clamp(state.cam.zoom*0.9,0.5,2.5); }
+  if (k==='x'){ state.cam.zoom=clamp(state.cam.zoom*1.1,0.5,2.5); }
+});
+function setMode(m){ state.build.mode=m; }
+function tileAtClient(x,y){
+  // Use rounding for robust diamond selection
+  const w = screenToWorld(x,y);
+  const tx = Math.round(w.x);
+  const ty = Math.round(w.y);
+  return {tx,ty};
+}
+function handleClick(e){
+  const {tx,ty} = tileAtClient(e.clientX, e.clientY);
+  if (tx<0||ty<0||tx>=ROOM_W||ty>=ROOM_H) return;
+
+  const ent = pickEntity(tx,ty);
+
+  if (state.build.mode===1){ // build
+    const tab = state.build.tab;
+    const bp = state.build.selected;
+    if (!bp){ state.selection.id = ent?.id ?? null; inspectRender(); return; }
+
+    if (tab==='Racks'){
+      placeEntity('rack', tx, ty, {slots:bp.slots, gpus:Array(bp.slots).fill(null), color:RACKS.find(r=>r.id===bp.id).color}, bp.cost);
+    } else if (tab==='Cooling'){
+      const c = CRACS.find(c=>c.id===bp.id);
+      placeEntity('crac', tx, ty, {cap:c.cap, power:c.power, color:c.color}, c.cost);
+    } else if (tab==='Utilities'){
+      if (state.world.trunkId && bp.id!=='upgrade') {
+        addToast('⚠️ Trunk Exists', 'You already have a power trunk. Use Inspect → Upgrade.', null);
+        return;
+      }
+      const t = TRUNKS.find(t=>t.id===bp.id);
+      placeEntity('trunk', tx, ty, {capKW:t.capKW}, t.cost, (id)=>{ state.world.trunkId=id; });
+    } else if (tab==='GPUs'){
+      if (!ent || ent.type!=='rack'){ addToast('🧰 Tip', 'Click a rack to install the selected GPU.', null); return; }
+      const g = GPUS.find(g=>g.id===bp.id);
+      const price = currentGpuPrice(g.id);
+      if (state.econ.cash<price){ addToast('💸 Not enough cash', `You need ${fmtMoney(price)}.`, null); return; }
+      const slot = ent.data.gpus.findIndex(s=>!s);
+      if (slot===-1){ addToast('🗄️ Rack full', 'No empty slots.', null); return; }
+      state.econ.cash -= price;
+      ent.data.gpus[slot] = {gpuId:g.id, health:'ok', failUntil:0};
+      sound('place');
+      if (state.tutorial.open && state.tutorial.step<4) advanceTutorial(4);
+      selectEntity(ent.id);
+    }
+  } else if (state.build.mode===2){ // move
+    if (state.selection.id && state.selection.moving){
+      const moving = getEntity(state.selection.id);
+      if (!moving) return;
+      if (!canPlace(moving.type, tx, ty)){ addToast('🚫 Invalid spot', 'Can’t place here.', null); return; }
+      moving.x=tx; moving.y=ty;
+      state.selection.moving=false;
+    } else if (ent){
+      selectEntity(ent.id);
+      state.selection.moving=true;
+    }
+  } else if (state.build.mode===3){ // sell
+    if (!ent) return;
+    const refund = Math.round(valueOf(ent)*0.5);
+    state.econ.cash += refund;
+    if (ent.type==='trunk') state.world.trunkId=null;
+    state.world.entities = state.world.entities.filter(x=>x.id!==ent.id);
+    state.selection.id=null;
+    addToast('💰 Sold', `Refund ${fmtMoney(refund)}.`, null);
+  }
+  inspectRender();
+}
+function pickEntity(x,y){
+  for (let i=state.world.entities.length-1;i>=0;i--){
+    const e=state.world.entities[i];
+    if (e.x===x && e.y===y) return e;
+  }
+  return null;
+}
+function getEntity(id){ return state.world.entities.find(e=>e.id===id); }
+function selectEntity(id){ state.selection.id=id; inspectRender(); }
+
+/* ========== Placement Helpers ========== */
+function canPlace(type, x,y){
+  if (x<=0||y<=0||x>=ROOM_W-1||y>=ROOM_H-1) return false; // keep off walls
+  const tile = state.world.tiles[y]?.[x];
+  if (!tile || tile.type!=='floor') return false;
+  const coll = state.world.entities.some(e=>e.x===x&&e.y===y);
+  if (coll) return false;
+  return true;
+}
+function placeEntity(type,x,y,data,cost,after){
+  if (!canPlace(type,x,y)){ sound('error'); return addToast('🚫 Invalid spot','Cannot place here.',null); }
+  if (state.econ.cash<cost){ sound('error'); return addToast('💸 Not enough cash', `Need ${fmtMoney(cost)}.`, null); }
+  state.econ.cash -= cost;
+  const id = 'e'+Math.random().toString(36).slice(2,9);
+  const ent = {id, type, x,y, rot:state.input.rotate, data:{...data, throttle:0}};
+  state.world.entities.push(ent);
+  if (type==='trunk') state.world.trunkId=id;
+  sound('place');
+  if (after) after(id);
+  if (state.tutorial.open){
+    if (type==='trunk') advanceTutorial(1);
+    if (type==='rack') advanceTutorial(2);
+    if (type==='crac') advanceTutorial(3);
+  }
+}
+
+/* ========== UI: Build Panel ========== */
+const buildTabs = document.getElementById('buildTabs');
+buildTabs.addEventListener('click', (e)=>{
+  const t = e.target.closest('.tab'); if(!t) return;
+  document.querySelectorAll('#buildTabs .tab').forEach(el=>el.classList.remove('active'));
+  t.classList.add('active');
+  state.build.tab = t.dataset.tab;
+  state.build.selected = null;
+  buildPanelRender();
+});
+function buildPanelRender(){
+  const cont = document.getElementById('buildContent');
+  const tab = state.build.tab;
+  cont.innerHTML='';
+  function addItem(title, desc, price, onclick, disabled=false, note=''){
+    const div=document.createElement('div');
+    div.className='card';
+    div.innerHTML=`
+      <div class="grid2">
+        <div>
+          <div class="title">${title}</div>
+          <div class="tiny muted">${desc}</div>
+          ${note?`<div class="tiny warn">${note}</div>`:''}
+        </div>
+        <div>
+          <div class="price">${fmtMoney(price)}</div>
+          <button class="btn" ${disabled?'disabled':''}>Select</button>
+        </div>
+      </div>`;
+    div.querySelector('.btn').addEventListener('click', onclick);
+    cont.appendChild(div);
+  }
+
+  if (tab==='Racks'){
+    for (const r of RACKS){
+      const locked = r.unlockCash && state.econ.cumulativeProfit < r.unlockCash;
+      addItem(r.name, `${r.slots} GPU slots`, r.cost, ()=>{
+        state.build.selected = r; sound('ui');
+      }, locked, locked?`Unlock at $${fmt(r.unlockCash)} cumulative profit.`:'');
+    }
+  } else if (tab==='GPUs'){
+    for (const g of GPUS){
+      const unlocked = (!g.unlockHash || state.econ.cumulativeHashMin>=g.unlockHash) &&
+                       (!g.unlockCash || state.econ.cumulativeProfit>=g.unlockCash);
+      const price = currentGpuPrice(g.id);
+      addItem(`${g.name} GPU`, `${g.mh} MH/s • ${Math.round(g.power*1000)} W • MTBF ${g.mtbfH}h`, price, ()=>{
+        state.build.selected = g; sound('ui');
+      }, !unlocked, !unlocked? `Unlock with ${g.unlockHash?fmt(g.unlockHash)+' MH·min ':''}${g.unlockCash?'or $'+fmt(g.unlockCash)+' profit':''}` : (isFlash(g.id)?'Flash Sale −'+Math.round(state.econ.flash.discount*100)+'%':'' ));
+    }
+  } else if (tab==='Cooling'){
+    for (const c of CRACS){
+      const locked = c.unlockCash && state.econ.cumulativeProfit < c.unlockCash;
+      addItem(c.name, `Removes ${fmt(c.cap)} BTU/h • ${Math.round(c.power*1000)} W`, c.cost, ()=>{
+        state.build.selected = c; sound('ui');
+      }, locked, locked?`Unlock at $${fmt(c.unlockCash)} cumulative profit.`:'');
+    }
+  } else if (tab==='Utilities'){
+    const trunk = getTrunk();
+    if (!trunk){
+      for (const t of TRUNKS){
+        const locked = t.unlockCash && state.econ.cumulativeProfit < t.unlockCash;
+        addItem(t.name, `${t.capKW} kW room capacity`, t.cost, ()=>{
+          state.build.selected = t; sound('ui');
+        }, locked, locked?`Unlock at $${fmt(t.unlockCash)} cumulative profit.`:'');
+      }
+    } else {
+      const curr = TRUNKS.findIndex(t=>t.capKW===trunk.data.capKW);
+      const next = TRUNKS[curr+1];
+      if (next){
+        addItem(`Upgrade → ${next.name}`, `${next.capKW} kW capacity`, next.cost, ()=>{
+          if (state.econ.cash<next.cost) return addToast('💸 Not enough cash', fmtMoney(next.cost), null);
+          state.econ.cash-=next.cost;
+          trunk.data.capKW = next.capKW;
+          addToast('⚡ Upgraded', `Power capacity is now ${next.capKW} kW.`, null);
+          sound('place'); buildPanelRender(); inspectRender();
+        }, next.unlockCash && state.econ.cumulativeProfit<next.unlockCash, next.unlockCash?`Unlock at $${fmt(next.unlockCash)} profit.`:'');
+      } else {
+        const div=document.createElement('div');
+        div.className='card tiny'; div.textContent='Max trunk tier reached.';
+        cont.appendChild(div);
+      }
+    }
+  }
+}
+function currentGpuPrice(id){
+  const g = GPUS.find(x=>x.id===id);
+  if (!g) return 0;
+  if (state.econ.flash.gpuId===id && now()<state.econ.flash.until){
+    return Math.round(g.cost * (1 - state.econ.flash.discount));
+  }
+  return g.cost;
+}
+function isFlash(id){ return state.econ.flash.gpuId===id && now()<state.econ.flash.until; }
+
+/* ========== Inspect Panel ========== */
+function inspectRender(){
+  const box = document.getElementById('inspectContent');
+  const id = state.selection.id;
+  const ent = id? getEntity(id): null;
+  if (!ent){ box.innerHTML = `<div class="tiny muted">Select a rack, CRAC, or trunk to view stats.</div>`; return; }
+
+  if (ent.type==='rack'){
+    const gCount = ent.data.gpus.filter(x=>!!x).length;
+    const mh = rackHash(ent, true);
+    const mhEff = rackHash(ent, false);
+    const throttled = ent.data.throttle || 0;
+    let html = `
+      <div class="title">Rack</div>
+      <div class="tiny">Slots: ${ent.data.slots} • GPUs: ${gCount}/${ent.data.slots}</div>
+      <div class="tiny">Hashrate: ${mhEff.toFixed(1)} / ${mh.toFixed(1)} MH/s ${throttled>0?`<span class="bad">(Throttled)</span>`:''}</div>
+      <div class="divider"></div>
+      <div class="title">Slots</div>
+      <div class="slot-row" id="slots"></div>
+      <div class="divider"></div>
+      <div class="row">
+        <button class="btn" id="btnMove">${state.selection.moving?'Place Here':'Move'}</button>
+        <button class="btn" id="btnSell">Sell Rack (50%)</button>
+      </div>`;
+    box.innerHTML=html;
+    const slots = box.querySelector('#slots');
+    ent.data.gpus.forEach((g,idx)=>{
+      const d = document.createElement('div');
+      d.className = 'slot' + (g && g.health==='fail' ? ' bad':'');
+      if (!g) d.textContent='—';
+      else {
+        const bp = GPUS.find(x=>x.id===g.gpuId);
+        d.innerHTML = `<div>${bp.name}</div><div class="tiny">${bp.mh} MH/s</div><div class="tiny ${g.health==='fail'?'bad':''}">${g.health==='fail'?'FAILED':'OK'}</div>`;
+      }
+      d.addEventListener('click', ()=>{
+        if (!g && state.build.tab==='GPUs' && state.build.selected){
+          const bp = GPUS.find(x=>x.id===state.build.selected.id);
+          const price = currentGpuPrice(bp.id);
+          if (state.econ.cash<price) return addToast('💸 Not enough cash', fmtMoney(price), null);
+          ent.data.gpus[idx] = {gpuId:bp.id, health:'ok', failUntil:0};
+          state.econ.cash -= price;
+          inspectRender(); sound('place');
+        } else if (g){ slotActions(ent, idx); }
+      });
+      slots.appendChild(d);
+    });
+    box.querySelector('#btnMove').onclick=()=>{ state.build.mode=2; state.selection.moving=!state.selection.moving; };
+    box.querySelector('#btnSell').onclick=()=>{ const refund=Math.round(valueOf(ent)*0.5); state.econ.cash+=refund; state.world.entities=state.world.entities.filter(x=>x.id!==ent.id); state.selection.id=null; addToast('💰 Sold', fmtMoney(refund),null); inspectRender(); };
+  } else if (ent.type==='crac'){
+    box.innerHTML = `
+      <div class="title">CRAC</div>
+      <div class="tiny">Capacity: ${fmt(ent.data.cap)} BTU/h • Power: ${Math.round(ent.data.power*1000)} W</div>
+      <div class="divider"></div>
+      <div class="row">
+        <button class="btn" id="btnSell">Sell (50%)</button>
+      </div>`;
+    box.querySelector('#btnSell').onclick=()=>{ const refund=Math.round(valueOf(ent)*0.5); state.econ.cash+=refund; state.world.entities=state.world.entities.filter(x=>x.id!==ent.id); state.selection.id=null; addToast('💰 Sold', fmtMoney(refund),null); inspectRender(); };
+  } else if (ent.type==='trunk'){
+    const currCap = ent.data.capKW;
+    const idx = TRUNKS.findIndex(t=>t.capKW===currCap);
+    const next = TRUNKS[idx+1];
+    box.innerHTML = `
+      <div class="title">Power Trunk</div>
+      <div class="tiny">Room capacity: ${currCap} kW</div>
+      <div class="divider"></div>
+      ${next?`<div class="row"><button class="btn" id="btnUp">Upgrade → ${next.name} (${next.capKW} kW) — ${fmtMoney(next.cost)}</button></div>`:`<div class="tiny muted">Max tier reached.</div>`}
+    `;
+    if (next) box.querySelector('#btnUp').onclick=()=>{ if(state.econ.cash<next.cost) return addToast('💸 Not enough cash', fmtMoney(next.cost),null); state.econ.cash-=next.cost; ent.data.capKW=next.capKW; addToast('⚡ Upgraded', `Capacity ${next.capKW} kW`, null); sound('place'); buildPanelRender(); inspectRender(); };
+  }
+}
+function slotActions(rack, idx){
+  const g = rack.data.gpus[idx]; if (!g) return;
+  const bp = GPUS.find(x=>x.id===g.gpuId);
+  const modal = document.createElement('div');
+  modal.className='toast';
+  modal.innerHTML = `
+    <div class="title">GPU Slot ${idx+1} • ${bp.name}</div>
+    <div class="tiny">Status: ${g.health==='fail'?'<span class="bad">FAILED</span>':'OK'} • ${bp.mh} MH/s • ${Math.round(bp.power*1000)} W</div>
+    <div class="row" style="margin-top:6px;">
+      <button class="btn" id="btnRemove">Remove (50% refund)</button>
+      ${g.health==='fail'?'<button class="btn" id="btnRepair">Instant Repair</button>':''}
+      <button class="btn" id="btnClose">Close</button>
+    </div>`;
+  document.getElementById('toasts').appendChild(modal);
+  modal.querySelector('#btnClose').onclick=()=>modal.remove();
+  modal.querySelector('#btnRemove').onclick=()=>{ const refund=Math.round(currentGpuPrice(bp.id)*0.5); state.econ.cash+=refund; rack.data.gpus[idx]=null; modal.remove(); inspectRender(); addToast('🗑️ Removed', `Refund ${fmtMoney(refund)}.`, null); };
+  if (g.health==='fail'){
+    modal.querySelector('#btnRepair').onclick=()=>{ const cost=Math.round(currentGpuPrice(bp.id)*0.2); if(state.econ.cash<cost) return addToast('💸 Need', fmtMoney(cost),null); state.econ.cash-=cost; g.health='ok'; g.failUntil=0; modal.remove(); inspectRender(); addToast('🛠️ Repaired', 'GPU back online.', null); };
+  }
+}
+
+/* ========== Economy & Sim ========== */
+function rackHash(ent, base){
+  let mh=0;
+  for (const g of ent.data.gpus){
+    if (!g) continue;
+    if (g.health==='fail') continue;
+    const bp = GPUS.find(x=>x.id===g.gpuId);
+    mh += bp.mh;
+  }
+  if (base) return mh;
+  return mh * (1 - (ent.data.throttle||0));
+}
+function valueOf(ent){
+  if (ent.type==='rack'){
+    const r = RACKS.find(x=>x.slots===ent.data.slots) || RACKS[0];
+    let v = r.cost;
+    for (const g of ent.data.gpus){ if (g){ v += currentGpuPrice(g.gpuId); } }
+    return v;
+  } else if (ent.type==='crac'){
+    const c = CRACS.find(x=>x.cap===ent.data.cap) || CRACS[0];
+    return c.cost;
+  } else if (ent.type==='trunk'){
+    const t = TRUNKS.find(x=>x.capKW===ent.data.capKW) || TRUNKS[0];
+    return t.cost;
+  }
+  return 0;
+}
+function getTrunk(){ return state.world.trunkId? getEntity(state.world.trunkId) : null; }
+function snapshotTotals(){
+  const trunk = getTrunk();
+  const powerCapKW = trunk? trunk.data.capKW : 0;
+  let totalPowerKW=0, totalHeat=0, totalMH=0;
+  let coolingCap=0, coolingPowerKW=0;
+  for (const e of state.world.entities){
+    if (e.type==='rack'){
+      for (const g of e.data.gpus){ if (!g) continue; if (g.health==='fail') continue; const bp=GPUS.find(x=>x.id===g.gpuId); totalPowerKW+=bp.power; totalHeat+=bp.heat; totalMH+=bp.mh; }
+    } else if (e.type==='crac'){
+      coolingCap += e.data.cap * (now()<state.econ.hotUntil ? 0.8 : 1.0);
+      coolingPowerKW += e.data.power;
+    }
+  }
+  let powerScale = 1.0;
+  if (powerCapKW>0 && totalPowerKW>powerCapKW) powerScale = powerCapKW/totalPowerKW;
+  let heatScale = 1.0;
+  if (coolingCap>0 && totalHeat>coolingCap) heatScale = coolingCap/totalHeat;
+  const scale = Math.min(powerScale, heatScale);
+  const effMH = totalMH * scale;
+  for (const e of state.world.entities){ if (e.type==='rack') e.data.throttle = 1-scale; }
+  return {powerKW: totalPowerKW*scale, powerCapKW, heat: totalHeat*scale, coolCap: coolingCap, coolPowerKW, mh: totalMH, mhEff: effMH, scale};
+}
+function simTick(dtSec){
+  const inGameMinutes = dtSec * 60;
+  state.time.gameMinutes += inGameMinutes;
+
+  if (Math.floor(state.time.gameMinutes/60) !== Math.floor((state.time.gameMinutes-inGameMinutes)/60)){
+    const step = (state.rnd()*0.02 - 0.01);
+    state.econ.coin = clamp(state.econ.coin * (1+step), 0.8, 1.25);
+    const step2 = (state.rnd()*0.02 - 0.01);
+    state.econ.diff = clamp(state.econ.diff * (1+step2), 0.8, 1.25);
+  }
+
+  state.events.nextInMin -= inGameMinutes;
+  if (state.events.nextInMin<=0){
+    spawnEvent();
+    state.events.nextInMin = 15 + Math.floor(state.rnd()*15);
+  }
+
+  if (Math.floor(state.time.gameMinutes) !== Math.floor(state.time.gameMinutes - inGameMinutes)){
+    const hours = 1/60;
+    for (const e of state.world.entities){
+      if (e.type!=='rack') continue;
+      for (const g of e.data.gpus){
+        if (!g || g.health==='fail') continue;
+        const bp = GPUS.find(x=>x.id===g.gpuId);
+        const p = hours / bp.mtbfH;
+        if (state.rnd()<p){
+          g.health='fail';
+          g.failUntil = state.time.gameMinutes + 5;
+          addToast('💥 GPU Failure', `${bp.name} failed (auto-repair in 5m or pay to fix instantly).`, null);
+        }
+      }
+    }
+  }
+  for (const e of state.world.entities){
+    if (e.type!=='rack') continue;
+    for (const g of e.data.gpus){
+      if (!g || g.health!=='fail') continue;
+      if (state.time.gameMinutes>=g.failUntil){ g.health='ok'; g.failUntil=0; }
+    }
+  }
+
+  const snap = snapshotTotals();
+  let pPrice = BASE_POWER_PRICE;
+  if (now()<state.econ.surgeUntil) pPrice *= clamp(state.econ.surgeMult||1.8, SURGE_MULT_MIN, SURGE_MULT_MAX);
+  if (now()<state.econ.rebateUntil) pPrice *= 0.7;
+  state.econ.powerPrice = pPrice;
+
+  const reward = REWARD_PER_MH_PER_MIN_BASE * state.econ.coin / state.econ.diff;
+  const incomePerSec = (snap.mhEff/60) * reward;
+  const powerCostPerSec = (snap.powerKW * pPrice)/3600;
+  const coolingCostPerSec = (snap.coolPowerKW * pPrice)/3600;
+
+  state.econ.incomePerSec = incomePerSec;
+  state.econ.costPerSec = powerCostPerSec + coolingCostPerSec;
+  state.econ.netPerSec = incomePerSec - (powerCostPerSec + coolingCostPerSec);
+
+  state.econ.cash += state.econ.netPerSec * dtSec;
+  state.econ.cumulativeProfit += Math.max(0, state.econ.netPerSec*dtSec);
+  state.econ.cumulativeHashMin += (snap.mhEff * (dtSec/60));
+
+  const netHr = state.econ.netPerSec*3600;
+  const heatPct = snap.coolCap>0 ? (snap.heat/snap.coolCap) : 1;
+  for (const q of state.quests){
+    if (q.id==='q1' && !q.done && netHr>=1000){ q.done=true; state.econ.cash+=q.reward; addToast('🎯 Quest Complete', `${q.text} +${fmtMoney(q.reward)}`, null); }
+    if (q.id==='q2' && !q.done){
+      if (heatPct<=0.8) q.progress += inGameMinutes; else q.progress = 0;
+      if (q.progress>=q.needMin){ q.done=true; state.econ.cash+=q.reward; addToast('🎯 Quest Complete', `${q.text} +${fmtMoney(q.reward)}`, null); }
+    }
+  }
+
+  state.econ.lastNetMinute += dtSec;
+  if (state.econ.lastNetMinute>=1){
+    state.econ.lastNetMinute=0;
+    const netMin = state.econ.netPerSec*60;
+    state.econ.history.push(netMin);
+    if (state.econ.history.length>600) state.econ.history.shift();
+  }
+  state.econ.totals = {...snap};
+
+  if (state.tutorial.open){
+    const hasTrunk = !!getTrunk();
+    const hasRack = state.world.entities.some(e=>e.type==='rack');
+    const hasCrac = state.world.entities.some(e=>e.type==='crac');
+    const hasGPU = state.world.entities.some(e=>e.type==='rack' && e.data.gpus.some(g=>g));
+    if (hasTrunk && hasRack && hasCrac && hasGPU) {
+      advanceTutorial(5);
+      setTimeout(()=>{ document.getElementById('tutorial').style.display='none'; state.tutorial.open=false; }, 1500);
+    }
+  }
+}
+function spawnEvent(){
+  const options = ['surge','hot','flash','rebate'];
+  const type = seededShuffle(options.slice(), state.rnd)[0];
+  if (type==='surge'){
+    const mult = lerp(SURGE_MULT_MIN,SURGE_MULT_MAX,state.rnd());
+    state.econ.surgeMult = mult;
+    state.econ.surgeUntil = now() + 10*1000;
+    addToast('📈 Power Price Surge', `Electricity price ×${mult.toFixed(2)} for 10m.`, null);
+  } else if (type==='hot'){
+    state.econ.hotUntil = now() + 10*1000;
+    addToast('🥵 Hot Day', 'Cooling effectiveness −20% for 10m.', null);
+  } else if (type==='flash'){
+    const g = GPUS[Math.floor(state.rnd()*GPUS.length)];
+    state.econ.flash = {gpuId:g.id, until: now()+15*1000, discount:0.25};
+    addToast('🛒 Flash Sale', `${g.name} −25% for 15m!`, ()=>{ state.build.tab='GPUs'; buildPanelRender(); });
+  } else if (type==='rebate'){
+    state.econ.rebateUntil = now()+10*1000;
+    addToast('💡 Utility Rebate', 'Power price −30% for 10m.', null);
+  }
+}
+
+/* ========== Render Loop ========== */
+function loop(){
+  const t = now();
+  let dt = (t - state.time.last)/1000;
+  state.time.last = t;
+  const speed = state.time.speed;
+  if (speed===0) dt=0; else dt *= speed;
+
+  state.time.acc += dt;
+  const step = 1/state.time.tickHz;
+  while (state.time.acc>=step){ simTick(step); state.time.acc -= step; }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+function draw(){
+  ctx.clearRect(0,0,canvas.width/devicePixelRatio, canvas.height/devicePixelRatio);
+  for (let y=0;y<ROOM_H;y++){
+    for (let x=0;x<ROOM_W;x++){
+      const t = state.world.tiles[y][x].type;
+      let a= '#151f2f', b='#122033';
+      if (t==='wall') { a='#0e1522'; b='#0d1320'; }
+      if (t==='door') { a='#1b2a45'; b='#1b2a45'; }
+      drawTile(x,y,a,b);
+    }
+  }
+  drawGhost();
+  for (const e of state.world.entities) drawEntity(e);
+
+  document.getElementById('cash').textContent = fmtMoney(state.econ.cash);
+  const netHr = state.econ.netPerSec*3600;
+  const netEl = document.getElementById('netHr');
+  netEl.textContent = fmtMoney(netHr);
+  netEl.style.color = netHr>=0? 'var(--good)':'var(--bad)';
+  document.getElementById('powerUse').textContent = state.econ.totals.powerKW.toFixed(2);
+  document.getElementById('powerCap').textContent = (state.econ.totals.powerCapKW||0).toFixed(0);
+  document.getElementById('heatUse').textContent = Math.round(state.econ.totals.heat);
+  document.getElementById('heatCap').textContent = Math.round(state.econ.totals.coolCap);
+  document.getElementById('pPrice').textContent = '$'+state.econ.powerPrice.toFixed(2);
+  document.getElementById('reward').textContent = '×'+(state.econ.coin/state.econ.diff).toFixed(2);
+  drawSpark();
+  const gc = document.getElementById('ghostCost');
+  gc.style.left = state.input.mx+'px'; gc.style.top = state.input.my+'px';
+}
+function drawEntity(ent){
+  const p = worldToScreen(ent.x+0.5, ent.y+0.5);
+  const z = state.cam.zoom;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.globalAlpha=0.25;
+  ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(0, 10*z, 20*z, 8*z, 0,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=1;
+
+  if (ent.type==='rack'){
+    const col = ent.data.color || '#88aaff';
+    ctx.fillStyle=col;
+    roundRect(ctx, -18*z, -42*z, 36*z, 56*z, 6*z, true);
+    ctx.fillStyle='#0b1220';
+    for(let i=0;i<ent.data.slots;i++){
+      const row = Math.floor(i/2), colI = i%2;
+      const sx = -12*z + colI*12*z, sy = -34*z + row*7*z;
+      ctx.fillRect(sx, sy, 10*z, 5*z);
+    }
+    const gCount = ent.data.gpus.filter(g=>!!g).length;
+    ctx.fillStyle='#cfe4ff';
+    ctx.font = `${Math.floor(10*z)}px ui-sans-serif`;
+    ctx.fillText(`${gCount}/${ent.data.slots}`, -16*z, -46*z);
+    if (ent.data.throttle>0){
+      ctx.fillStyle='rgba(255,101,114,0.6)';
+      ctx.fillRect(-18*z, -42*z, 36*z, 56*z);
+    }
+  } else if (ent.type==='crac'){
+    ctx.fillStyle = ent.data.color || '#6ff0d0';
+    roundRect(ctx, -22*z, -26*z, 44*z, 32*z, 6*z, true);
+    ctx.fillStyle='#07201a';
+    ctx.fillRect(-18*z, -6*z, 36*z, 6*z);
+    ctx.fillStyle='#c9ffe9';
+    ctx.font = `${Math.floor(10*z)}px ui-sans-serif`;
+    ctx.fillText(`${fmt(ent.data.cap)} BTU/h`, -20*z, -30*z);
+  } else if (ent.type==='trunk'){
+    ctx.fillStyle = '#ffd36a';
+    roundRect(ctx, -20*z, -20*z, 40*z, 40*z, 8*z, true);
+    ctx.fillStyle='#402b00';
+    ctx.font = `${Math.floor(11*z)}px ui-sans-serif`;
+    ctx.fillText(`${ent.data.capKW} kW`, -18*z, -24*z);
+  }
+  ctx.restore();
+}
+function drawSpark(){
+  const s = document.getElementById('spark');
+  const c = s.getContext('2d');
+  c.clearRect(0,0,s.width,s.height);
+  const arr = state.econ.history;
+  if (arr.length<2) return;
+  const min = Math.min(...arr), max=Math.max(...arr);
+  const pad=2;
+  c.beginPath();
+  for (let i=0;i<arr.length;i++){
+    const x = pad + (i/(arr.length-1))*(s.width-2*pad);
+    const v = (arr[i]-min) / ((max-min)||1);
+    const y = s.height - pad - v*(s.height-2*pad);
+    if (i===0) c.moveTo(x,y); else c.lineTo(x,y);
+  }
+  c.lineWidth=2; c.strokeStyle= (arr[arr.length-1] >= arr[Math.max(0,arr.length-2)] ) ? '#69f59c' : '#ff6572';
+  c.stroke();
+}
+function drawGhost(){
+  const tab = state.build.tab;
+  const bp = state.build.selected;
+  const gc = document.getElementById('ghostCost');
+  gc.style.display='none';
+  if (!bp || state.build.mode!==1) return;
+
+  const {tx,ty} = tileAtClient(state.input.mx, state.input.my);
+  if (tx<0||ty<0||tx>=ROOM_W||ty>=ROOM_H) return;
+  const valid = tab==='GPUs' ? !!pickEntity(tx,ty) : canPlace(tab==='Utilities'&&bp.id!=='upgrade'?'trunk':tab==='Cooling'?'crac':'rack', tx,ty);
+
+  const p = worldToScreen(tx+0.5, ty+0.5);
+  ctx.save();
+  ctx.globalAlpha=0.6;
+  ctx.fillStyle = valid ? '#69f59c' : '#ff6572';
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y - TILE_H*state.cam.zoom/2);
+  ctx.lineTo(p.x + TILE_W*state.cam.zoom/2, p.y);
+  ctx.lineTo(p.x, p.y + TILE_H*state.cam.zoom/2);
+  ctx.lineTo(p.x - TILE_W*state.cam.zoom/2, p.y);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  const price = (tab==='GPUs')? currentGpuPrice(bp.id) :
+                (tab==='Racks')? bp.cost :
+                (tab==='Cooling')? bp.cost :
+                (tab==='Utilities')? (TRUNKS.find(t=>t.id===bp.id)?.cost||0) : 0;
+  gc.textContent = fmtMoney(price);
+  gc.style.display='block';
+}
+
+/* ========== Notifications & Sounds ========== */
+function addToast(title, text, onClick){
+  const t = document.createElement('div');
+  t.className='toast';
+  t.innerHTML=`<div class="title">${title}</div><div class="tiny">${text||''}</div>`;
+  if (onClick) t.style.cursor='pointer', t.onclick=onClick;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .4s'; setTimeout(()=>t.remove(),400); }, 6000);
+}
+const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+function beep(freq=880, dur=0.06, type='sine', vol=0.04){
+  const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+  o.type=type; o.frequency.value=freq; g.gain.value=vol;
+  o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur);
+}
+function sound(kind){
+  if (kind==='place') { beep(640,0.05,'triangle',0.05); }
+  else if (kind==='error'){ beep(180,0.12,'sawtooth',0.04); }
+  else if (kind==='ui'){ beep(420,0.05,'sine',0.03); }
+}
+
+/* ========== Settings & HUD Controls ========== */
+document.getElementById('saveBtn').onclick=()=>saveGame(true);
+document.getElementById('settingsBtn').onclick=()=>{
+  const t=document.createElement('div'); t.className='toast';
+  t.innerHTML=`<div class="title">Settings</div><div class="tiny">Seed: ${state.seed}</div>
+    <div class="row" style="margin-top:6px;">
+      <button class="btn" id="btnReset">Wipe Save</button>
+      <button class="btn" id="btnClose">Close</button></div>`;
+  t.querySelector('#btnReset').onclick=()=>{ localStorage.removeItem(SAVE_KEY); location.reload(); };
+  t.querySelector('#btnClose').onclick=()=>t.remove();
+  document.getElementById('toasts').appendChild(t);
+};
+document.getElementById('timeSeg').addEventListener('click',(e)=>{
+  const b = e.target.closest('.btn'); if(!b) return;
+  document.querySelectorAll('#timeSeg .btn').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  setSpeed(Number(b.dataset.speed));
+});
+function setSpeed(sp){
+  state.time.speed = sp;
+  document.querySelectorAll('#timeSeg .btn').forEach(btn=>btn.classList.toggle('active', Number(btn.dataset.speed)===sp));
+}
+document.getElementById('closeTutorial').onclick=()=>{ document.getElementById('tutorial').style.display='none'; state.tutorial.open=false; };
+function advanceTutorial(step){ state.tutorial.step = Math.max(state.tutorial.step, step); }
+
+/* ========== Quests & Milestones ========== */
+function renderQuests(){
+  const qDiv = document.getElementById('quests'); qDiv.innerHTML='';
+  for (const q of state.quests){
+    const d=document.createElement('div'); d.className='card';
+    if (q.id==='q2' && !q.done){
+      d.innerHTML=`<div class="title">${q.text}</div><div class="tiny">Progress: ${Math.floor(q.progress||0)}/${q.needMin} min • Reward ${fmtMoney(q.reward)}</div>`;
+    } else {
+      d.innerHTML=`<div class="title">${q.text}</div><div class="tiny">${q.done?'<span class="good">Completed</span>':'Reward '+fmtMoney(q.reward)}</div>`;
+    }
+    qDiv.appendChild(d);
+  }
+  const mDiv = document.getElementById('milestones');
+  mDiv.innerHTML = `
+    <div>Profit: $${fmt(Math.floor(state.econ.cumulativeProfit))}</div>
+    <div>Hash Minutes: ${fmt(Math.floor(state.econ.cumulativeHashMin))} MH·min</div>`;
+}
+
+/* ========== Boot ========== */
+init();
+
+})();
+</script>
+</body>
+</html>

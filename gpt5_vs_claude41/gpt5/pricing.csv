@@ -1,0 +1,7 @@
+Provider,Model,Input Unit,Input Price USD,Output Unit,Output Price USD,Notes
+OpenAI,GPT-5,per 1M tokens,1.25,per 1M tokens,10.0,Launch page pricing
+OpenAI,GPT-5 mini,per 1M tokens,0.25,per 1M tokens,2.0,Launch page pricing
+Anthropic,Claude 4 Sonnet,per 1M tokens,3.0,per 1M tokens,15.0,Standard context (≤200k)
+Anthropic,Claude 4 Sonnet (1M ctx),per 1M tokens,6.0,per 1M tokens,22.5,>200k input tokens pricing
+Anthropic,Claude 4 Opus,per 1M tokens,15.0,per 1M tokens,75.0,Flagship reasoning
+Google,Gemini 2.5 Flash (Vertex),per 1M characters,37.5,per 1M characters,150.0,GA endpoint pricing units=characters

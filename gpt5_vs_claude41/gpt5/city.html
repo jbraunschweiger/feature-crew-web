@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>City Generator & Simulation — Single File (Three r128)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+  <style>
+    :root {
+      --bg:#0c1118; --panel:#121a24cc; --panel-solid:#121a24; --soft:#1a2533; --accent:#69d; --text:#e6eef7; --muted:#9fb0c7;
+    }
+    html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #app { position:fixed; inset:0; overflow:hidden; }
+    canvas { display:block; }
+    .hud {
+      position: fixed; left: 12px; top: 12px; padding: 12px; background: var(--panel); border:1px solid #ffffff12; border-radius:12px; backdrop-filter: blur(8px);
+      max-width: 420px; z-index:10; user-select:none;
+    }
+    .hud h1{font-size:16px;margin:0 0 8px 0;color:#cfe6ff}
+    .row { display:grid; grid-template-columns: 120px 1fr auto; align-items:center; gap:8px; margin:6px 0; }
+    .row > label { color:var(--muted); }
+    .row > input[type="range"] { width:100%; }
+    .row > input[type="text"], .row > select { width:100%; background:var(--soft); color:var(--text); border:1px solid #ffffff1a; border-radius:8px; padding:6px 8px; }
+    .row > button { background:var(--accent); color:#011; border:0; border-radius:8px; padding:8px 10px; font-weight:600; cursor:pointer; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .toggle { display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .toggle input { transform: translateY(1px); }
+    .stats {
+      position: fixed; right: 12px; top: 12px; padding: 12px; background: var(--panel); border:1px solid #ffffff12; border-radius:12px; backdrop-filter: blur(8px);
+      z-index:10; min-width: 260px;
+    }
+    .stats h2 { font-size:14px; margin:0 0 8px 0; color:#cfe6ff }
+    .stats .kvs { display:grid; grid-template-columns: 1fr 1fr; gap:6px 12px; }
+    .legend {
+      position: fixed; left: 12px; bottom: 12px; padding: 10px; background: var(--panel); border:1px solid #ffffff12; border-radius:12px; backdrop-filter: blur(8px);
+      z-index:10; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    }
+    .chip { display:flex; align-items:center; gap:6px; background:#ffffff0e; border:1px solid #ffffff12; border-radius:999px; padding:6px 10px; }
+    .swatch { width:14px; height:14px; border-radius:3px; }
+    .modebar {
+      position: fixed; right: 12px; bottom: 12px; padding: 10px; background: var(--panel); border:1px solid #ffffff12; border-radius:12px; backdrop-filter: blur(8px);
+      z-index:10; display:flex; gap:8px;
+    }
+    .modebar button { background:#ffffff10; color:var(--text); border:1px solid #ffffff1a; padding:8px 10px; border-radius:10px; cursor:pointer }
+    .modebar button.active { background:var(--accent); color:#012 }
+    .toast {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 24px; background: var(--panel); border:1px solid #ffffff12; border-radius:12px; padding:10px 14px; z-index:10; display:none;
+    }
+    .meter { height:6px; background:#ffffff15; border-radius:6px; overflow:hidden; }
+    .meter > i { display:block; height:100%; background:linear-gradient(90deg,#6cf,#8fd); width:30%; }
+    .sep { height:1px; background:#ffffff12; margin:8px 0; }
+    .note { color:#9fb0c7; font-size:12px; opacity:.9 }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="hud" id="hud">
+  <h1>City Generator & Simulation</h1>
+  <div class="row">
+    <label>Seed</label>
+    <input id="seedInput" type="text" value="metro-2025"/>
+    <button id="regenBtn">Regenerate</button>
+  </div>
+  <div class="row">
+    <label>Road Layout</label>
+    <select id="layoutSelect">
+      <option value="hybrid">Hybrid</option>
+      <option value="grid">Grid</option>
+      <option value="organic">Organic</option>
+    </select>
+    <span class="note">pattern</span>
+  </div>
+  <div class="row">
+    <label>Density</label>
+    <input id="densityRange" type="range" min="0" max="1" step="0.01" value="0.65"/>
+    <span id="densityVal" class="note">0.65</span>
+  </div>
+  <div class="row">
+    <label>Map Size</label>
+    <input id="sizeRange" type="range" min="64" max="192" step="32" value="128"/>
+    <span id="sizeVal" class="note">128</span>
+  </div>
+  <div class="row">
+    <label>Sim Speed</label>
+    <input id="speedRange" type="range" min="0.2" max="3" step="0.1" value="1"/>
+    <span id="speedVal" class="note">1.0×</span>
+  </div>
+  <div class="toggle"><input id="dayNightToggle" type="checkbox" checked/><label for="dayNightToggle">Day–Night Cycle</label></div>
+  <div class="toggle"><input id="autoWeatherToggle" type="checkbox" checked/><label for="autoWeatherToggle">Auto Weather</label></div>
+  <div class="grid2">
+    <button id="pauseBtn">⏸ Pause</button>
+    <button id="disasterBtn">⚠️ Trigger Event</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grid2">
+    <select id="paintTool">
+      <option value="none">Sandbox: select tool…</option>
+      <option value="road">✚ Road</option>
+      <option value="res">🏠 Residential</option>
+      <option value="com">🏢 Commercial</option>
+      <option value="ind">🏭 Industrial</option>
+      <option value="park">🌳 Park</option>
+      <option value="erase">⟲ Auto</option>
+    </select>
+    <button id="upgradeBtn">⬆ Upgrade Now</button>
+  </div>
+  <div class="note" style="margin-top:6px">Tip: drag to pan, wheel to zoom, <b>WASD/QE</b> to move/tilt. Click to paint when a sandbox tool is selected.</div>
+</div>
+
+<div class="stats" id="stats">
+  <h2>City Stats</h2>
+  <div class="kvs">
+    <div class="note">Time</div><div id="timeVal">06:00</div>
+    <div class="note">Weather</div><div id="weatherVal">Clear</div>
+    <div class="note">Population</div><div id="popVal">0</div>
+    <div class="note">Jobs</div><div id="jobsVal">0</div>
+    <div class="note">Unemployed</div><div id="unempVal">0</div>
+    <div class="note">Vacancies</div><div id="vacVal">0</div>
+    <div class="note">GDP (M)</div><div id="gdpVal">0.0</div>
+    <div class="note">Revenue (K/tick)</div><div id="taxVal">0</div>
+    <div class="note">Traffic</div><div id="trafficVal">0</div>
+    <div class="note">Happiness</div>
+    <div class="meter"><i id="happyBar" style="width:50%"></i></div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="chip"><span class="swatch" style="background:#2f3545"></span> Road</div>
+  <div class="chip"><span class="swatch" style="background:#4caf50"></span> Park</div>
+  <div class="chip"><span class="swatch" style="background:#5599ee"></span> River</div>
+  <div class="chip"><span class="swatch" style="background:#b9c6ff"></span> Residential</div>
+  <div class="chip"><span class="swatch" style="background:#ffd28a"></span> Commercial</div>
+  <div class="chip"><span class="swatch" style="background:#ff9ea1"></span> Industrial</div>
+</div>
+
+<div class="modebar" id="modebar">
+  <button data-mode="iso" class="active">Isometric</button>
+  <button data-mode="top">Top-down</button>
+  <button data-mode="free">Free</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- libs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+
+<script>
+(() => {
+'use strict';
+
+/* ==============================
+   Utilities (seeded RNG, helpers)
+   ============================== */
+function xmur3(str){
+  let h=1779033703^str.length;
+  for(let i=0;i<str.length;i++){
+    h=Math.imul(h ^ str.charCodeAt(i),3432918353); h=h<<13 | h>>>19;
+  }
+  return ()=>{ h=Math.imul(h ^ (h>>>16),2246822507); h=Math.imul(h ^ (h>>>13),3266489909);
+    return (h ^= h>>>16)>>>0;
+  };
+}
+function mulberry32(a){ return function(){ let t=a+=0x6D2B79F5; t=Math.imul(t ^ (t>>>15), t|1);
+  t ^= t + Math.imul(t ^ (t>>>7), t|61); return ((t ^ (t>>>14))>>>0) / 4294967296; }; }
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const map=(x,in0,in1,out0,out1)=> out0 + (out1-out0) * ((x-in0)/(in1-in0));
+const randInt=(rng,a,b)=> Math.floor(lerp(a,b+1, rng()));
+function showToast(msg, ms=1800){
+  const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block';
+  clearTimeout(showToast._to); showToast._to=setTimeout(()=>t.style.display='none', ms);
+}
+
+/* ==============================
+   Core Config
+   ============================== */
+let CFG = {
+  MAP_SIZE: 128,
+  TILE: 1.0,
+  DENSITY: 0.65,
+  LAYOUT: 'hybrid',
+  SPEED: 1.0,
+  SEED: 'metro-2025',
+  CYCLE: true,
+  AUTO_WEATHER: true,
+};
+
+const Z = { EMPTY:0, ROAD:1, RIVER:2, PARK:3, RES:4, COM:5, IND:6 }; // zoning
+
+/* ==============================
+   Three.js Scene & Camera
+   ============================== */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0f16);
+scene.fog = new THREE.FogExp2(0x0a0f16, 0.02);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
+let cameraMode = 'iso';
+let camState = { pos: new THREE.Vector3(40, 50, 60), yaw: -Math.PI/4, pitch: -0.9, zoom: 1 };
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.45);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+sun.position.set(100, 200, 100);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+scene.add(sun);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(4000,4000),
+  new THREE.MeshStandardMaterial({ color:0x0d1220, roughness:1, metalness:0 })
+);
+ground.receiveShadow = true;
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+/* ==============================
+   Camera Controls (no OrbitControls)
+   ============================== */
+let keys = {};
+window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+let dragging=false, lastX=0,lastY=0;
+renderer.domElement.addEventListener('mousedown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; });
+renderer.domElement.addEventListener('mouseup', ()=> dragging=false );
+renderer.domElement.addEventListener('mouseleave', ()=> dragging=false );
+renderer.domElement.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+  if(cameraMode==='free'){
+    camState.yaw -= dx*0.003;
+    camState.pitch = clamp(camState.pitch - dy*0.003, -1.5, -0.1);
+  } else {
+    // pan
+    const panSpeed = 0.03 * (camera.position.y/30);
+    const right = new THREE.Vector3(Math.cos(camState.yaw),0, -Math.sin(camState.yaw));
+    const fwd = new THREE.Vector3(Math.sin(camState.yaw),0, Math.cos(camState.yaw));
+    camState.pos.addScaledVector(right, -dx*panSpeed);
+    camState.pos.addScaledVector(fwd, dy*panSpeed);
+  }
+});
+
+renderer.domElement.addEventListener('wheel', e=>{
+  if(cameraMode === 'top'){
+    camState.pos.y = clamp(camState.pos.y + Math.sign(e.deltaY)*5, 20, 350);
+  } else if(cameraMode==='iso'){
+    camState.pos.y = clamp(camState.pos.y + Math.sign(e.deltaY)*4, 16, 220);
+  } else {
+    camState.zoom = clamp(camState.zoom + Math.sign(e.deltaY)*0.1, 0.5, 2.0);
+  }
+  e.preventDefault();
+},{passive:false});
+
+/* ==============================
+   Grid & World State
+   ============================== */
+let rng = mulberry32(1);
+let noise = new SimplexNoise(()=>rng());
+let city = null; // will store grids, graphs, meshes, entities
+
+function tileToWorld(i,j){ return new THREE.Vector3((i-0.5*CFG.MAP_SIZE)*CFG.TILE, 0, (j-0.5*CFG.MAP_SIZE)*CFG.TILE); }
+function worldToTile(x,z){
+  const i = Math.floor(x/CFG.TILE + 0.5*CFG.MAP_SIZE);
+  const j = Math.floor(z/CFG.TILE + 0.5*CFG.MAP_SIZE);
+  return [i,j];
+}
+
+/* ==============================
+   Generation (roads, river, zones)
+   ============================== */
+function generateCity(){
+  // cleanup previous
+  if(city) {
+    for(const obj of city.toDispose) scene.remove(obj);
+    city = null;
+  }
+
+  const seedStr = CFG.SEED.trim();
+  const seedFn = xmur3(seedStr);
+  rng = mulberry32(seedFn());
+  noise = new SimplexNoise(()=>rng());
+
+  const N = CFG.MAP_SIZE;
+  const grid = new Uint8Array(N*N); // zoning grid
+  const elev = new Float32Array(N*N); // elevation for aesthetics & river carving
+  const index=(i,j)=> i<0||j<0||i>=N||j>=N ? -1 : (j*N+i);
+
+  // elevation & base parks
+  for(let j=0;j<N;j++){
+    for(let i=0;i<N;i++){
+      const nx = i/N - 0.5, nz = j/N - 0.5;
+      const d = Math.hypot(nx,nz); // distance from center
+      const e = 0.6*noise.noise2D(nx*1.6, nz*1.6) + 0.4*noise.noise2D(nx*3.2+100, nz*3.2+100);
+      elev[index(i,j)] = e - d*0.6;
+      grid[index(i,j)] = Z.EMPTY;
+    }
+  }
+
+  // river: carve a meandering path across map using noise ridges
+  const river = [];
+  const rows = randInt(rng, 2, 3);
+  for(let r=0;r<rows;r++){
+    const startSide = rng()<0.5 ? 'W' : 'N';
+    if(startSide==='W'){
+      let j = randInt(rng, 12, N-12);
+      for(let i=0;i<N;i++){
+        const off = Math.floor(12 * noise.noise2D(i*0.05 + r*3, j*0.03 + 33));
+        const jj = clamp(j+off, 4, N-5);
+        river.push([i,jj]);
+      }
+    } else {
+      let i = randInt(rng, 12, N-12);
+      for(let j=0;j<N;j++){
+        const off = Math.floor(12 * noise.noise2D(i*0.03 + 77, j*0.05 + r*3));
+        const ii = clamp(i+off, 4, N-5);
+        river.push([ii,j]);
+      }
+    }
+  }
+  for(const [i,j] of river){
+    for(let dj=-2; dj<=2; dj++)
+    for(let di=-2; di<=2; di++){
+      const k=index(i+di,j+dj); if(k<0) continue;
+      grid[k]=Z.RIVER; elev[k]-=0.8;
+    }
+  }
+
+  // roads: hybrid/grid/organic using noise & spacing
+  const road = (i,j)=>{ const k=index(i,j); if(k>=0 && grid[k]!==Z.RIVER) grid[k]=Z.ROAD; };
+  const spacingMain = CFG.LAYOUT==='grid' ? 10 : CFG.LAYOUT==='organic' ? 18 : 14;
+  const spacingSide = Math.max(6, Math.floor(spacingMain*0.66));
+  // main avenues
+  for(let i=4;i<N;i+=spacingMain){
+    let wiggle = randInt(rng,-3,3);
+    for(let j=4;j<N-4;j++){
+      if(CFG.LAYOUT!=='grid'){
+        const w = Math.floor(3*noise.noise2D(i*0.12, j*0.12));
+        wiggle = clamp(wiggle + Math.sign(w)*rng()*0.5|0, -3, 3);
+      }
+      road(i+wiggle, j);
+    }
+  }
+  for(let j=4;j<N;j+=spacingMain){
+    let wiggle = randInt(rng,-3,3);
+    for(let i=4;i<N-4;i++){
+      if(CFG.LAYOUT!=='grid'){
+        const w = Math.floor(3*noise.noise2D(i*0.12+50, j*0.12-50));
+        wiggle = clamp(wiggle + Math.sign(w)*rng()*0.5|0, -3, 3);
+      }
+      road(i, j+wiggle);
+    }
+  }
+  // side streets
+  for(let i=2;i<N;i+=spacingSide){
+    for(let j=2;j<N;j++){
+      if(rng()<0.8) road(i,j);
+    }
+  }
+  for(let j=2;j<N;j+=spacingSide){
+    for(let i=2;i<N;i++){
+      if(rng()<0.8) road(i,j);
+    }
+  }
+  // organic veins (only for hybrid/organic)
+  if(CFG.LAYOUT!=='grid'){
+    for(let s=0;s<Math.floor(12*CFG.DENSITY); s++){
+      let i = randInt(rng,6,N-6), j = randInt(rng,6,N-6);
+      const len = randInt(rng, 40, 120);
+      let ang = rng()*Math.PI*2;
+      for(let t=0;t<len;t++){
+        i = clamp(Math.round(i + Math.cos(ang)), 2, N-3);
+        j = clamp(Math.round(j + Math.sin(ang)), 2, N-3);
+        road(i,j);
+        ang += (noise.noise2D(i*0.2, j*0.2))*0.6;
+        if(grid[index(i,j)]===Z.RIVER) break;
+      }
+    }
+  }
+
+  // district seeding by proximity & centrality & noise
+  const center = [N/2, N/2];
+  for(let j=1;j<N-1;j++){
+    for(let i=1;i<N-1;i++){
+      const k=index(i,j);
+      if(grid[k]!==Z.EMPTY) continue;
+      const dC = Math.hypot(i-center[0], j-center[1])/(N*0.7);
+      const nearRoad = grid[index(i+1,j)]===Z.ROAD||grid[index(i-1,j)]===Z.ROAD||grid[index(i,j+1)]===Z.ROAD||grid[index(i,j-1)]===Z.ROAD;
+      const nz = noise.noise2D(i*0.05+10, j*0.05-10);
+      // Parks ribbon and pockets
+      if(elev[k] > 0.65 || nz > 0.72) { grid[k]=Z.PARK; continue; }
+      if(!nearRoad && rng()<0.2) { grid[k]=Z.PARK; continue; }
+
+      // Zone probabilities
+      let pCOM = clamp(0.65 - dC + 0.25*nz, 0, 1);
+      let pIND = clamp(0.25 + (1.0-dC)*0.15 + (noise.noise2D(i*0.12-77,j*0.12+77))*0.2,0,1);
+      let pRES = 1 - 0.5*pCOM - 0.6*pIND + 0.2;
+      pCOM *= CFG.DENSITY;
+      pRES = clamp(pRES, 0, 1);
+      const roll = rng();
+      const sum = pRES + pCOM + pIND;
+      const r = roll * sum;
+      if(r < pRES) grid[k]=Z.RES;
+      else if(r < pRES+pCOM) grid[k]=Z.COM;
+      else grid[k]=Z.IND;
+    }
+  }
+
+  // Build road graph (intersections/edges)
+  const nodes = []; const nodeIndex = new Int32Array(N*N).fill(-1);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  for(let j=1;j<N-1;j++){
+    for(let i=1;i<N-1;i++){
+      const k=index(i,j);
+      if(grid[k]!==Z.ROAD) continue;
+      let deg=0;
+      for(const [dx,dz] of dirs){
+        if(grid[index(i+dx,j+dz)]===Z.ROAD) deg++;
+      }
+      if(deg>=3 || (deg===2 && (grid[index(i+1,j)]===Z.ROAD) !== (grid[index(i-1,j)]===Z.ROAD))) {
+        nodeIndex[k]=nodes.length;
+        nodes.push({i,j,neighbors:[]});
+      }
+    }
+  }
+  function addEdge(a,b) {
+    if(a===-1||b===-1||a===b) return;
+    const A = nodes[a], B = nodes[b];
+    if(!A.neighbors.includes(b)) A.neighbors.push(b);
+    if(!B.neighbors.includes(a)) B.neighbors.push(a);
+  }
+  for(let n=0;n<nodes.length;n++){
+    const {i,j} = nodes[n];
+    for(const [dx,dz] of dirs){
+      let ii=i, jj=j;
+      while(true){
+        ii+=dx; jj+=dz;
+        const k=index(ii,jj); if(k<0) break;
+        if(grid[k]!==Z.ROAD) break;
+        if(nodeIndex[k]>=0){ addEdge(n,nodeIndex[k]); break; }
+      }
+    }
+  }
+
+  // Geometry Building
+  const toDispose=[];
+  const group = new THREE.Group(); scene.add(group); toDispose.push(group);
+
+  // Roads geometry (instanced)
+  const roadMat = new THREE.MeshStandardMaterial({ color:0x2f3545, roughness:0.9, metalness:0.0 });
+  const roadGeom = new THREE.BoxGeometry(CFG.TILE, 0.2, CFG.TILE);
+  const roadIM = new THREE.InstancedMesh(roadGeom, roadMat, N*N);
+  let roadCount=0;
+
+  // Water (river)
+  const waterMat = new THREE.MeshStandardMaterial({ color:0x3366aa, roughness:0.5, metalness:0.2, transparent:true, opacity:0.9 });
+  const waterGeom = new THREE.BoxGeometry(CFG.TILE, 0.15, CFG.TILE);
+  const waterIM = new THREE.InstancedMesh(waterGeom, waterMat, N*N);
+  let waterCount=0;
+
+  // Parks ground
+  const parkMat = new THREE.MeshStandardMaterial({ color:0x2c5d34, roughness:1, metalness:0 });
+  const parkGeom = new THREE.BoxGeometry(CFG.TILE, 0.05, CFG.TILE);
+  const parkIM = new THREE.InstancedMesh(parkGeom, parkMat, N*N);
+  let parkCount=0;
+
+  // Trees (simple instanced cones)
+  const treeGeom = new THREE.ConeGeometry(0.35, 1.2, 6);
+  const treeMat = new THREE.MeshStandardMaterial({ color:0x4caf50, roughness:0.7, metalness:0 });
+  const treeIM = new THREE.InstancedMesh(treeGeom, treeMat, Math.floor(N*N*0.2));
+  let treeCount=0;
+
+  // Buildings: three materials by zone
+  const matRES = new THREE.MeshStandardMaterial({ color:0xb9c6ff, roughness:0.8, metalness:0.1, emissive:0x0a0e1a, emissiveIntensity:0.0 });
+  const matCOM = new THREE.MeshStandardMaterial({ color:0xffd28a, roughness:0.6, metalness:0.2, emissive:0x141a22, emissiveIntensity:0.0 });
+  const matIND = new THREE.MeshStandardMaterial({ color:0xff9ea1, roughness:0.9, metalness:0.05, emissive:0x1a1111, emissiveIntensity:0.0 });
+
+  const bGeom = new THREE.BoxGeometry(1,1,1); // will scale per-instance
+  const bRES = new THREE.InstancedMesh(bGeom, matRES, N*N);
+  const bCOM = new THREE.InstancedMesh(bGeom, matCOM, N*N);
+  const bIND = new THREE.InstancedMesh(bGeom, matIND, N*N);
+  let cRES=0, cCOM=0, cIND=0;
+
+  // Streetlights (sparse at nodes)
+  const slGeom = new THREE.CylinderGeometry(0.06,0.06,2,6);
+  const slHead = new THREE.SphereGeometry(0.12,8,8);
+  const slMat = new THREE.MeshStandardMaterial({ color:0xcccccc, roughness:0.8 });
+  const streetlightGroup = new THREE.Group();
+  group.add(streetlightGroup);
+
+  // Place tiles
+  const tmp = new THREE.Object3D();
+  for(let j=0;j<N;j++){
+    for(let i=0;i<N;i++){
+      const k=index(i,j);
+      const pos = tileToWorld(i,j);
+      const e = elev[k];
+      const y = e*0.5;
+      if(grid[k]===Z.ROAD){
+        tmp.position.set(pos.x, 0.01+y, pos.z);
+        tmp.scale.set(1.0, 1, 1.0);
+        tmp.updateMatrix();
+        roadIM.setMatrixAt(roadCount++, tmp.matrix);
+      } else if(grid[k]===Z.RIVER){
+        tmp.position.set(pos.x, -0.02+y, pos.z);
+        tmp.updateMatrix();
+        waterIM.setMatrixAt(waterCount++, tmp.matrix);
+      } else if(grid[k]===Z.PARK){
+        tmp.position.set(pos.x, 0.02+y, pos.z);
+        tmp.updateMatrix();
+        parkIM.setMatrixAt(parkCount++, tmp.matrix);
+        if(rng()<0.3){
+          tmp.position.set(pos.x + (rng()-0.5)*0.4, 0.6+y, pos.z + (rng()-0.5)*0.4);
+          tmp.rotation.y = rng()*Math.PI*2;
+          tmp.updateMatrix();
+          treeIM.setMatrixAt(treeCount++, tmp.matrix);
+        }
+      }
+    }
+  }
+  roadIM.count=roadCount; waterIM.count=waterCount; parkIM.count=parkCount; treeIM.count=treeCount;
+  [roadIM, waterIM, parkIM, treeIM].forEach(m=>{ m.castShadow=false; m.receiveShadow=true; group.add(m); });
+
+  // Buildings placement based on zones
+  let housingCap=0, jobsCap=0;
+  for(let j=1;j<N-1;j++){
+    for(let i=1;i<N-1;i++){
+      const k=index(i,j); const t = grid[k];
+      if(t!==Z.RES && t!==Z.COM && t!==Z.IND) continue;
+      const nearRoad = grid[index(i+1,j)]===Z.ROAD||grid[index(i-1,j)]===Z.ROAD||grid[index(i,j+1)]===Z.ROAD||grid[index(i,j-1)]===Z.ROAD;
+      if(!nearRoad) continue;
+
+      const pos = tileToWorld(i,j);
+      const dC = Math.hypot(i - center[0], j - center[1])/(N*0.8);
+      const roadDensity = (grid[index(i+1,j)]===Z.ROAD) + (grid[index(i-1,j)]===Z.ROAD) + (grid[index(i,j+1)]===Z.ROAD) + (grid[index(i,j-1)]===Z.ROAD);
+      const downtownness = clamp( (1.0-dC)*0.8 + roadDensity*0.1 + noise.noise2D(i*0.2, j*0.2)*0.1, 0, 1 );
+      let minH=0.6, maxH=2.5;
+      if(t===Z.COM){ minH=1.2; maxH= lerp(3.0, 9.0, downtownness); }
+      if(t===Z.RES){ minH=0.8; maxH= lerp(2.0, 5.0, downtownness*0.7); }
+      if(t===Z.IND){ minH=1.0; maxH= lerp(2.5, 4.5, downtownness*0.5); }
+
+      const h = lerp(minH, maxH, Math.pow(rng(), 0.65));
+      const w = clamp(lerp(0.6, 0.95, rng()), 0.5, 1.0);
+      const d = clamp(lerp(0.6, 0.95, rng()), 0.5, 1.0);
+
+      tmp.position.set(pos.x, h/2, pos.z);
+      tmp.scale.set(w, h, d);
+      tmp.rotation.y = (rng()<0.5?0:Math.PI/2);
+      tmp.updateMatrix();
+      if(t===Z.RES){ bRES.setMatrixAt(cRES++, tmp.matrix); housingCap += Math.floor(6*h*w*d); }
+      if(t===Z.COM){ bCOM.setMatrixAt(cCOM++, tmp.matrix); jobsCap += Math.floor(8*h*w*d); }
+      if(t===Z.IND){ bIND.setMatrixAt(cIND++, tmp.matrix); jobsCap += Math.floor(10*h*w*d*0.8); }
+    }
+  }
+  bRES.count=cRES; bCOM.count=cCOM; bIND.count=cIND;
+  [bRES,bCOM,bIND].forEach(m=>{ m.castShadow=true; m.receiveShadow=true; group.add(m); });
+
+  // Streetlights at graph nodes
+  for(const n of nodes){
+    if(rng()<0.3){
+      const post = new THREE.Mesh(slGeom, slMat); post.castShadow=true; post.receiveShadow=true;
+      const pos = tileToWorld(n.i,n.j);
+      post.position.set(pos.x+0.45, 1.0, pos.z+0.45);
+      const head = new THREE.Mesh(slHead, new THREE.MeshStandardMaterial({color:0xfff2c2, emissive:0x000000}));
+      head.position.set(0,1.1,0);
+      post.add(head);
+      streetlightGroup.add(post);
+    }
+  }
+
+  // Vehicles & pedestrians
+  const vehicles=[], peds=[];
+  const vehicleGeom = new THREE.BoxGeometry(0.6,0.3,1.0);
+  const vehicleMat = new THREE.MeshStandardMaterial({ color:0xdddddd, roughness:0.7, metalness:0.2, emissive:0x000000 });
+  function spawnVehicle(){
+    if(nodes.length<2) return;
+    const start = nodes[randInt(rng,0,nodes.length-1)];
+    if(start.neighbors.length===0) return;
+    const mesh = new THREE.Mesh(vehicleGeom, vehicleMat.clone());
+    mesh.castShadow=true; mesh.receiveShadow=false;
+    mesh.material.color.setHSL(rng(), 0.5, 0.6);
+    group.add(mesh);
+    const v = {
+      mesh, cur:start, prev:null, next: start.neighbors[randInt(rng,0,start.neighbors.length-1)],
+      t:0, speed: lerp(2.0, 5.0, rng()), alive:true
+    };
+    vehicles.push(v);
+  }
+  function stepEntity(ent, dt){
+    if(!ent.alive) return;
+    const A=ent.cur, B=nodes[ent.next];
+    const a = tileToWorld(A.i,A.j), b = tileToWorld(B.i,B.j);
+    const dist = a.distanceTo(b) || 1e-6;
+    ent.t += dt * ent.speed / dist;
+    if(ent.t>=1){
+      ent.prev = ent.cur;
+      ent.cur = B;
+      ent.t = 0;
+      const options = B.neighbors.filter(n=> nodes[n]!==ent.prev);
+      if(options.length===0){ ent.alive=false; group.remove(ent.mesh); return; }
+      ent.next = options[randInt(rng,0,options.length-1)];
+    }
+    const p = a.clone().lerp(b, ent.t);
+    ent.mesh.position.copy(p).add(new THREE.Vector3(0, ent.yOffset||0.17, 0));
+    ent.mesh.rotation.y = Math.atan2(b.x-a.x, b.z-a.z);
+  }
+  for(let i=0;i<Math.min(120, Math.floor(nodes.length*0.2)); i++) spawnVehicle();
+
+  // r128: emulate capsule with cylinder + head
+  const pedBodyGeom = new THREE.CylinderGeometry(0.12,0.12,0.6,6);
+  const pedHeadGeom = new THREE.SphereGeometry(0.14,8,8);
+  const pedBodyMat = new THREE.MeshStandardMaterial({ color:0x6aa0ff, roughness:0.9, metalness:0.0 });
+  const pedHeadMat = new THREE.MeshStandardMaterial({ color:0xffe0bd, roughness:0.9, metalness:0.0 });
+
+  function spawnPed(){
+    if(nodes.length<2) return;
+    const start = nodes[randInt(rng,0,nodes.length-1)];
+    if(start.neighbors.length===0) return;
+    const body = new THREE.Mesh(pedBodyGeom, pedBodyMat.clone());
+    const head = new THREE.Mesh(pedHeadGeom, pedHeadMat.clone());
+    head.position.y = 0.4;
+    const grp = new THREE.Group();
+    grp.add(body); grp.add(head);
+    grp.castShadow = true; grp.receiveShadow = false;
+    group.add(grp);
+    const p = {
+      mesh: grp, cur:start, prev:null, next: start.neighbors[randInt(rng,0,start.neighbors.length-1)],
+      t:0, speed: lerp(0.7, 1.3, rng()), alive:true, yOffset:0.3
+    };
+    peds.push(p);
+  }
+  for(let i=0;i<Math.min(60, Math.floor(nodes.length*0.08)); i++) spawnPed();
+
+  // Weather system
+  const weather = { kind:'Clear', sys:null, vel:new THREE.Vector3(0,-20,0) };
+  function makeWeather(kind){
+    if(weather.sys){ scene.remove(weather.sys); weather.sys.geometry.dispose(); weather.sys.material.dispose(); weather.sys=null; }
+    if(kind==='Clear' || kind==='Fog'){ weather.kind=kind; return; }
+    const count = 1500;
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(count*3);
+    const box = 120;
+    for(let i=0;i<count;i++){
+      positions[i*3+0] = (rng()-0.5)*box;
+      positions[i*3+1] = rng()*60 + 10;
+      positions[i*3+2] = (rng()-0.5)*box;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+    const mat = new THREE.PointsMaterial({ size: kind==='Snow'? 0.12 : 0.05, color: kind==='Snow'? 0xffffff : 0xaad4ff, transparent:true, opacity:0.9 });
+    const pts = new THREE.Points(geo, mat);
+    weather.kind = kind; weather.sys = pts;
+    scene.add(pts);
+  }
+
+  // Economy & simulation state
+  const sim = {
+    time: 6.0, // hour
+    population: Math.floor(housingCap*0.55),
+    jobs: Math.floor(jobsCap*0.65),
+    gdp: 80, taxRate: 0.015, revenue: 0,
+    happiness: 0.65,
+  };
+
+  // Lighting tweaks with day/night
+  function setNightFactor(nf){
+    const eRes = 0.25*nf, eCom = 0.35*nf, eInd = 0.15*nf;
+    matRES.emissiveIntensity = eRes;
+    matCOM.emissiveIntensity = eCom;
+    matIND.emissiveIntensity = eInd;
+    ambient.intensity = lerp(0.18, 0.55, 1-nf);
+    sun.intensity = lerp(0.1, 1.0, 1-nf);
+    scene.fog.density = lerp(0.035, 0.02, 1-nf);
+    streetlightGroup.traverse(obj=>{
+      if(obj.isMesh && obj.geometry.type==='SphereGeometry'){
+        obj.material.emissive = new THREE.Color(0xfff2c2);
+        obj.material.emissiveIntensity = nf>0.15 ? 1.0*nf : 0.0;
+      }
+    });
+  }
+
+  // Export city
+  city = {
+    N, grid, nodes, nodeIndex, group, streetlightGroup, toDispose,
+    vehicles, peds, spawnVehicle, spawnPed, stepEntity,
+    sim, mats:{matRES, matCOM, matIND}, weather, makeWeather,
+    setNightFactor
+  };
+
+  // Initial weather/random
+  if(CFG.AUTO_WEATHER){
+    const wroll = rng();
+    city.makeWeather(wroll<0.12?'Fog': wroll<0.28?'Rain': wroll<0.34?'Snow':'Clear');
+  } else {
+    city.makeWeather('Clear');
+  }
+
+  // Recenter camera
+  camState.pos.set(0, cameraMode==='top'? 120 : 60, cameraMode==='iso'? 80 : 40);
+  camState.yaw = -Math.PI/4; camState.pitch = -0.9;
+
+  showToast('City generated: ' + CFG.SEED);
+}
+
+/* ==============================
+   Simulation Loop
+   ============================== */
+let paused=false;
+function update(dt){
+  if(!city) return;
+  const spd = CFG.SPEED;
+  const {sim} = city;
+
+  // time & sun
+  if(CFG.CYCLE) sim.time += dt * 0.1 * spd; // hours
+  if(sim.time>=24) sim.time-=24;
+
+  const isNight = (sim.time<6)||(sim.time>19.5);
+  const nightFactor = isNight ? (sim.time<6? map(sim.time,0,6,1,0) : map(sim.time,19.5,24,0,1)) : 0;
+  const tDay = (sim.time/24)*Math.PI*2;
+  sun.position.set( Math.cos(tDay)*200, Math.sin(tDay)*220, Math.sin(tDay)*200 );
+  if(city.setNightFactor) city.setNightFactor(nightFactor);
+
+  // economy (very simple)
+  const housingCap = Math.max(sim.population, Math.floor(sim.population / 0.55));
+  const jobCap = Math.max(sim.jobs, Math.floor(sim.jobs / 0.65));
+  const demandHousing = clamp((city.vehicles.length/80) + (1-nightFactor)*0.6, 0, 2);
+  const demandJobs = clamp((1-nightFactor)*0.7 + 0.3, 0, 2);
+
+  // migration & growth
+  const deltaPop = clamp( (jobCap - sim.population)*0.002 + demandHousing*0.1 - nightFactor*0.05, -4, 6 ) * dt * spd;
+  const deltaJobs = clamp( (housingCap - sim.jobs)*0.002 + demandJobs*0.08, -3, 5 ) * dt * spd;
+  sim.population = Math.max(0, sim.population + deltaPop);
+  sim.jobs = Math.max(0, sim.jobs + deltaJobs);
+
+  // GDP / revenue
+  const productivity = 0.8 + (city.vehicles.length/200)*0.1 + (1-nightFactor)*0.05;
+  sim.gdp = clamp(sim.gdp + (sim.jobs*productivity - 60)*0.0005*dt*spd, 40, 5000);
+  sim.revenue = sim.gdp * sim.taxRate * 0.2;
+
+  // happiness (amenities, parks, traffic)
+  const parks = city.grid.reduce((a,t)=>a+(t===Z.PARK),0);
+  const parkFactor = clamp(parks/(city.N*city.N*0.12),0,1);
+  const trafficFactor = clamp(city.vehicles.length/(city.nodes.length+1), 0, 1);
+  sim.happiness = clamp(0.55 + parkFactor*0.25 - trafficFactor*0.18 + (1-nightFactor)*0.05, 0, 1);
+
+  // vehicle/ped flux
+  const targetVehicles = Math.floor( clamp((sim.population/40) + (1-nightFactor)*35, 20, 220) );
+  if(city.vehicles.length < targetVehicles && Math.random()<0.8) city.spawnVehicle();
+  if(city.vehicles.length > targetVehicles && city.vehicles.length>0 && Math.random()<0.3){
+    const v = city.vehicles.pop(); if(v){ v.alive=false; city.group.remove(v.mesh); }
+  }
+  const targetPeds = Math.floor( clamp((sim.population/60) + (1-nightFactor)*20, 8, 80) );
+  if(city.peds.length < targetPeds && Math.random()<0.6) city.spawnPed();
+  if(city.peds.length > targetPeds && city.peds.length>0 && Math.random()<0.2){
+    const p = city.peds.pop(); if(p){ p.alive=false; city.group.remove(p.mesh); }
+  }
+
+  // weather particles
+  if(city.weather.sys){
+    const positions = city.weather.sys.geometry.attributes.position.array;
+    for(let i=0;i<positions.length;i+=3){
+      positions[i+0] += (city.weather.kind==='Snow'? (Math.random()-0.5)*0.05 : 0);
+      positions[i+1] += (city.weather.kind==='Snow'? -0.08 : -0.6) * dt*60;
+      positions[i+2] += (city.weather.kind==='Snow'? (Math.random()-0.5)*0.05 : 0);
+      if(positions[i+1] < 0) positions[i+1] = Math.random()*60 + 10;
+    }
+    city.weather.sys.geometry.attributes.position.needsUpdate = true;
+    if(CFG.AUTO_WEATHER && Math.random()<0.0003*dt){
+      const roll=Math.random(); city.makeWeather( roll<0.1?'Fog': roll<0.5?'Rain' : roll<0.6?'Snow' : 'Clear' );
+    }
+  }
+
+  // move entities (use the method attached to the city)
+  const dtMove = dt*spd;
+  for(const v of city.vehicles) city.stepEntity(v, dtMove);
+  for(const p of city.peds) city.stepEntity(p, dtMove*0.45);
+
+  // upgrades & rare events
+  if(Math.random()<0.0005*dt*spd){ upgradeDowntown(1); }
+  if(Math.random()<0.00008*dt*spd){ triggerEvent(['Fire','Traffic Jam','Recession'][Math.floor(Math.random()*3)], false); }
+}
+
+function upgradeDowntown(count=6){
+  if(!city) return;
+  const im = city.group.children.find(o=>o.isInstancedMesh && o.material===city.mats.matCOM);
+  if(!im) return;
+  const m = new THREE.Matrix4(); const p=new THREE.Vector3(), q=new THREE.Quaternion(), s=new THREE.Vector3();
+  for(let i=0;i<Math.min(count, im.count); i++){
+    const id = Math.floor(Math.random()*im.count);
+    im.getMatrixAt(id, m); m.decompose(p,q,s);
+    const newH = clamp(s.y*lerp(1.02, 1.12, Math.random()), 1.2, 16);
+    s.set(s.x, newH, s.z);
+    m.compose(p,q,s);
+    im.setMatrixAt(id, m);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  showToast('Downtown upgraded ⬆');
+}
+
+/* ==============================
+   Disasters / Events
+   ============================== */
+function triggerEvent(kind='Fire', announce=true){
+  if(!city) return;
+  if(announce) showToast('Event: ' + kind, 2000);
+  if(kind==='Fire'){
+    const im = city.group.children.find(o=>o.isInstancedMesh && o.material===city.mats.matRES);
+    if(!im || im.count===0) return;
+    const flare = new THREE.PointLight(0xff5500, 1.2, 8, 2);
+    flare.position.set( (Math.random()-0.5)*CFG.MAP_SIZE*0.5, 1.4, (Math.random()-0.5)*CFG.MAP_SIZE*0.5 );
+    scene.add(flare);
+    setTimeout(()=>scene.remove(flare), 3500);
+    city.sim.happiness = clamp(city.sim.happiness - 0.08, 0, 1);
+    city.sim.population = Math.max(0, city.sim.population - 8);
+  } else if(kind==='Traffic Jam'){
+    for(const v of city.vehicles) v.speed *= 0.6;
+    setTimeout(()=>{ for(const v of city.vehicles) v.speed/=0.6; }, 6000);
+    city.sim.happiness = clamp(city.sim.happiness - 0.05, 0, 1);
+  } else if(kind==='Recession'){
+    city.sim.gdp *= 0.92;
+    city.sim.jobs *= 0.96;
+    city.sim.happiness = clamp(city.sim.happiness - 0.06, 0, 1);
+  }
+}
+
+/* ==============================
+   Rendering & Camera
+   ============================== */
+function updateCamera(dt){
+  const speed = (cameraMode==='free'? 18 : 10) * dt * (CFG.SPEED*0.6+0.7);
+  const right = new THREE.Vector3(Math.cos(camState.yaw),0, -Math.sin(camState.yaw));
+  const fwd = new THREE.Vector3(Math.sin(camState.yaw),0, Math.cos(camState.yaw));
+  if(keys['w']) camState.pos.addScaledVector(fwd, -speed);
+  if(keys['s']) camState.pos.addScaledVector(fwd, speed);
+  if(keys['a']) camState.pos.addScaledVector(right, -speed);
+  if(keys['d']) camState.pos.addScaledVector(right, speed);
+  if(keys['q']) camState.yaw -= 0.8*dt;
+  if(keys['e']) camState.yaw += 0.8*dt;
+  if(cameraMode==='free'){
+    if(keys['r']) camState.pos.y += 10*dt;
+    if(keys['f']) camState.pos.y -= 10*dt;
+  }
+
+  if(cameraMode==='iso'){
+    const dist = 110;
+    const target = new THREE.Vector3(0,0,0).add(camState.pos.clone().setY(0));
+    const offset = new THREE.Vector3(Math.sin(camState.yaw)*dist, clamp(camState.pos.y, 18, 220), Math.cos(camState.yaw)*dist);
+    camera.position.copy(target.clone().add(offset));
+    camera.lookAt(target);
+  } else if(cameraMode==='top'){
+    camera.position.set(camState.pos.x, clamp(camState.pos.y, 20, 350), camState.pos.z);
+    camera.rotation.set(-Math.PI/2, 0, 0);
+  } else {
+    const dir = new THREE.Vector3(
+      Math.cos(camState.pitch)*Math.sin(camState.yaw),
+      Math.sin(camState.pitch),
+      Math.cos(camState.pitch)*Math.cos(camState.yaw)
+    );
+    camera.position.copy(camState.pos);
+    const target = camState.pos.clone().add(dir);
+    camera.lookAt(target);
+  }
+}
+
+let last=performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now-last)/1000); last=now;
+  if(!paused) update(dt);
+  updateCamera(dt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+/* ==============================
+   Interaction: Sandbox Painting
+   ============================== */
+let paintTool = 'none';
+renderer.domElement.addEventListener('click', e=>{
+  if(paintTool==='none' || !city) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const x = ( (e.clientX-rect.left)/rect.width )*2 - 1;
+  const y = -((e.clientY-rect.top)/rect.height)*2 + 1;
+  const mouse = new THREE.Vector2(x,y);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(ground, false);
+  if(intersects.length===0) return;
+  const p = intersects[0].point;
+  const [i,j] = worldToTile(p.x, p.z);
+  if(i<1||j<1||i>=city.N-1||j>=city.N-1) return;
+  const idx = j*city.N+i;
+  if(paintTool==='erase') {
+    const dC = Math.hypot(i-city.N*0.5, j-city.N*0.5)/(city.N*0.7);
+    const nzv = noise.noise2D(i*0.05+10, j*0.05-10);
+    let t = Z.RES;
+    if(nzv>0.72) t=Z.PARK;
+    else {
+      let pCOM = clamp(0.65 - dC + 0.25*nzv, 0, 1);
+      let pIND = clamp(0.25 + (1.0-dC)*0.15 + (noise.noise2D(i*0.12-77,j*0.12+77))*0.2,0,1);
+      let pRES = 1 - 0.5*pCOM - 0.6*pIND + 0.2;
+      pCOM *= CFG.DENSITY; pRES=clamp(pRES,0,1);
+      const roll = Math.random();
+      const sum = pRES+pCOM+pIND; const r = roll*sum;
+      if(r<pRES) t=Z.RES; else if(r<pRES+pCOM) t=Z.COM; else t=Z.IND;
+    }
+    city.grid[idx]=t;
+    regenerateLocal();
+    return;
+  }
+  city.grid[idx] = (paintTool==='road')? Z.ROAD :
+                   (paintTool==='res')? Z.RES :
+                   (paintTool==='com')? Z.COM :
+                   (paintTool==='ind')? Z.IND :
+                   (paintTool==='park')? Z.PARK : Z.EMPTY;
+  regenerateLocal();
+});
+
+function regenerateLocal(){
+  // Full regen keeps graph/instances correct & avoids partial inconsistencies
+  generateCity();
+}
+
+/* ==============================
+   UI Wiring
+   ============================== */
+const seedInput = document.getElementById('seedInput');
+const regenBtn = document.getElementById('regenBtn');
+const layoutSelect = document.getElementById('layoutSelect');
+const densityRange = document.getElementById('densityRange');
+const densityVal = document.getElementById('densityVal');
+const sizeRange = document.getElementById('sizeRange');
+const sizeVal = document.getElementById('sizeVal');
+const speedRange = document.getElementById('speedRange');
+const speedVal = document.getElementById('speedVal');
+const dayNightToggle = document.getElementById('dayNightToggle');
+const autoWeatherToggle = document.getElementById('autoWeatherToggle');
+const pauseBtn = document.getElementById('pauseBtn');
+const disasterBtn = document.getElementById('disasterBtn');
+const paintToolSel = document.getElementById('paintTool');
+const upgradeBtn = document.getElementById('upgradeBtn');
+
+regenBtn.onclick = ()=>{ CFG.SEED=seedInput.value; generateCity(); };
+layoutSelect.onchange = ()=>{ CFG.LAYOUT=layoutSelect.value; generateCity(); };
+densityRange.oninput = ()=>{ CFG.DENSITY=parseFloat(densityRange.value); densityVal.textContent=CFG.DENSITY.toFixed(2); };
+densityRange.onchange = ()=>{ generateCity(); };
+sizeRange.oninput = ()=>{ CFG.MAP_SIZE=parseInt(sizeRange.value,10); sizeVal.textContent=CFG.MAP_SIZE; };
+sizeRange.onchange = ()=>{ generateCity(); };
+speedRange.oninput = ()=>{ CFG.SPEED=parseFloat(speedRange.value); speedVal.textContent=CFG.SPEED.toFixed(1)+'×'; };
+dayNightToggle.onchange = ()=>{ CFG.CYCLE = dayNightToggle.checked; };
+autoWeatherToggle.onchange = ()=>{ CFG.AUTO_WEATHER = autoWeatherToggle.checked; };
+pauseBtn.onclick = ()=>{ paused=!paused; pauseBtn.textContent = paused?'▶️ Resume':'⏸ Pause'; };
+disasterBtn.onclick = ()=>{ const kinds=['Fire','Traffic Jam','Recession']; triggerEvent(kinds[Math.floor(Math.random()*3)], true); };
+paintToolSel.onchange = ()=>{ paintTool = paintToolSel.value; if(paintTool!=='none') showToast('Sandbox: ' + paintToolSel.options[paintToolSel.selectedIndex].text); };
+upgradeBtn.onclick = ()=> upgradeDowntown(Math.floor(Math.random()*6)+4);
+
+document.getElementById('modebar').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  [...e.currentTarget.children].forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  cameraMode = btn.dataset.mode;
+  if(cameraMode==='top'){ camState.pos.set(0,120,0); }
+  if(cameraMode==='iso'){ camState.pos.set(0,60,80); camState.yaw = -Math.PI/4; camState.pitch = -0.9; }
+  if(cameraMode==='free'){ camState.pos.set(40,30,40); camState.yaw = -Math.PI/3; camState.pitch = -0.6; }
+});
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ==============================
+   Stats UI Update
+   ============================== */
+const timeVal = document.getElementById('timeVal');
+const weatherVal = document.getElementById('weatherVal');
+const popVal = document.getElementById('popVal');
+const jobsVal = document.getElementById('jobsVal');
+const unempVal = document.getElementById('unempVal');
+const vacVal = document.getElementById('vacVal');
+const gdpVal = document.getElementById('gdpVal');
+const taxVal = document.getElementById('taxVal');
+const trafficVal = document.getElementById('trafficVal');
+const happyBar = document.getElementById('happyBar');
+
+setInterval(()=>{
+  if(!city) return;
+  const {sim} = city;
+  const hh = Math.floor(sim.time)%24, mm = Math.floor((sim.time%1)*60);
+  timeVal.textContent = (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+  weatherVal.textContent = city.weather.kind;
+  popVal.textContent = Math.round(sim.population).toLocaleString();
+  jobsVal.textContent = Math.round(sim.jobs).toLocaleString();
+  const unemployed = Math.max(0, Math.round(sim.population - sim.jobs));
+  const vacancies = Math.max(0, Math.round(sim.jobs - sim.population));
+  unempVal.textContent = unemployed.toLocaleString();
+  vacVal.textContent = vacancies.toLocaleString();
+  gdpVal.textContent = sim.gdp.toFixed(1);
+  taxVal.textContent = Math.round(sim.revenue*1000).toLocaleString();
+  trafficVal.textContent = city.vehicles.length.toString();
+  happyBar.style.width = (sim.happiness*100).toFixed(0)+'%';
+}, 250);
+
+/* ==============================
+   Kickoff
+   ============================== */
+generateCity();
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
