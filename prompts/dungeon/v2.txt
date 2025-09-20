@@ -4,7 +4,6 @@ Create a browser-based, 3D dungeon-crawling game as a node project. The game wor
 Technical Requirements:
 1. Core Framework
    - Use Three.js for 3D rendering.
-   - No external build tools—everything lives in one HTML file.
    - Responsive to window resize.
 
 2. Dungeon Generation
@@ -57,16 +56,4 @@ I have attached a simple example project to demonstrate correct usage of these l
 Ensure the project is modular, with clear separation of concerns, and follows best practices for performance and maintainability. 
 Include a README file that explains how to set up and run the project. Use TypeScript for type safety and better development experience.
 
-
-Format your entire output using Markdown-style code blocks. For each file in the codebase, use this exact structure:
-
-```filename.ext
-// file contents here
-```
-
-	•	Start each file block with triple backticks followed immediately by the full filename (including extension), with no extra text before or after the backticks.
-	•	Only include code files. No explanations, summaries, or prose.
-	•	If there are multiple files, place each in its own code block, one after the other.
-	•	Avoid nested or indented code blocks. Use plain Markdown syntax.
-
-This format will be parsed by an automated script that extracts file names and contents. Incorrect formatting will cause parsing to fail.
+The repository contains a simple example project to demonstrate correct usage of these libraries. Use this as a starting point.
