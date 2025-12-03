@@ -1,0 +1,2021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planet Survival</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Rajdhani', sans-serif;
+        }
+        
+        body.playing {
+            cursor: none;
+        }
+        
+        #game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Crosshair */
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        
+        #crosshair::before {
+            width: 20px;
+            height: 2px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        #crosshair::after {
+            width: 2px;
+            height: 20px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        #crosshair.interact::before,
+        #crosshair.interact::after {
+            background: #4ade80;
+        }
+        
+        /* HUD */
+        #hud {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        .hotbar-slot {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .hotbar-slot.selected {
+            border-color: #4ade80;
+            box-shadow: 0 0 15px rgba(74, 222, 128, 0.4);
+        }
+        
+        .hotbar-slot .icon {
+            font-size: 24px;
+        }
+        
+        .hotbar-slot .count {
+            position: absolute;
+            bottom: 4px;
+            right: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+        }
+        
+        .hotbar-slot .key {
+            position: absolute;
+            top: 2px;
+            left: 6px;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Stats bars */
+        #stats {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        .stat-bar {
+            width: 200px;
+        }
+        
+        .stat-bar .label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .stat-bar .bar {
+            height: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .stat-bar .fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .stat-bar.health .fill {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+        
+        .stat-bar.stamina .fill {
+            background: linear-gradient(90deg, #eab308, #facc15);
+        }
+        
+        /* Inventory Panel */
+        #inventory {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 15, 25, 0.95);
+            border: 2px solid rgba(100, 180, 255, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            z-index: 200;
+            display: none;
+            min-width: 500px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #inventory.open {
+            display: block;
+        }
+        
+        #inventory h2 {
+            font-family: 'Orbitron', sans-serif;
+            color: #64b5f6;
+            font-size: 20px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        
+        .inventory-slot {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .inventory-slot:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(100, 180, 255, 0.5);
+        }
+        
+        .inventory-slot .icon {
+            font-size: 24px;
+        }
+        
+        .inventory-slot .count {
+            position: absolute;
+            bottom: 4px;
+            right: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+        }
+        
+        /* Crafting */
+        #crafting {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 20px;
+        }
+        
+        #crafting h3 {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .craft-recipes {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .craft-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .craft-item:hover {
+            background: rgba(74, 222, 128, 0.1);
+            border-color: rgba(74, 222, 128, 0.5);
+        }
+        
+        .craft-item.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .craft-item .recipe-icon {
+            font-size: 28px;
+        }
+        
+        .craft-item .recipe-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .craft-item .recipe-name {
+            font-weight: 600;
+            color: #fff;
+            font-size: 14px;
+        }
+        
+        .craft-item .recipe-cost {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Interaction prompt */
+        #interact-prompt {
+            position: fixed;
+            top: 60%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            z-index: 100;
+            display: none;
+            pointer-events: none;
+        }
+        
+        #interact-prompt.show {
+            display: block;
+        }
+        
+        #interact-prompt kbd {
+            background: rgba(74, 222, 128, 0.3);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Orbitron', sans-serif;
+            color: #4ade80;
+            margin-right: 8px;
+        }
+        
+        /* Resource popup */
+        .resource-popup {
+            position: fixed;
+            pointer-events: none;
+            z-index: 150;
+            animation: popUp 1s ease-out forwards;
+            font-weight: 600;
+            font-size: 16px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        
+        @keyframes popUp {
+            0% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+        }
+        
+        /* Info panel */
+        #info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 16px 20px;
+            border-radius: 12px;
+            color: #fff;
+            z-index: 100;
+            font-size: 13px;
+            pointer-events: none;
+        }
+        
+        #info-panel h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: #64b5f6;
+            margin-bottom: 10px;
+        }
+        
+        #info-panel p {
+            margin: 4px 0;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        #info-panel kbd {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        
+        /* Time display */
+        #time-display {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 20px;
+            border-radius: 12px;
+            color: #fff;
+            z-index: 100;
+            font-family: 'Orbitron', sans-serif;
+            pointer-events: none;
+        }
+        
+        #time-display .time {
+            font-size: 24px;
+            color: #64b5f6;
+        }
+        
+        #time-display .day {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        /* Loading screen */
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, #0a1628 0%, #000 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loader {
+            width: 80px;
+            height: 80px;
+            border: 3px solid rgba(100, 181, 246, 0.1);
+            border-top-color: #64b5f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #loading h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: #64b5f6;
+            font-size: 32px;
+            margin-bottom: 30px;
+            letter-spacing: 4px;
+        }
+        
+        #loading p {
+            margin-top: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+        }
+        
+        #loading .tip {
+            margin-top: 40px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 13px;
+            max-width: 400px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        
+        /* Start prompt */
+        #start-prompt {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 20, 40, 0.95);
+            padding: 40px 60px;
+            border-radius: 16px;
+            border: 2px solid rgba(100, 180, 255, 0.3);
+            text-align: center;
+            z-index: 500;
+            display: none;
+        }
+        
+        #start-prompt h2 {
+            font-family: 'Orbitron', sans-serif;
+            color: #64b5f6;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        
+        #start-prompt p {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 30px;
+        }
+        
+        #start-prompt button {
+            background: linear-gradient(135deg, #4ade80, #22c55e);
+            border: none;
+            padding: 16px 48px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            color: #000;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        #start-prompt button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(74, 222, 128, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h1>PLANET SURVIVAL</h1>
+        <div class="loader"></div>
+        <p id="loading-status">Generating terrain...</p>
+        <p class="tip">Explore, gather resources, and craft tools to survive on this alien world.</p>
+    </div>
+    
+    <div id="start-prompt">
+        <h2>Ready to Explore</h2>
+        <p>Click to start your adventure</p>
+        <button id="start-btn">START GAME</button>
+    </div>
+    
+    <div id="game-container"></div>
+    
+    <div id="crosshair"></div>
+    
+    <div id="info-panel">
+        <h3>Controls</h3>
+        <p><kbd>WASD</kbd> Move</p>
+        <p><kbd>SHIFT</kbd> Sprint</p>
+        <p><kbd>SPACE</kbd> Jump</p>
+        <p><kbd>E</kbd> Interact</p>
+        <p><kbd>TAB</kbd> Inventory</p>
+        <p><kbd>1-5</kbd> Hotbar</p>
+    </div>
+    
+    <div id="time-display">
+        <div class="day">Day <span id="day-num">1</span></div>
+        <div class="time" id="time-text">12:00</div>
+    </div>
+    
+    <div id="stats">
+        <div class="stat-bar health">
+            <div class="label">Health</div>
+            <div class="bar"><div class="fill" id="health-bar" style="width: 100%"></div></div>
+        </div>
+        <div class="stat-bar stamina">
+            <div class="label">Stamina</div>
+            <div class="bar"><div class="fill" id="stamina-bar" style="width: 100%"></div></div>
+        </div>
+    </div>
+    
+    <div id="hud">
+        <div class="hotbar-slot selected" data-slot="0">
+            <span class="key">1</span>
+            <span class="icon">✊</span>
+            <span class="count"></span>
+        </div>
+        <div class="hotbar-slot" data-slot="1">
+            <span class="key">2</span>
+            <span class="icon"></span>
+            <span class="count"></span>
+        </div>
+        <div class="hotbar-slot" data-slot="2">
+            <span class="key">3</span>
+            <span class="icon"></span>
+            <span class="count"></span>
+        </div>
+        <div class="hotbar-slot" data-slot="3">
+            <span class="key">4</span>
+            <span class="icon"></span>
+            <span class="count"></span>
+        </div>
+        <div class="hotbar-slot" data-slot="4">
+            <span class="key">5</span>
+            <span class="icon"></span>
+            <span class="count"></span>
+        </div>
+    </div>
+    
+    <div id="interact-prompt">
+        <kbd>E</kbd> <span id="interact-text">Gather</span>
+    </div>
+    
+    <div id="inventory">
+        <h2>Inventory</h2>
+        <div class="inventory-grid" id="inventory-grid"></div>
+        <div id="crafting">
+            <h3>Crafting</h3>
+            <div class="craft-recipes" id="craft-recipes"></div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <script>
+    // ============================================
+    // GAME CONFIGURATION
+    // ============================================
+    
+    const CONFIG = {
+        PLANET_RADIUS: 200,
+        PLAYER_HEIGHT: 1.8,
+        PLAYER_SPEED: 8,
+        SPRINT_MULTIPLIER: 1.8,
+        JUMP_FORCE: 12,
+        GRAVITY: 25,
+        INTERACT_DISTANCE: 4,
+        
+        // Prop counts
+        TREE_COUNT: 800,
+        ROCK_COUNT: 600,
+        BUSH_COUNT: 400,
+        GRASS_COUNT: 2000,
+        
+        // Day/night
+        DAY_LENGTH: 300, // seconds for full day
+        
+        // Resources
+        WOOD_PER_TREE: 5,
+        STONE_PER_ROCK: 4,
+        FIBER_PER_BUSH: 3
+    };
+    
+    // Item definitions
+    const ITEMS = {
+        wood: { name: 'Wood', icon: '🪵', stackSize: 64, color: '#8B4513' },
+        stone: { name: 'Stone', icon: '🪨', stackSize: 64, color: '#808080' },
+        fiber: { name: 'Plant Fiber', icon: '🌿', stackSize: 64, color: '#228B22' },
+        stick: { name: 'Stick', icon: '🥢', stackSize: 64, color: '#8B4513' },
+        axe: { name: 'Stone Axe', icon: '🪓', stackSize: 1, tool: true, efficiency: 2 },
+        pickaxe: { name: 'Stone Pickaxe', icon: '⛏️', stackSize: 1, tool: true, efficiency: 2 },
+        torch: { name: 'Torch', icon: '🔦', stackSize: 16, placeable: true },
+        rope: { name: 'Rope', icon: '🪢', stackSize: 32, color: '#D2691E' }
+    };
+    
+    // Crafting recipes
+    const RECIPES = [
+        { result: 'stick', count: 2, ingredients: { wood: 1 } },
+        { result: 'rope', count: 1, ingredients: { fiber: 3 } },
+        { result: 'axe', count: 1, ingredients: { stick: 2, stone: 3, rope: 1 } },
+        { result: 'pickaxe', count: 1, ingredients: { stick: 2, stone: 3, rope: 1 } },
+        { result: 'torch', count: 4, ingredients: { stick: 1, fiber: 2 } }
+    ];
+    
+    // ============================================
+    // MAIN GAME CLASS
+    // ============================================
+    
+    class PlanetSurvival {
+        constructor() {
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+            
+            // Noise generators
+            this.simplex = new SimplexNoise(12345);
+            this.simplex2 = new SimplexNoise(67890);
+            this.simplex3 = new SimplexNoise(11111);
+            
+            // Game state
+            this.isPlaying = false;
+            this.isPaused = false;
+            this.clock = new THREE.Clock();
+            this.gameTime = 12 * 60; // Start at noon (in minutes)
+            this.day = 1;
+            
+            // Player state
+            this.player = {
+                position: new THREE.Vector3(),
+                velocity: new THREE.Vector3(),
+                onGround: false,
+                health: 100,
+                stamina: 100,
+                rotation: { x: 0, y: 0 }
+            };
+            
+            // Input state
+            this.keys = {};
+            this.mouse = { x: 0, y: 0 };
+            
+            // Inventory
+            this.inventory = {};
+            this.hotbar = [null, null, null, null, null];
+            this.selectedSlot = 0;
+            
+            // World objects
+            this.props = [];
+            this.interactTarget = null;
+            
+            // Initialize
+            this.init();
+        }
+        
+        async init() {
+            // Renderer setup
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.shadowMap.enabled = true;
+            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('game-container').appendChild(this.renderer.domElement);
+            
+            // Scene fog
+            this.scene.fog = new THREE.Fog(0x87CEEB, 100, 400);
+            
+            this.updateLoadingStatus('Creating planet...');
+            await this.sleep(100);
+            
+            // Create world
+            this.createSkybox();
+            this.createPlanet();
+            
+            this.updateLoadingStatus('Generating terrain...');
+            await this.sleep(100);
+            
+            this.createWater();
+            this.createAtmosphere();
+            
+            this.updateLoadingStatus('Planting trees...');
+            await this.sleep(100);
+            
+            this.createProps();
+            
+            this.updateLoadingStatus('Setting up lighting...');
+            await this.sleep(100);
+            
+            this.createLighting();
+            
+            // Initialize player position
+            this.spawnPlayer();
+            
+            // Initial render to show the world from player's perspective
+            this.updateLighting();
+            this.renderer.render(this.scene, this.camera);
+            
+            // Setup input
+            this.setupInput();
+            
+            // Setup UI
+            this.setupUI();
+            
+            // Hide loading, show start prompt
+            this.updateLoadingStatus('Ready!');
+            await this.sleep(500);
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('start-prompt').style.display = 'block';
+            
+            // Start render loop (but not game logic)
+            this.animate();
+        }
+        
+        sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        updateLoadingStatus(text) {
+            document.getElementById('loading-status').textContent = text;
+        }
+        
+        startGame() {
+            document.getElementById('start-prompt').style.display = 'none';
+            this.renderer.domElement.requestPointerLock();
+            this.isPlaying = true;
+            this.clock.start();
+        }
+        
+        // ============================================
+        // WORLD GENERATION
+        // ============================================
+        
+        createSkybox() {
+            // Starfield
+            const starGeometry = new THREE.BufferGeometry();
+            const starCount = 5000;
+            const positions = new Float32Array(starCount * 3);
+            
+            for (let i = 0; i < starCount; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const r = 800 + Math.random() * 200;
+                
+                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+            }
+            
+            starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const starMaterial = new THREE.PointsMaterial({
+                size: 2,
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            this.stars = new THREE.Points(starGeometry, starMaterial);
+            this.scene.add(this.stars);
+        }
+        
+        createPlanet() {
+            const geometry = new THREE.SphereGeometry(CONFIG.PLANET_RADIUS, 256, 256);
+            const positions = geometry.attributes.position;
+            const colors = new Float32Array(positions.count * 3);
+            
+            // Store terrain data for props placement
+            this.terrainData = [];
+            
+            for (let i = 0; i < positions.count; i++) {
+                const x = positions.getX(i);
+                const y = positions.getY(i);
+                const z = positions.getZ(i);
+                
+                const elevation = this.getTerrainElevation(x, y, z);
+                const latitude = Math.abs(y / CONFIG.PLANET_RADIUS);
+                
+                // Apply elevation
+                const maxElevation = 15;
+                const newRadius = CONFIG.PLANET_RADIUS + elevation * maxElevation;
+                
+                const length = Math.sqrt(x * x + y * y + z * z);
+                const nx = x / length;
+                const ny = y / length;
+                const nz = z / length;
+                
+                positions.setX(i, nx * newRadius);
+                positions.setY(i, ny * newRadius);
+                positions.setZ(i, nz * newRadius);
+                
+                // Store terrain info
+                this.terrainData.push({
+                    normal: new THREE.Vector3(nx, ny, nz),
+                    elevation: elevation,
+                    radius: newRadius,
+                    biome: this.getBiome(elevation, latitude, x, y, z)
+                });
+                
+                // Get biome color
+                const color = this.getBiomeColor(elevation, latitude, x, y, z);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            }
+            
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.computeVertexNormals();
+            
+            const material = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.85,
+                metalness: 0.05
+            });
+            
+            this.planet = new THREE.Mesh(geometry, material);
+            this.planet.receiveShadow = true;
+            this.scene.add(this.planet);
+        }
+        
+        getTerrainElevation(x, y, z) {
+            const scale = 1 / CONFIG.PLANET_RADIUS;
+            
+            let elevation = 0;
+            
+            // Continental noise
+            elevation += this.simplex.noise3D(x * scale * 2, y * scale * 2, z * scale * 2) * 0.5;
+            
+            // Mountain ridges
+            const ridge = 1 - Math.abs(this.simplex2.noise3D(x * scale * 4, y * scale * 4, z * scale * 4));
+            const mountainMask = Math.max(0, this.simplex.noise3D(x * scale * 1.5, y * scale * 1.5, z * scale * 1.5));
+            elevation += ridge * ridge * 0.3 * mountainMask;
+            
+            // Fine detail
+            elevation += this.simplex3.noise3D(x * scale * 8, y * scale * 8, z * scale * 8) * 0.1;
+            elevation += this.simplex.noise3D(x * scale * 16, y * scale * 16, z * scale * 16) * 0.05;
+            
+            return elevation;
+        }
+        
+        getBiome(elevation, latitude, x, y, z) {
+            const waterLevel = 0;
+            
+            if (elevation < waterLevel) return 'ocean';
+            if (elevation < waterLevel + 0.05) return 'beach';
+            
+            const temperature = 1 - latitude - (elevation - waterLevel) * 0.3;
+            const moisture = this.simplex3.noise3D(x * 0.02, y * 0.02, z * 0.02) * 0.5 + 0.5;
+            
+            if (temperature < 0.2) return 'snow';
+            if (temperature < 0.35) return 'tundra';
+            if (temperature < 0.5) return 'taiga';
+            if (temperature < 0.7) {
+                if (moisture > 0.5) return 'forest';
+                return 'grassland';
+            }
+            if (moisture > 0.4) return 'jungle';
+            if (moisture > 0.2) return 'savanna';
+            return 'desert';
+        }
+        
+        getBiomeColor(elevation, latitude, x, y, z) {
+            const biome = this.getBiome(elevation, latitude, x, y, z);
+            const variation = this.simplex3.noise3D(x * 0.1, y * 0.1, z * 0.1) * 0.1;
+            
+            const colors = {
+                ocean: { r: 0.1, g: 0.3, b: 0.5 },
+                beach: { r: 0.85 + variation, g: 0.78 + variation, b: 0.55 },
+                snow: { r: 0.95, g: 0.97, b: 1 },
+                tundra: { r: 0.5 + variation, g: 0.55 + variation, b: 0.45 },
+                taiga: { r: 0.2 + variation * 0.5, g: 0.35 + variation * 0.5, b: 0.2 },
+                forest: { r: 0.2 + variation * 0.5, g: 0.45 + variation * 0.5, b: 0.15 },
+                grassland: { r: 0.4 + variation, g: 0.55 + variation, b: 0.25 },
+                jungle: { r: 0.1 + variation * 0.3, g: 0.4 + variation * 0.3, b: 0.1 },
+                savanna: { r: 0.65 + variation, g: 0.55 + variation, b: 0.3 },
+                desert: { r: 0.85 + variation, g: 0.7 + variation, b: 0.45 }
+            };
+            
+            return colors[biome] || colors.grassland;
+        }
+        
+        createWater() {
+            const waterGeometry = new THREE.SphereGeometry(CONFIG.PLANET_RADIUS + 0.5, 128, 128);
+            
+            const waterMaterial = new THREE.MeshStandardMaterial({
+                color: 0x0066aa,
+                transparent: true,
+                opacity: 0.85,
+                roughness: 0.1,
+                metalness: 0.3
+            });
+            
+            this.water = new THREE.Mesh(waterGeometry, waterMaterial);
+            this.scene.add(this.water);
+        }
+        
+        createAtmosphere() {
+            // Atmospheric scattering
+            const atmosphereGeometry = new THREE.SphereGeometry(CONFIG.PLANET_RADIUS + 50, 64, 64);
+            
+            const atmosphereMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    sunDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        vPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 sunDirection;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    
+                    void main() {
+                        vec3 viewDir = normalize(cameraPosition - vPosition);
+                        float rim = 1.0 - max(dot(viewDir, vNormal), 0.0);
+                        rim = pow(rim, 3.0);
+                        
+                        vec3 color = vec3(0.4, 0.7, 1.0);
+                        float alpha = rim * 0.5;
+                        
+                        gl_FragColor = vec4(color, alpha);
+                    }
+                `,
+                transparent: true,
+                side: THREE.BackSide,
+                depthWrite: false
+            });
+            
+            this.atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+            this.scene.add(this.atmosphere);
+        }
+        
+        createProps() {
+            // Tree types by biome
+            this.createTrees();
+            this.createRocks();
+            this.createBushes();
+            this.createGrass();
+        }
+        
+        createTrees() {
+            const treeGroup = new THREE.Group();
+            
+            for (let i = 0; i < CONFIG.TREE_COUNT; i++) {
+                // Random position on sphere
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                
+                const x = Math.sin(phi) * Math.cos(theta);
+                const y = Math.cos(phi);
+                const z = Math.sin(phi) * Math.sin(theta);
+                
+                const elevation = this.getTerrainElevation(
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                // Skip water areas
+                if (elevation < 0.02) continue;
+                
+                const latitude = Math.abs(y);
+                const biome = this.getBiome(elevation, latitude,
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                // Skip biomes without trees
+                if (['ocean', 'beach', 'desert', 'snow', 'tundra'].includes(biome)) continue;
+                
+                const radius = CONFIG.PLANET_RADIUS + elevation * 15;
+                const position = new THREE.Vector3(x * radius, y * radius, z * radius);
+                const normal = new THREE.Vector3(x, y, z).normalize();
+                
+                const tree = this.createTree(biome, position, normal);
+                if (tree) {
+                    tree.userData = {
+                        type: 'tree',
+                        biome: biome,
+                        resource: 'wood',
+                        amount: CONFIG.WOOD_PER_TREE,
+                        interactText: 'Chop Tree'
+                    };
+                    this.props.push(tree);
+                    treeGroup.add(tree);
+                }
+            }
+            
+            this.scene.add(treeGroup);
+        }
+        
+        createTree(biome, position, normal) {
+            const tree = new THREE.Group();
+            
+            // Tree size variation
+            const scale = 0.8 + Math.random() * 0.6;
+            
+            let trunkHeight, trunkRadius, foliageColor, foliageType;
+            
+            switch (biome) {
+                case 'taiga':
+                    trunkHeight = 6 * scale;
+                    trunkRadius = 0.3 * scale;
+                    foliageColor = 0x1a472a;
+                    foliageType = 'pine';
+                    break;
+                case 'forest':
+                    trunkHeight = 5 * scale;
+                    trunkRadius = 0.35 * scale;
+                    foliageColor = 0x228B22;
+                    foliageType = 'deciduous';
+                    break;
+                case 'jungle':
+                    trunkHeight = 8 * scale;
+                    trunkRadius = 0.4 * scale;
+                    foliageColor = 0x006400;
+                    foliageType = 'palm';
+                    break;
+                case 'savanna':
+                    trunkHeight = 4 * scale;
+                    trunkRadius = 0.5 * scale;
+                    foliageColor = 0x556B2F;
+                    foliageType = 'acacia';
+                    break;
+                default:
+                    trunkHeight = 5 * scale;
+                    trunkRadius = 0.3 * scale;
+                    foliageColor = 0x228B22;
+                    foliageType = 'deciduous';
+            }
+            
+            // Trunk
+            const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.7, trunkRadius, trunkHeight, 8);
+            const trunkMat = new THREE.MeshStandardMaterial({ 
+                color: 0x4a3728,
+                roughness: 0.9
+            });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.castShadow = true;
+            trunk.position.y = trunkHeight / 2;
+            tree.add(trunk);
+            
+            // Foliage based on type
+            if (foliageType === 'pine') {
+                // Conical pine tree
+                for (let i = 0; i < 4; i++) {
+                    const coneHeight = (2.5 - i * 0.4) * scale;
+                    const coneRadius = (1.8 - i * 0.3) * scale;
+                    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 8);
+                    const coneMat = new THREE.MeshStandardMaterial({ 
+                        color: foliageColor,
+                        roughness: 0.8
+                    });
+                    const cone = new THREE.Mesh(coneGeo, coneMat);
+                    cone.castShadow = true;
+                    cone.position.y = trunkHeight * 0.4 + i * 1.2 * scale;
+                    tree.add(cone);
+                }
+            } else if (foliageType === 'palm') {
+                // Palm fronds
+                const frondCount = 7;
+                for (let i = 0; i < frondCount; i++) {
+                    const angle = (i / frondCount) * Math.PI * 2;
+                    const frondGeo = new THREE.BoxGeometry(0.3, 0.1, 3 * scale);
+                    const frondMat = new THREE.MeshStandardMaterial({ 
+                        color: foliageColor,
+                        roughness: 0.7
+                    });
+                    const frond = new THREE.Mesh(frondGeo, frondMat);
+                    frond.position.y = trunkHeight;
+                    frond.position.x = Math.cos(angle) * 0.5;
+                    frond.position.z = Math.sin(angle) * 0.5;
+                    frond.rotation.x = Math.PI * 0.2;
+                    frond.rotation.y = angle;
+                    frond.castShadow = true;
+                    tree.add(frond);
+                }
+            } else if (foliageType === 'acacia') {
+                // Flat-topped acacia
+                const canopyGeo = new THREE.CylinderGeometry(2.5 * scale, 2 * scale, 1 * scale, 8);
+                const canopyMat = new THREE.MeshStandardMaterial({ 
+                    color: foliageColor,
+                    roughness: 0.8
+                });
+                const canopy = new THREE.Mesh(canopyGeo, canopyMat);
+                canopy.castShadow = true;
+                canopy.position.y = trunkHeight + 0.5;
+                tree.add(canopy);
+            } else {
+                // Deciduous - spherical foliage
+                const foliageGeo = new THREE.SphereGeometry(2 * scale, 8, 8);
+                const foliageMat = new THREE.MeshStandardMaterial({ 
+                    color: foliageColor,
+                    roughness: 0.8
+                });
+                const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+                foliage.castShadow = true;
+                foliage.position.y = trunkHeight + 1;
+                tree.add(foliage);
+            }
+            
+            // Orient to planet surface
+            tree.position.copy(position);
+            tree.lookAt(position.clone().add(normal));
+            tree.rotateX(Math.PI / 2);
+            
+            return tree;
+        }
+        
+        createRocks() {
+            const rockGroup = new THREE.Group();
+            
+            for (let i = 0; i < CONFIG.ROCK_COUNT; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                
+                const x = Math.sin(phi) * Math.cos(theta);
+                const y = Math.cos(phi);
+                const z = Math.sin(phi) * Math.sin(theta);
+                
+                const elevation = this.getTerrainElevation(
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                // Skip water
+                if (elevation < 0) continue;
+                
+                const radius = CONFIG.PLANET_RADIUS + elevation * 15;
+                const position = new THREE.Vector3(x * radius, y * radius, z * radius);
+                const normal = new THREE.Vector3(x, y, z).normalize();
+                
+                const rock = this.createRock(position, normal, elevation);
+                rock.userData = {
+                    type: 'rock',
+                    resource: 'stone',
+                    amount: CONFIG.STONE_PER_ROCK,
+                    interactText: 'Mine Rock'
+                };
+                this.props.push(rock);
+                rockGroup.add(rock);
+            }
+            
+            this.scene.add(rockGroup);
+        }
+        
+        createRock(position, normal, elevation) {
+            const scale = 0.5 + Math.random() * 1.5;
+            
+            // Irregular rock shape
+            const geometry = new THREE.DodecahedronGeometry(scale, 0);
+            
+            // Deform vertices for natural look
+            const positions = geometry.attributes.position;
+            for (let i = 0; i < positions.count; i++) {
+                const x = positions.getX(i);
+                const y = positions.getY(i);
+                const z = positions.getZ(i);
+                const noise = 0.8 + this.simplex.noise3D(x * 2, y * 2, z * 2) * 0.4;
+                positions.setX(i, x * noise);
+                positions.setY(i, y * noise);
+                positions.setZ(i, z * noise);
+            }
+            geometry.computeVertexNormals();
+            
+            // Color based on elevation
+            let color;
+            if (elevation > 0.4) {
+                color = 0x808080; // Mountain rock
+            } else if (elevation > 0.2) {
+                color = 0x696969; // Dark rock
+            } else {
+                color = 0x8B7355; // Brownish
+            }
+            
+            const material = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            
+            const rock = new THREE.Mesh(geometry, material);
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            
+            // Position and orient
+            rock.position.copy(position);
+            rock.lookAt(position.clone().add(normal));
+            rock.rotateX(Math.PI / 2);
+            rock.rotation.z = Math.random() * Math.PI * 2;
+            
+            return rock;
+        }
+        
+        createBushes() {
+            const bushGroup = new THREE.Group();
+            
+            for (let i = 0; i < CONFIG.BUSH_COUNT; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                
+                const x = Math.sin(phi) * Math.cos(theta);
+                const y = Math.cos(phi);
+                const z = Math.sin(phi) * Math.sin(theta);
+                
+                const elevation = this.getTerrainElevation(
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                if (elevation < 0.02 || elevation > 0.5) continue;
+                
+                const latitude = Math.abs(y);
+                const biome = this.getBiome(elevation, latitude,
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                if (['ocean', 'beach', 'desert', 'snow'].includes(biome)) continue;
+                
+                const radius = CONFIG.PLANET_RADIUS + elevation * 15;
+                const position = new THREE.Vector3(x * radius, y * radius, z * radius);
+                const normal = new THREE.Vector3(x, y, z).normalize();
+                
+                const bush = this.createBush(position, normal, biome);
+                bush.userData = {
+                    type: 'bush',
+                    resource: 'fiber',
+                    amount: CONFIG.FIBER_PER_BUSH,
+                    interactText: 'Gather Fiber'
+                };
+                this.props.push(bush);
+                bushGroup.add(bush);
+            }
+            
+            this.scene.add(bushGroup);
+        }
+        
+        createBush(position, normal, biome) {
+            const bush = new THREE.Group();
+            const scale = 0.4 + Math.random() * 0.4;
+            
+            let color = 0x228B22;
+            if (biome === 'tundra') color = 0x4A5D23;
+            if (biome === 'savanna') color = 0x6B8E23;
+            
+            // Multiple spheres for bush shape
+            for (let i = 0; i < 3; i++) {
+                const sphereGeo = new THREE.SphereGeometry(0.5 * scale, 6, 6);
+                const sphereMat = new THREE.MeshStandardMaterial({
+                    color: color,
+                    roughness: 0.9
+                });
+                const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+                sphere.position.x = (Math.random() - 0.5) * 0.5;
+                sphere.position.y = 0.3 + i * 0.2;
+                sphere.position.z = (Math.random() - 0.5) * 0.5;
+                sphere.castShadow = true;
+                bush.add(sphere);
+            }
+            
+            bush.position.copy(position);
+            bush.lookAt(position.clone().add(normal));
+            bush.rotateX(Math.PI / 2);
+            
+            return bush;
+        }
+        
+        createGrass() {
+            // Simple grass patches using instanced geometry
+            const grassGroup = new THREE.Group();
+            
+            for (let i = 0; i < CONFIG.GRASS_COUNT; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                
+                const x = Math.sin(phi) * Math.cos(theta);
+                const y = Math.cos(phi);
+                const z = Math.sin(phi) * Math.sin(theta);
+                
+                const elevation = this.getTerrainElevation(
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                if (elevation < 0.02 || elevation > 0.4) continue;
+                
+                const latitude = Math.abs(y);
+                const biome = this.getBiome(elevation, latitude,
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                if (!['grassland', 'forest', 'savanna'].includes(biome)) continue;
+                
+                const radius = CONFIG.PLANET_RADIUS + elevation * 15 + 0.1;
+                const position = new THREE.Vector3(x * radius, y * radius, z * radius);
+                const normal = new THREE.Vector3(x, y, z).normalize();
+                
+                const grass = this.createGrassPatch(position, normal, biome);
+                grassGroup.add(grass);
+            }
+            
+            this.scene.add(grassGroup);
+        }
+        
+        createGrassPatch(position, normal, biome) {
+            const grass = new THREE.Group();
+            
+            let color = 0x3CB371;
+            if (biome === 'savanna') color = 0x9ACD32;
+            
+            // Simple grass blades
+            for (let i = 0; i < 5; i++) {
+                const bladeGeo = new THREE.PlaneGeometry(0.1, 0.4 + Math.random() * 0.3);
+                const bladeMat = new THREE.MeshStandardMaterial({
+                    color: color,
+                    side: THREE.DoubleSide,
+                    roughness: 0.8
+                });
+                const blade = new THREE.Mesh(bladeGeo, bladeMat);
+                blade.position.x = (Math.random() - 0.5) * 0.5;
+                blade.position.y = 0.2;
+                blade.position.z = (Math.random() - 0.5) * 0.5;
+                blade.rotation.y = Math.random() * Math.PI;
+                blade.rotation.x = (Math.random() - 0.5) * 0.3;
+                grass.add(blade);
+            }
+            
+            grass.position.copy(position);
+            grass.lookAt(position.clone().add(normal));
+            grass.rotateX(Math.PI / 2);
+            
+            return grass;
+        }
+        
+        // ============================================
+        // LIGHTING
+        // ============================================
+        
+        createLighting() {
+            // Sun light
+            this.sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            this.sunLight.position.set(300, 200, 300);
+            this.sunLight.castShadow = true;
+            this.sunLight.shadow.mapSize.width = 2048;
+            this.sunLight.shadow.mapSize.height = 2048;
+            this.sunLight.shadow.camera.near = 1;
+            this.sunLight.shadow.camera.far = 1000;
+            this.sunLight.shadow.camera.left = -100;
+            this.sunLight.shadow.camera.right = 100;
+            this.sunLight.shadow.camera.top = 100;
+            this.sunLight.shadow.camera.bottom = -100;
+            this.scene.add(this.sunLight);
+            
+            // Ambient light
+            this.ambientLight = new THREE.AmbientLight(0x404060, 0.4);
+            this.scene.add(this.ambientLight);
+            
+            // Hemisphere light
+            this.hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x3D5C3D, 0.5);
+            this.scene.add(this.hemiLight);
+        }
+        
+        updateLighting() {
+            // Update based on time of day
+            const hours = this.gameTime / 60;
+            const angle = ((hours - 6) / 24) * Math.PI * 2;
+            
+            // Sun position relative to player
+            const sunDist = 400;
+            const sunY = Math.sin(angle) * sunDist;
+            const sunX = Math.cos(angle) * sunDist;
+            
+            // Get player up vector for local sun position
+            const playerUp = this.player.position.clone().normalize();
+            const playerRight = new THREE.Vector3(1, 0, 0);
+            if (Math.abs(playerUp.y) < 0.99) {
+                playerRight.crossVectors(new THREE.Vector3(0, 1, 0), playerUp).normalize();
+            }
+            const playerForward = new THREE.Vector3().crossVectors(playerUp, playerRight);
+            
+            this.sunLight.position.copy(this.player.position)
+                .add(playerUp.clone().multiplyScalar(sunY))
+                .add(playerRight.clone().multiplyScalar(sunX));
+            
+            this.sunLight.target.position.copy(this.player.position);
+            
+            // Day/night intensity
+            const dayFactor = Math.max(0, Math.sin(angle));
+            this.sunLight.intensity = 0.3 + dayFactor * 1.5;
+            this.ambientLight.intensity = 0.1 + dayFactor * 0.4;
+            
+            // Sun color
+            if (dayFactor < 0.3 && dayFactor > 0) {
+                // Sunset/sunrise
+                this.sunLight.color.setHSL(0.08, 0.9, 0.6);
+                this.scene.fog.color.setHSL(0.08, 0.5, 0.3 + dayFactor);
+            } else if (dayFactor > 0) {
+                // Daytime
+                this.sunLight.color.setHSL(0.12, 0.3, 0.95);
+                this.scene.fog.color.setHSL(0.55, 0.5, 0.6);
+            } else {
+                // Nighttime
+                this.sunLight.color.setHSL(0.6, 0.3, 0.3);
+                this.scene.fog.color.setHSL(0.65, 0.3, 0.1);
+            }
+            
+            // Update stars visibility
+            if (this.stars) {
+                this.stars.material.opacity = Math.max(0, 0.8 - dayFactor * 2);
+            }
+        }
+        
+        // ============================================
+        // PLAYER
+        // ============================================
+        
+        spawnPlayer() {
+            // Find a good spawn point (on land, temperate area)
+            let attempts = 0;
+            let found = false;
+            
+            while (!found && attempts < 100) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.PI / 2 + (Math.random() - 0.5) * 0.5; // Near equator
+                
+                const x = Math.sin(phi) * Math.cos(theta);
+                const y = Math.cos(phi);
+                const z = Math.sin(phi) * Math.sin(theta);
+                
+                const elevation = this.getTerrainElevation(
+                    x * CONFIG.PLANET_RADIUS,
+                    y * CONFIG.PLANET_RADIUS,
+                    z * CONFIG.PLANET_RADIUS
+                );
+                
+                if (elevation > 0.05 && elevation < 0.3) {
+                    const radius = CONFIG.PLANET_RADIUS + elevation * 15 + CONFIG.PLAYER_HEIGHT;
+                    this.player.position.set(x * radius, y * radius, z * radius);
+                    found = true;
+                }
+                attempts++;
+            }
+            
+            if (!found) {
+                // Fallback spawn
+                const x = 0, y = 0, z = 1;
+                const elevation = this.getTerrainElevation(0, 0, CONFIG.PLANET_RADIUS);
+                const radius = CONFIG.PLANET_RADIUS + Math.max(elevation, 0.1) * 15 + CONFIG.PLAYER_HEIGHT;
+                this.player.position.set(0, 0, radius);
+            }
+            
+            // Set up player orientation based on position on sphere
+            const up = this.player.position.clone().normalize();
+            
+            // Calculate initial yaw - face tangent to surface
+            this.player.rotation.y = Math.atan2(up.x, up.z);
+            this.player.rotation.x = 0;
+            
+            // CRITICAL: Position camera immediately at player position
+            this.camera.position.copy(this.player.position);
+            this.camera.up.copy(up);
+            
+            // Look along the surface (tangent direction)
+            const forward = new THREE.Vector3(0, 0, -1);
+            forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.player.rotation.y);
+            // Project forward onto surface tangent plane
+            forward.sub(up.clone().multiplyScalar(forward.dot(up))).normalize();
+            
+            this.camera.lookAt(this.player.position.clone().add(forward));
+            
+            // Mark player as on ground
+            this.player.onGround = true;
+        }
+        
+        updatePlayer(delta) {
+            if (!this.isPlaying || this.isPaused) return;
+            
+            // Get player's local coordinate system
+            const up = this.player.position.clone().normalize();
+            const forward = new THREE.Vector3(0, 0, -1);
+            forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.player.rotation.y);
+            
+            // Project forward onto planet surface
+            forward.sub(up.clone().multiplyScalar(forward.dot(up))).normalize();
+            
+            const right = new THREE.Vector3().crossVectors(up, forward).normalize();
+            
+            // Movement input
+            let moveDir = new THREE.Vector3();
+            
+            if (this.keys['KeyW']) moveDir.add(forward);
+            if (this.keys['KeyS']) moveDir.sub(forward);
+            if (this.keys['KeyA']) moveDir.add(right);
+            if (this.keys['KeyD']) moveDir.sub(right);
+            
+            // Sprinting
+            let speed = CONFIG.PLAYER_SPEED;
+            const isSprinting = this.keys['ShiftLeft'] && moveDir.length() > 0;
+            
+            if (isSprinting && this.player.stamina > 0) {
+                speed *= CONFIG.SPRINT_MULTIPLIER;
+                this.player.stamina = Math.max(0, this.player.stamina - 20 * delta);
+            } else if (!isSprinting) {
+                this.player.stamina = Math.min(100, this.player.stamina + 15 * delta);
+            }
+            
+            if (moveDir.length() > 0) {
+                moveDir.normalize().multiplyScalar(speed);
+            }
+            
+            // Apply movement
+            this.player.velocity.x = moveDir.x;
+            this.player.velocity.z = moveDir.z;
+            
+            // Gravity toward planet center
+            const gravityDir = up.clone().negate();
+            this.player.velocity.add(gravityDir.multiplyScalar(CONFIG.GRAVITY * delta));
+            
+            // Jumping
+            if (this.keys['Space'] && this.player.onGround) {
+                this.player.velocity.add(up.clone().multiplyScalar(CONFIG.JUMP_FORCE));
+                this.player.onGround = false;
+            }
+            
+            // Move player
+            this.player.position.add(this.player.velocity.clone().multiplyScalar(delta));
+            
+            // Ground collision
+            const distFromCenter = this.player.position.length();
+            const terrainX = this.player.position.x / distFromCenter;
+            const terrainY = this.player.position.y / distFromCenter;
+            const terrainZ = this.player.position.z / distFromCenter;
+            
+            const elevation = this.getTerrainElevation(
+                terrainX * CONFIG.PLANET_RADIUS,
+                terrainY * CONFIG.PLANET_RADIUS,
+                terrainZ * CONFIG.PLANET_RADIUS
+            );
+            
+            const groundHeight = CONFIG.PLANET_RADIUS + elevation * 15 + CONFIG.PLAYER_HEIGHT;
+            
+            if (distFromCenter < groundHeight) {
+                // On ground
+                this.player.position.normalize().multiplyScalar(groundHeight);
+                this.player.onGround = true;
+                
+                // Remove velocity component toward planet
+                const velDotUp = this.player.velocity.dot(up);
+                if (velDotUp < 0) {
+                    this.player.velocity.sub(up.clone().multiplyScalar(velDotUp));
+                }
+            } else {
+                this.player.onGround = false;
+            }
+            
+            // Update camera
+            this.camera.position.copy(this.player.position);
+            
+            // Camera rotation
+            const lookDir = new THREE.Vector3(0, 0, -1);
+            lookDir.applyAxisAngle(right, this.player.rotation.x);
+            lookDir.applyAxisAngle(up, this.player.rotation.y);
+            
+            this.camera.up.copy(up);
+            this.camera.lookAt(this.player.position.clone().add(lookDir));
+            
+            // Update shadow camera to follow player
+            if (this.sunLight) {
+                this.sunLight.target.position.copy(this.player.position);
+                this.sunLight.target.updateMatrixWorld();
+            }
+        }
+        
+        // ============================================
+        // INPUT
+        // ============================================
+        
+        setupInput() {
+            // Keyboard
+            window.addEventListener('keydown', (e) => {
+                this.keys[e.code] = true;
+                
+                if (e.code === 'Tab') {
+                    e.preventDefault();
+                    this.toggleInventory();
+                }
+                
+                if (e.code === 'KeyE' && this.interactTarget) {
+                    this.interact(this.interactTarget);
+                }
+                
+                // Hotbar selection
+                if (e.code >= 'Digit1' && e.code <= 'Digit5') {
+                    this.selectHotbarSlot(parseInt(e.code.charAt(5)) - 1);
+                }
+                
+                if (e.code === 'Escape') {
+                    if (document.getElementById('inventory').classList.contains('open')) {
+                        this.toggleInventory();
+                    } else {
+                        document.exitPointerLock();
+                    }
+                }
+            });
+            
+            window.addEventListener('keyup', (e) => {
+                this.keys[e.code] = false;
+            });
+            
+            // Mouse
+            document.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement && !this.isPaused) {
+                    this.player.rotation.y -= e.movementX * 0.002;
+                    this.player.rotation.x -= e.movementY * 0.002;
+                    this.player.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.player.rotation.x));
+                }
+            });
+            
+            document.addEventListener('click', () => {
+                if (!document.pointerLockElement && this.isPlaying) {
+                    this.renderer.domElement.requestPointerLock();
+                }
+            });
+            
+            document.addEventListener('pointerlockchange', () => {
+                this.isPaused = !document.pointerLockElement;
+                if (document.pointerLockElement) {
+                    document.body.classList.add('playing');
+                } else {
+                    document.body.classList.remove('playing');
+                }
+            });
+            
+            // Start button
+            document.getElementById('start-btn').addEventListener('click', () => {
+                this.startGame();
+            });
+            
+            // Resize
+            window.addEventListener('resize', () => {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+        
+        // ============================================
+        // INTERACTION
+        // ============================================
+        
+        checkInteraction() {
+            // Raycast from camera
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+            
+            // Check props
+            const propMeshes = this.props.map(p => p.children.length > 0 ? p.children[0] : p);
+            const intersects = raycaster.intersectObjects(this.props, true);
+            
+            this.interactTarget = null;
+            document.getElementById('crosshair').classList.remove('interact');
+            document.getElementById('interact-prompt').classList.remove('show');
+            
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                if (hit.distance < CONFIG.INTERACT_DISTANCE) {
+                    // Find parent prop
+                    let prop = hit.object;
+                    while (prop.parent && !prop.userData.type) {
+                        prop = prop.parent;
+                    }
+                    
+                    if (prop.userData.type) {
+                        this.interactTarget = prop;
+                        document.getElementById('crosshair').classList.add('interact');
+                        document.getElementById('interact-prompt').classList.add('show');
+                        document.getElementById('interact-text').textContent = prop.userData.interactText;
+                    }
+                }
+            }
+        }
+        
+        interact(prop) {
+            if (!prop || !prop.userData) return;
+            
+            const data = prop.userData;
+            
+            // Calculate yield (better with tools)
+            let amount = data.amount;
+            const selectedItem = this.hotbar[this.selectedSlot];
+            
+            if (selectedItem && ITEMS[selectedItem.id].tool) {
+                if ((data.type === 'tree' && selectedItem.id === 'axe') ||
+                    (data.type === 'rock' && selectedItem.id === 'pickaxe')) {
+                    amount = Math.ceil(amount * ITEMS[selectedItem.id].efficiency);
+                }
+            }
+            
+            // Add to inventory
+            this.addToInventory(data.resource, amount);
+            
+            // Show popup
+            this.showResourcePopup(`+${amount} ${ITEMS[data.resource].name}`, ITEMS[data.resource].color);
+            
+            // Remove prop
+            const index = this.props.indexOf(prop);
+            if (index > -1) {
+                this.props.splice(index, 1);
+            }
+            prop.parent.remove(prop);
+            
+            this.interactTarget = null;
+            document.getElementById('crosshair').classList.remove('interact');
+            document.getElementById('interact-prompt').classList.remove('show');
+        }
+        
+        showResourcePopup(text, color) {
+            const popup = document.createElement('div');
+            popup.className = 'resource-popup';
+            popup.textContent = text;
+            popup.style.color = color || '#fff';
+            popup.style.left = '50%';
+            popup.style.top = '45%';
+            popup.style.transform = 'translateX(-50%)';
+            document.body.appendChild(popup);
+            
+            setTimeout(() => popup.remove(), 1000);
+        }
+        
+        // ============================================
+        // INVENTORY
+        // ============================================
+        
+        addToInventory(itemId, amount) {
+            if (!this.inventory[itemId]) {
+                this.inventory[itemId] = 0;
+            }
+            this.inventory[itemId] += amount;
+            this.updateHotbarUI();
+            
+            // Auto-add to hotbar if slot available
+            this.autoAddToHotbar(itemId);
+        }
+        
+        removeFromInventory(itemId, amount) {
+            if (!this.inventory[itemId]) return false;
+            if (this.inventory[itemId] < amount) return false;
+            
+            this.inventory[itemId] -= amount;
+            if (this.inventory[itemId] <= 0) {
+                delete this.inventory[itemId];
+            }
+            
+            this.updateHotbarUI();
+            return true;
+        }
+        
+        autoAddToHotbar(itemId) {
+            // Check if already in hotbar
+            for (let i = 0; i < this.hotbar.length; i++) {
+                if (this.hotbar[i] && this.hotbar[i].id === itemId) return;
+            }
+            
+            // Find empty slot
+            for (let i = 0; i < this.hotbar.length; i++) {
+                if (!this.hotbar[i]) {
+                    this.hotbar[i] = { id: itemId };
+                    this.updateHotbarUI();
+                    return;
+                }
+            }
+        }
+        
+        selectHotbarSlot(index) {
+            this.selectedSlot = index;
+            document.querySelectorAll('.hotbar-slot').forEach((slot, i) => {
+                slot.classList.toggle('selected', i === index);
+            });
+        }
+        
+        toggleInventory() {
+            const inv = document.getElementById('inventory');
+            inv.classList.toggle('open');
+            this.isPaused = inv.classList.contains('open');
+            
+            if (this.isPaused) {
+                document.exitPointerLock();
+                this.renderInventory();
+            }
+        }
+        
+        renderInventory() {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+            
+            // Create 24 slots
+            for (let i = 0; i < 24; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'inventory-slot';
+                grid.appendChild(slot);
+            }
+            
+            // Fill with items
+            let slotIndex = 0;
+            for (const [itemId, count] of Object.entries(this.inventory)) {
+                if (slotIndex >= 24) break;
+                const item = ITEMS[itemId];
+                const slot = grid.children[slotIndex];
+                slot.innerHTML = `
+                    <span class="icon">${item.icon}</span>
+                    <span class="count">${count}</span>
+                `;
+                slotIndex++;
+            }
+            
+            // Render crafting
+            this.renderCrafting();
+        }
+        
+        renderCrafting() {
+            const recipes = document.getElementById('craft-recipes');
+            recipes.innerHTML = '';
+            
+            for (const recipe of RECIPES) {
+                const canCraft = this.canCraft(recipe);
+                const item = ITEMS[recipe.result];
+                
+                const costText = Object.entries(recipe.ingredients)
+                    .map(([id, count]) => `${count} ${ITEMS[id].name}`)
+                    .join(', ');
+                
+                const div = document.createElement('div');
+                div.className = `craft-item ${canCraft ? '' : 'disabled'}`;
+                div.innerHTML = `
+                    <span class="recipe-icon">${item.icon}</span>
+                    <div class="recipe-info">
+                        <span class="recipe-name">${item.name} x${recipe.count}</span>
+                        <span class="recipe-cost">${costText}</span>
+                    </div>
+                `;
+                
+                if (canCraft) {
+                    div.addEventListener('click', () => this.craft(recipe));
+                }
+                
+                recipes.appendChild(div);
+            }
+        }
+        
+        canCraft(recipe) {
+            for (const [itemId, count] of Object.entries(recipe.ingredients)) {
+                if (!this.inventory[itemId] || this.inventory[itemId] < count) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        
+        craft(recipe) {
+            if (!this.canCraft(recipe)) return;
+            
+            // Remove ingredients
+            for (const [itemId, count] of Object.entries(recipe.ingredients)) {
+                this.removeFromInventory(itemId, count);
+            }
+            
+            // Add result
+            this.addToInventory(recipe.result, recipe.count);
+            
+            // Re-render
+            this.renderInventory();
+        }
+        
+        // ============================================
+        // UI
+        // ============================================
+        
+        setupUI() {
+            // Initial hotbar
+            this.updateHotbarUI();
+        }
+        
+        updateHotbarUI() {
+            const slots = document.querySelectorAll('.hotbar-slot');
+            
+            slots.forEach((slot, i) => {
+                const hotbarItem = this.hotbar[i];
+                const icon = slot.querySelector('.icon');
+                const count = slot.querySelector('.count');
+                
+                if (i === 0 && !hotbarItem) {
+                    // Hand
+                    icon.textContent = '✊';
+                    count.textContent = '';
+                } else if (hotbarItem) {
+                    const item = ITEMS[hotbarItem.id];
+                    icon.textContent = item.icon;
+                    const invCount = this.inventory[hotbarItem.id] || 0;
+                    count.textContent = invCount > 1 ? invCount : '';
+                    
+                    // Remove from hotbar if no more in inventory
+                    if (invCount <= 0) {
+                        this.hotbar[i] = null;
+                        icon.textContent = '';
+                        count.textContent = '';
+                    }
+                } else {
+                    icon.textContent = '';
+                    count.textContent = '';
+                }
+            });
+        }
+        
+        updateStatsUI() {
+            document.getElementById('health-bar').style.width = `${this.player.health}%`;
+            document.getElementById('stamina-bar').style.width = `${this.player.stamina}%`;
+        }
+        
+        updateTimeUI() {
+            const hours = Math.floor(this.gameTime / 60);
+            const minutes = Math.floor(this.gameTime % 60);
+            document.getElementById('time-text').textContent = 
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            document.getElementById('day-num').textContent = this.day;
+        }
+        
+        // ============================================
+        // GAME LOOP
+        // ============================================
+        
+        animate() {
+            requestAnimationFrame(() => this.animate());
+            
+            const delta = Math.min(this.clock.getDelta(), 0.1);
+            
+            if (this.isPlaying && !this.isPaused) {
+                // Update game time
+                this.gameTime += (delta / CONFIG.DAY_LENGTH) * 24 * 60;
+                if (this.gameTime >= 24 * 60) {
+                    this.gameTime -= 24 * 60;
+                    this.day++;
+                }
+                
+                // Update player
+                this.updatePlayer(delta);
+                
+                // Check interactions
+                this.checkInteraction();
+                
+                // Update lighting
+                this.updateLighting();
+                
+                // Update UI
+                this.updateStatsUI();
+                this.updateTimeUI();
+            }
+            
+            // Render
+            this.renderer.render(this.scene, this.camera);
+        }
+    }
+    
+    // Start game
+    window.addEventListener('DOMContentLoaded', () => {
+        new PlanetSurvival();
+    });
+    </script>
+</body>
+</html>

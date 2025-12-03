@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Depths of Darkness - 3D Dungeon Crawler</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Share+Tech+Mono&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #0a0a0a;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        #game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 20px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+        }
+        
+        .hud-left {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .bar-container {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid;
+            border-radius: 3px;
+            padding: 4px 10px;
+            min-width: 220px;
+        }
+        
+        .health-container { border-color: #8b0000; }
+        .mana-container { border-color: #00008b; }
+        .xp-container { border-color: #8b8b00; }
+        
+        .bar-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 3px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .health-label { color: #ff6666; }
+        .mana-label { color: #6666ff; }
+        .xp-label { color: #ffff66; }
+        
+        .bar {
+            width: 100%;
+            height: 14px;
+            background: #1a1a1a;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .bar-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        
+        .health-fill {
+            background: linear-gradient(90deg, #8b0000, #ff4444);
+            box-shadow: 0 0 8px #ff4444;
+        }
+        
+        .mana-fill {
+            background: linear-gradient(90deg, #00008b, #4444ff);
+            box-shadow: 0 0 8px #4444ff;
+        }
+        
+        .xp-fill {
+            background: linear-gradient(90deg, #8b8b00, #ffff44);
+            box-shadow: 0 0 8px #ffff44;
+        }
+        
+        .stats-container {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .stat-box {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #ffd700;
+            border-radius: 3px;
+            padding: 8px 15px;
+            text-align: center;
+            min-width: 70px;
+        }
+        
+        .stat-label {
+            color: #ffd700;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .stat-value {
+            color: #fff;
+            font-size: 20px;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+        }
+        
+        .equipment-display {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 8px;
+            pointer-events: none;
+        }
+        
+        .equip-slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #444;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .equip-slot.weapon { border-color: #ff6600; }
+        .equip-slot.armor { border-color: #4169e1; }
+        .equip-slot.accessory { border-color: #9932cc; }
+        
+        .hotbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            pointer-events: none;
+        }
+        
+        .hotbar-slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #555;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            position: relative;
+            transition: all 0.2s;
+        }
+        
+        .hotbar-slot.selected {
+            border-color: #ffd700;
+            box-shadow: 0 0 10px #ffd700;
+        }
+        
+        .hotbar-key {
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            font-size: 10px;
+            color: #888;
+        }
+        
+        .hotbar-count {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 11px;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+        }
+        
+        #inventory-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 10, 10, 0.95);
+            border: 2px solid #ffd700;
+            border-radius: 10px;
+            padding: 20px;
+            min-width: 500px;
+            display: none;
+            z-index: 200;
+            pointer-events: auto;
+        }
+        
+        #inventory-panel.open { display: block; }
+        
+        .inventory-header {
+            font-family: 'Cinzel', serif;
+            font-size: 24px;
+            color: #ffd700;
+            text-align: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .inventory-content {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .inventory-left { flex: 1; }
+        .inventory-right { width: 180px; }
+        
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 5px;
+        }
+        
+        .inv-slot {
+            width: 45px;
+            height: 45px;
+            background: rgba(30, 30, 30, 0.9);
+            border: 1px solid #444;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+        
+        .inv-slot:hover {
+            border-color: #ffd700;
+            background: rgba(50, 50, 50, 0.9);
+        }
+        
+        .inv-slot .item-count {
+            position: absolute;
+            bottom: 1px;
+            right: 3px;
+            font-size: 10px;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+        }
+        
+        .equipped-slots {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .equipped-slot {
+            width: 55px;
+            height: 55px;
+            background: rgba(30, 30, 30, 0.9);
+            border: 2px solid;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .equipped-slot.weapon-slot { border-color: #ff6600; }
+        .equipped-slot.armor-slot { border-color: #4169e1; }
+        .equipped-slot.accessory-slot { border-color: #9932cc; }
+        
+        .slot-label {
+            position: absolute;
+            bottom: -18px;
+            font-size: 9px;
+            color: #888;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        
+        .player-stats {
+            margin-top: 30px;
+            padding: 10px;
+            background: rgba(20, 20, 20, 0.8);
+            border-radius: 5px;
+        }
+        
+        .player-stats h4 {
+            color: #ffd700;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            color: #aaa;
+            font-size: 11px;
+            margin: 4px 0;
+        }
+        
+        .stat-row span:last-child { color: #fff; }
+        
+        #item-tooltip {
+            position: fixed;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid #ffd700;
+            border-radius: 5px;
+            padding: 10px 15px;
+            max-width: 250px;
+            z-index: 300;
+            display: none;
+            pointer-events: none;
+        }
+        
+        .tooltip-name {
+            font-family: 'Cinzel', serif;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .tooltip-name.common { color: #fff; }
+        .tooltip-name.uncommon { color: #00ff00; }
+        .tooltip-name.rare { color: #4169e1; }
+        .tooltip-name.epic { color: #9932cc; }
+        .tooltip-name.legendary { color: #ff8c00; }
+        
+        .tooltip-type {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .tooltip-stats {
+            color: #8f8;
+            font-size: 11px;
+            margin-bottom: 5px;
+            white-space: pre-line;
+        }
+        
+        .tooltip-desc {
+            color: #aaa;
+            font-size: 10px;
+            font-style: italic;
+        }
+        
+        .tooltip-action {
+            color: #ff0;
+            font-size: 10px;
+            margin-top: 8px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+        }
+        
+        #minimap {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 160px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #4a4a4a;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        
+        .crosshair-dot {
+            width: 4px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+        }
+        
+        .crosshair-line {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.6);
+        }
+        
+        .crosshair-line.top { width: 2px; height: 10px; top: -14px; left: 1px; }
+        .crosshair-line.bottom { width: 2px; height: 10px; bottom: -14px; left: 1px; }
+        .crosshair-line.left { width: 10px; height: 2px; left: -14px; top: 1px; }
+        .crosshair-line.right { width: 10px; height: 2px; right: -14px; top: 1px; }
+        
+        #message-container {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
+        }
+        
+        .game-message {
+            color: #ffd700;
+            font-size: 16px;
+            text-shadow: 0 0 10px #ffd700, 2px 2px 4px #000;
+            animation: messageFade 2.5s ease forwards;
+            margin: 5px 0;
+        }
+        
+        .game-message.damage { color: #ff4444; }
+        .game-message.heal { color: #44ff44; }
+        .game-message.loot { color: #ffd700; }
+        .game-message.xp { color: #44ffff; }
+        .game-message.levelup { color: #ff44ff; font-size: 24px; }
+        
+        @keyframes messageFade {
+            0% { opacity: 0; transform: translateY(20px); }
+            15% { opacity: 1; transform: translateY(0); }
+            85% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+        
+        #combat-log {
+            position: fixed;
+            bottom: 90px;
+            left: 20px;
+            width: 280px;
+            max-height: 120px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 8px;
+            pointer-events: none;
+        }
+        
+        .log-entry {
+            font-size: 10px;
+            color: #888;
+            margin: 2px 0;
+        }
+        
+        .log-entry.damage { color: #ff6666; }
+        .log-entry.heal { color: #66ff66; }
+        .log-entry.loot { color: #ffff66; }
+        
+        #damage-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(139, 0, 0, 0.4) 100%);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.1s ease;
+            z-index: 99;
+        }
+        
+        #damage-flash.active { opacity: 1; }
+        
+        #levelup-effect {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, rgba(255, 215, 0, 0.3) 0%, transparent 70%);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 98;
+        }
+        
+        #levelup-effect.active { animation: levelupFlash 1s ease; }
+        
+        @keyframes levelupFlash {
+            0% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
+        .overlay-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            pointer-events: auto;
+        }
+        
+        .overlay-screen.hidden { display: none; }
+        
+        .game-title {
+            font-family: 'Cinzel', serif;
+            font-size: 56px;
+            color: #ffd700;
+            text-shadow: 0 0 30px #ffd700, 0 0 60px #8b4513, 0 4px 8px #000;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .game-subtitle {
+            color: #888;
+            font-size: 16px;
+            margin-bottom: 30px;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+        }
+        
+        .controls-info {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 25px 40px;
+            margin-bottom: 30px;
+        }
+        
+        .controls-info h3 {
+            color: #ffd700;
+            font-family: 'Cinzel', serif;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 18px;
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 30px;
+        }
+        
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #aaa;
+            font-size: 12px;
+        }
+        
+        .control-key {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            padding: 4px 10px;
+            border-radius: 3px;
+            color: #fff;
+            min-width: 60px;
+            text-align: center;
+            font-size: 11px;
+        }
+        
+        .start-button {
+            background: linear-gradient(135deg, #8b4513 0%, #ffd700 50%, #8b4513 100%);
+            border: none;
+            padding: 18px 50px;
+            font-size: 20px;
+            font-family: 'Cinzel', serif;
+            color: #000;
+            cursor: pointer;
+            border-radius: 5px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        
+        .start-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px #ffd700;
+        }
+        
+        .final-stats {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px 40px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .final-stats h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+        }
+        
+        .final-stat-row {
+            display: flex;
+            justify-content: space-between;
+            color: #aaa;
+            margin: 8px 0;
+            min-width: 200px;
+        }
+        
+        .final-stat-row span:last-child {
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <div id="hud">
+        <div class="hud-top">
+            <div class="hud-left">
+                <div class="bar-container health-container">
+                    <div class="bar-label health-label">
+                        <span>❤️ Health</span>
+                        <span id="health-text">100/100</span>
+                    </div>
+                    <div class="bar"><div class="bar-fill health-fill" id="health-fill"></div></div>
+                </div>
+                <div class="bar-container mana-container">
+                    <div class="bar-label mana-label">
+                        <span>💎 Mana</span>
+                        <span id="mana-text">50/50</span>
+                    </div>
+                    <div class="bar"><div class="bar-fill mana-fill" id="mana-fill"></div></div>
+                </div>
+                <div class="bar-container xp-container">
+                    <div class="bar-label xp-label">
+                        <span>⭐ Level <span id="player-level">1</span></span>
+                        <span id="xp-text">0/100</span>
+                    </div>
+                    <div class="bar"><div class="bar-fill xp-fill" id="xp-fill"></div></div>
+                </div>
+            </div>
+            <div class="stats-container">
+                <div class="stat-box"><div class="stat-label">Floor</div><div class="stat-value" id="floor-display">1</div></div>
+                <div class="stat-box"><div class="stat-label">Score</div><div class="stat-value" id="score-display">0</div></div>
+                <div class="stat-box"><div class="stat-label">Gold</div><div class="stat-value" id="gold-display">0</div></div>
+                <div class="stat-box"><div class="stat-label">Kills</div><div class="stat-value" id="kills-display">0</div></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="equipment-display">
+        <div class="equip-slot weapon" id="equipped-weapon">🗡️</div>
+        <div class="equip-slot armor" id="equipped-armor">👕</div>
+        <div class="equip-slot accessory" id="equipped-accessory">💍</div>
+    </div>
+    
+    <div class="hotbar">
+        <div class="hotbar-slot selected" id="hotbar-0"><span class="hotbar-key">1</span></div>
+        <div class="hotbar-slot" id="hotbar-1"><span class="hotbar-key">2</span></div>
+        <div class="hotbar-slot" id="hotbar-2"><span class="hotbar-key">3</span></div>
+        <div class="hotbar-slot" id="hotbar-3"><span class="hotbar-key">4</span></div>
+        <div class="hotbar-slot" id="hotbar-4"><span class="hotbar-key">5</span></div>
+    </div>
+    
+    <div id="crosshair">
+        <div class="crosshair-dot"></div>
+        <div class="crosshair-line top"></div>
+        <div class="crosshair-line bottom"></div>
+        <div class="crosshair-line left"></div>
+        <div class="crosshair-line right"></div>
+    </div>
+    
+    <div id="damage-flash"></div>
+    <div id="levelup-effect"></div>
+    <div id="message-container"></div>
+    <div id="combat-log"></div>
+    
+    <div id="minimap"><canvas id="minimap-canvas"></canvas></div>
+    
+    <div id="inventory-panel">
+        <div class="inventory-header">📦 Inventory</div>
+        <div class="inventory-content">
+            <div class="inventory-left"><div class="inventory-grid" id="inventory-grid"></div></div>
+            <div class="inventory-right">
+                <div class="equipped-slots">
+                    <div class="equipped-slot weapon-slot" id="inv-weapon" data-slot="weapon"><span class="slot-label">Weapon</span></div>
+                    <div class="equipped-slot armor-slot" id="inv-armor" data-slot="armor"><span class="slot-label">Armor</span></div>
+                    <div class="equipped-slot accessory-slot" id="inv-accessory" data-slot="accessory"><span class="slot-label">Accessory</span></div>
+                </div>
+                <div class="player-stats">
+                    <h4>Stats</h4>
+                    <div class="stat-row"><span>Attack</span><span id="stat-attack">10</span></div>
+                    <div class="stat-row"><span>Defense</span><span id="stat-defense">0</span></div>
+                    <div class="stat-row"><span>Speed</span><span id="stat-speed">100%</span></div>
+                    <div class="stat-row"><span>Crit</span><span id="stat-crit">5%</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="item-tooltip">
+        <div class="tooltip-name"></div>
+        <div class="tooltip-type"></div>
+        <div class="tooltip-stats"></div>
+        <div class="tooltip-desc"></div>
+        <div class="tooltip-action"></div>
+    </div>
+    
+    <div id="start-screen" class="overlay-screen">
+        <h1 class="game-title">⚔️ Depths of Darkness ⚔️</h1>
+        <p class="game-subtitle">A Dungeon Crawler Adventure</p>
+        <div class="controls-info">
+            <h3>Controls</h3>
+            <div class="controls-grid">
+                <div class="control-row"><span class="control-key">W A S D</span><span>Move</span></div>
+                <div class="control-row"><span class="control-key">Mouse</span><span>Look</span></div>
+                <div class="control-row"><span class="control-key">Click</span><span>Attack</span></div>
+                <div class="control-row"><span class="control-key">E</span><span>Interact</span></div>
+                <div class="control-row"><span class="control-key">I / Tab</span><span>Inventory</span></div>
+                <div class="control-row"><span class="control-key">1-5</span><span>Hotbar</span></div>
+                <div class="control-row"><span class="control-key">Q</span><span>Use Item</span></div>
+                <div class="control-row"><span class="control-key">R</span><span>Restart</span></div>
+            </div>
+        </div>
+        <button class="start-button" id="start-button">Begin Adventure</button>
+    </div>
+    
+    <div id="gameover-screen" class="overlay-screen hidden">
+        <h1 class="game-title" style="color: #8b0000;">💀 Game Over 💀</h1>
+        <p class="game-subtitle">You have fallen in the depths...</p>
+        <div class="final-stats">
+            <h3>Final Stats</h3>
+            <div class="final-stat-row"><span>Score</span><span id="final-score">0</span></div>
+            <div class="final-stat-row"><span>Floor Reached</span><span id="final-floor">1</span></div>
+            <div class="final-stat-row"><span>Enemies Slain</span><span id="final-kills">0</span></div>
+            <div class="final-stat-row"><span>Gold Collected</span><span id="final-gold">0</span></div>
+        </div>
+        <button class="start-button" id="restart-button">Try Again</button>
+    </div>
+    
+    <div id="victory-screen" class="overlay-screen hidden">
+        <h1 class="game-title">🏆 Victory! 🏆</h1>
+        <p class="game-subtitle">You have conquered the depths!</p>
+        <div class="final-stats">
+            <h3>Final Stats</h3>
+            <div class="final-stat-row"><span>Final Score</span><span id="victory-score">0</span></div>
+            <div class="final-stat-row"><span>Player Level</span><span id="victory-level">1</span></div>
+            <div class="final-stat-row"><span>Enemies Slain</span><span id="victory-kills">0</span></div>
+            <div class="final-stat-row"><span>Gold Collected</span><span id="victory-gold">0</span></div>
+        </div>
+        <button class="start-button" id="victory-restart">Play Again</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    
+    <script>
+    const CONFIG = {
+        CELL_SIZE: 4, WALL_HEIGHT: 4, DUNGEON_WIDTH: 45, DUNGEON_HEIGHT: 45,
+        PLAYER_HEIGHT: 1.7, PLAYER_SPEED: 7, PLAYER_MAX_HEALTH: 100, PLAYER_MAX_MANA: 50,
+        BASE_ATTACK: 10, BASE_DEFENSE: 0, ATTACK_RANGE: 3, ATTACK_COOLDOWN: 400,
+        SIGHT_RANGE: 18, XP_BASE: 100, XP_MULTIPLIER: 1.5, INVENTORY_SIZE: 24, MAX_FLOORS: 10
+    };
+
+    const ITEM_TYPES = { WEAPON: 'weapon', ARMOR: 'armor', ACCESSORY: 'accessory', CONSUMABLE: 'consumable', GOLD: 'gold', KEY: 'key' };
+    const RARITY = {
+        COMMON: { name: 'common', color: '#ffffff', multiplier: 1 },
+        UNCOMMON: { name: 'uncommon', color: '#00ff00', multiplier: 1.3 },
+        RARE: { name: 'rare', color: '#4169e1', multiplier: 1.7 },
+        EPIC: { name: 'epic', color: '#9932cc', multiplier: 2.2 },
+        LEGENDARY: { name: 'legendary', color: '#ff8c00', multiplier: 3 }
+    };
+
+    const ITEMS = {
+        rusty_sword: { id: 'rusty_sword', name: 'Rusty Sword', type: ITEM_TYPES.WEAPON, icon: '🗡️', attack: 5, desc: 'A worn blade.', rarity: RARITY.COMMON },
+        iron_sword: { id: 'iron_sword', name: 'Iron Sword', type: ITEM_TYPES.WEAPON, icon: '⚔️', attack: 12, desc: 'Reliable iron.', rarity: RARITY.UNCOMMON },
+        fire_sword: { id: 'fire_sword', name: 'Blazing Sword', type: ITEM_TYPES.WEAPON, icon: '🔥', attack: 20, critChance: 10, desc: 'Eternal flame.', rarity: RARITY.RARE },
+        shadow_blade: { id: 'shadow_blade', name: 'Shadow Blade', type: ITEM_TYPES.WEAPON, icon: '🌑', attack: 28, critChance: 15, desc: 'Forged in darkness.', rarity: RARITY.EPIC },
+        excalibur: { id: 'excalibur', name: 'Excalibur', type: ITEM_TYPES.WEAPON, icon: '✨', attack: 45, critChance: 25, desc: 'Legendary blade.', rarity: RARITY.LEGENDARY },
+        battle_axe: { id: 'battle_axe', name: 'Battle Axe', type: ITEM_TYPES.WEAPON, icon: '🪓', attack: 18, desc: 'Heavy devastation.', rarity: RARITY.UNCOMMON },
+        war_hammer: { id: 'war_hammer', name: 'War Hammer', type: ITEM_TYPES.WEAPON, icon: '🔨', attack: 25, desc: 'Crushes armor.', rarity: RARITY.RARE },
+        leather_armor: { id: 'leather_armor', name: 'Leather Armor', type: ITEM_TYPES.ARMOR, icon: '🥋', defense: 5, desc: 'Basic protection.', rarity: RARITY.COMMON },
+        chainmail: { id: 'chainmail', name: 'Chainmail', type: ITEM_TYPES.ARMOR, icon: '🛡️', defense: 12, desc: 'Metal rings.', rarity: RARITY.UNCOMMON },
+        plate_armor: { id: 'plate_armor', name: 'Plate Armor', type: ITEM_TYPES.ARMOR, icon: '🏰', defense: 20, speed: -10, desc: 'Heavy plates.', rarity: RARITY.RARE },
+        dragon_armor: { id: 'dragon_armor', name: 'Dragon Scale', type: ITEM_TYPES.ARMOR, icon: '🐉', defense: 35, desc: 'Dragon scales.', rarity: RARITY.EPIC },
+        divine_armor: { id: 'divine_armor', name: 'Divine Plate', type: ITEM_TYPES.ARMOR, icon: '👼', defense: 50, speed: 10, desc: 'Blessed by gods.', rarity: RARITY.LEGENDARY },
+        copper_ring: { id: 'copper_ring', name: 'Copper Ring', type: ITEM_TYPES.ACCESSORY, icon: '💍', attack: 2, desc: 'Simple ring.', rarity: RARITY.COMMON },
+        silver_amulet: { id: 'silver_amulet', name: 'Silver Amulet', type: ITEM_TYPES.ACCESSORY, icon: '📿', defense: 5, maxHealth: 20, desc: 'Protection charm.', rarity: RARITY.UNCOMMON },
+        ruby_pendant: { id: 'ruby_pendant', name: 'Ruby Pendant', type: ITEM_TYPES.ACCESSORY, icon: '❤️', attack: 8, critChance: 8, desc: 'Inner fire.', rarity: RARITY.RARE },
+        vampiric_ring: { id: 'vampiric_ring', name: 'Vampiric Ring', type: ITEM_TYPES.ACCESSORY, icon: '🧛', lifesteal: 15, desc: 'Drains life.', rarity: RARITY.EPIC },
+        crown_of_kings: { id: 'crown_of_kings', name: 'Crown of Kings', type: ITEM_TYPES.ACCESSORY, icon: '👑', attack: 15, defense: 15, critChance: 15, desc: 'Royal crown.', rarity: RARITY.LEGENDARY },
+        health_potion: { id: 'health_potion', name: 'Health Potion', type: ITEM_TYPES.CONSUMABLE, icon: '🧪', heal: 30, desc: 'Restores 30 HP.', rarity: RARITY.COMMON, stackable: true, maxStack: 10 },
+        greater_health: { id: 'greater_health', name: 'Greater Health', type: ITEM_TYPES.CONSUMABLE, icon: '💊', heal: 60, desc: 'Restores 60 HP.', rarity: RARITY.UNCOMMON, stackable: true, maxStack: 10 },
+        mana_potion: { id: 'mana_potion', name: 'Mana Potion', type: ITEM_TYPES.CONSUMABLE, icon: '💎', mana: 25, desc: 'Restores 25 MP.', rarity: RARITY.COMMON, stackable: true, maxStack: 10 },
+        elixir: { id: 'elixir', name: 'Elixir of Life', type: ITEM_TYPES.CONSUMABLE, icon: '⚗️', heal: 100, mana: 50, desc: 'Full restore.', rarity: RARITY.RARE, stackable: true, maxStack: 5 },
+        strength_potion: { id: 'strength_potion', name: 'Strength Potion', type: ITEM_TYPES.CONSUMABLE, icon: '💪', buff: 'strength', duration: 30, desc: '+50% dmg 30s.', rarity: RARITY.UNCOMMON, stackable: true, maxStack: 5 },
+        speed_potion: { id: 'speed_potion', name: 'Speed Potion', type: ITEM_TYPES.CONSUMABLE, icon: '⚡', buff: 'speed', duration: 30, desc: '+50% speed 30s.', rarity: RARITY.UNCOMMON, stackable: true, maxStack: 5 },
+        shield_potion: { id: 'shield_potion', name: 'Shield Potion', type: ITEM_TYPES.CONSUMABLE, icon: '🛡️', buff: 'shield', duration: 20, desc: '+50% def 20s.', rarity: RARITY.RARE, stackable: true, maxStack: 5 },
+        gold_coin: { id: 'gold_coin', name: 'Gold', type: ITEM_TYPES.GOLD, icon: '🪙', value: 1, desc: 'Shiny gold.', rarity: RARITY.COMMON, stackable: true, maxStack: 9999 },
+        gold_pile: { id: 'gold_pile', name: 'Gold Pile', type: ITEM_TYPES.GOLD, icon: '💰', value: 10, desc: 'Pile of gold.', rarity: RARITY.UNCOMMON, stackable: true, maxStack: 9999 },
+        treasure_chest: { id: 'treasure_chest', name: 'Treasure', type: ITEM_TYPES.GOLD, icon: '💎', value: 50, desc: 'Gems!', rarity: RARITY.RARE, stackable: true, maxStack: 9999 }
+    };
+
+    const ENEMY_TYPES = {
+        rat: { id: 'rat', name: 'Giant Rat', health: 20, damage: 5, speed: 4, xp: 15, color: 0x8B4513, size: 0.4, lootTable: [{ item: 'gold_coin', chance: 0.8, count: [1, 3] }, { item: 'health_potion', chance: 0.1 }] },
+        bat: { id: 'bat', name: 'Cave Bat', health: 15, damage: 8, speed: 6, xp: 20, color: 0x2F2F2F, size: 0.35, flying: true, lootTable: [{ item: 'gold_coin', chance: 0.7, count: [1, 2] }, { item: 'mana_potion', chance: 0.15 }] },
+        goblin: { id: 'goblin', name: 'Goblin', health: 40, damage: 12, speed: 3.5, xp: 35, color: 0x228B22, size: 0.6, lootTable: [{ item: 'gold_pile', chance: 0.5 }, { item: 'rusty_sword', chance: 0.1 }, { item: 'leather_armor', chance: 0.08 }] },
+        skeleton: { id: 'skeleton', name: 'Skeleton', health: 50, damage: 15, speed: 2.5, xp: 40, color: 0xFFFACD, size: 0.8, lootTable: [{ item: 'gold_coin', chance: 0.8, count: [3, 6] }, { item: 'iron_sword', chance: 0.08 }] },
+        orc: { id: 'orc', name: 'Orc Warrior', health: 80, damage: 20, speed: 2.8, xp: 60, color: 0x556B2F, size: 1.0, lootTable: [{ item: 'gold_pile', chance: 0.7 }, { item: 'battle_axe', chance: 0.1 }, { item: 'chainmail', chance: 0.1 }] },
+        ghost: { id: 'ghost', name: 'Phantom', health: 45, damage: 18, speed: 4, xp: 55, color: 0xE0FFFF, size: 0.9, transparent: true, lootTable: [{ item: 'mana_potion', chance: 0.4 }, { item: 'silver_amulet', chance: 0.1 }] },
+        demon: { id: 'demon', name: 'Lesser Demon', health: 120, damage: 28, speed: 3.5, xp: 100, color: 0x8B0000, size: 1.1, emissive: 0x330000, lootTable: [{ item: 'treasure_chest', chance: 0.5 }, { item: 'fire_sword', chance: 0.12 }, { item: 'ruby_pendant', chance: 0.1 }] },
+        golem: { id: 'golem', name: 'Stone Golem', health: 200, damage: 35, speed: 1.5, xp: 120, color: 0x696969, size: 1.4, lootTable: [{ item: 'gold_pile', chance: 0.9, count: [2, 4] }, { item: 'plate_armor', chance: 0.15 }, { item: 'war_hammer', chance: 0.1 }] },
+        dragon: { id: 'dragon', name: 'Fire Drake', health: 350, damage: 45, speed: 3, xp: 250, color: 0xFF4500, size: 1.8, emissive: 0x441100, boss: true, lootTable: [{ item: 'treasure_chest', chance: 1, count: [2, 4] }, { item: 'dragon_armor', chance: 0.25 }, { item: 'shadow_blade', chance: 0.2 }] },
+        lich: { id: 'lich', name: 'Lich King', health: 300, damage: 40, speed: 2.5, xp: 300, color: 0x4B0082, size: 1.5, emissive: 0x1a001a, boss: true, lootTable: [{ item: 'treasure_chest', chance: 1, count: [3, 5] }, { item: 'vampiric_ring', chance: 0.3 }, { item: 'excalibur', chance: 0.1 }, { item: 'crown_of_kings', chance: 0.08 }] }
+    };
+
+    let gameState = { isPlaying: false, inventoryOpen: false, floor: 1, score: 0, gold: 0, kills: 0, playerHealth: 100, playerMaxHealth: 100, playerMana: 50, playerMaxMana: 50, playerLevel: 1, playerXP: 0, xpToLevel: 100, lastAttackTime: 0, discoveredCells: new Set(), buffs: {}, inventory: [], equipment: { weapon: null, armor: null, accessory: null }, hotbar: [null, null, null, null, null], selectedHotbar: 0, stats: { attack: 10, defense: 0, speed: 100, critChance: 5, lifesteal: 0, maxHealthBonus: 0 } };
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050508);
+    scene.fog = new THREE.FogExp2(0x050508, 0.04);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.y = CONFIG.PLAYER_HEIGHT;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.getElementById('game-container').appendChild(renderer.domElement);
+
+    const noise = new SimplexNoise();
+
+    function createProceduralTexture(type) {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        if (type === 'wall') {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, 512, 512);
+            for (let row = 0; row < 16; row++) {
+                const offset = (row % 2) * 32;
+                for (let col = 0; col < 9; col++) {
+                    const x = col * 64 + offset - 32;
+                    const y = row * 32;
+                    const v = noise.noise2D(col * 0.5, row * 0.5) * 20;
+                    ctx.fillStyle = `rgb(${50 + v}, ${50 + v}, ${52 + v})`;
+                    ctx.fillRect(x + 2, y + 2, 60, 28);
+                    for (let i = 0; i < 8; i++) {
+                        const nx = x + 2 + Math.random() * 58;
+                        const ny = y + 2 + Math.random() * 26;
+                        const nv = Math.random() * 20 - 10;
+                        ctx.fillStyle = `rgba(${60 + nv}, ${60 + nv}, ${60 + nv}, 0.3)`;
+                        ctx.fillRect(nx, ny, 3, 3);
+                    }
+                }
+            }
+        } else if (type === 'floor') {
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(0, 0, 512, 512);
+            for (let y = 0; y < 512; y += 64) {
+                for (let x = 0; x < 512; x += 64) {
+                    const v = noise.noise2D(x * 0.01, y * 0.01) * 15;
+                    ctx.fillStyle = `rgb(${35 + v}, ${35 + v}, ${37 + v})`;
+                    ctx.fillRect(x + 2, y + 2, 60, 60);
+                    for (let py = y + 2; py < y + 60; py += 4) {
+                        for (let px = x + 2; px < x + 60; px += 4) {
+                            const n = noise.noise2D(px * 0.1, py * 0.1) * 8;
+                            ctx.fillStyle = `rgb(${35 + v + n}, ${35 + v + n}, ${37 + v + n})`;
+                            ctx.fillRect(px, py, 4, 4);
+                        }
+                    }
+                }
+            }
+        } else {
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, 512, 512);
+            for (let y = 0; y < 512; y += 2) {
+                for (let x = 0; x < 512; x += 2) {
+                    const v = (noise.noise2D(x * 0.02, y * 0.02) + 1) / 2 * 15;
+                    ctx.fillStyle = `rgb(${10 + v}, ${10 + v}, ${12 + v})`;
+                    ctx.fillRect(x, y, 2, 2);
+                }
+            }
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        return texture;
+    }
+
+    const wallTexture = createProceduralTexture('wall');
+    wallTexture.repeat.set(2, 2);
+    const floorTexture = createProceduralTexture('floor');
+    floorTexture.repeat.set(CONFIG.DUNGEON_WIDTH / 4, CONFIG.DUNGEON_HEIGHT / 4);
+    const ceilingTexture = createProceduralTexture('ceiling');
+    ceilingTexture.repeat.set(CONFIG.DUNGEON_WIDTH / 2, CONFIG.DUNGEON_HEIGHT / 2);
+
+    const materials = {
+        floor: new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.85, metalness: 0.1 }),
+        wall: new THREE.MeshStandardMaterial({ map: wallTexture, roughness: 0.75, metalness: 0.15 }),
+        ceiling: new THREE.MeshStandardMaterial({ map: ceilingTexture, roughness: 1, metalness: 0 }),
+        exit: new THREE.MeshStandardMaterial({ color: 0x4169e1, roughness: 0.3, metalness: 0.6, emissive: 0x112244, emissiveIntensity: 0.5 }),
+        trap: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.5 }),
+        spike: new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.4, metalness: 0.7 }),
+        chest: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.3 }),
+        chestGold: new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.3, metalness: 0.8, emissive: 0x332200 })
+    };
+
+    const ambientLight = new THREE.AmbientLight(0x111122, 0.3);
+    scene.add(ambientLight);
+    const playerLight = new THREE.PointLight(0xff8844, 1.2, 18);
+    playerLight.castShadow = true;
+    scene.add(playerLight);
+    const playerLight2 = new THREE.PointLight(0x4444ff, 0.3, 12);
+    scene.add(playerLight2);
+
+    class FirstPersonControls {
+        constructor(cam, el) {
+            this.camera = cam; this.domElement = el; this.isLocked = false;
+            this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
+            this.onMouseMove = (e) => {
+                if (!this.isLocked || gameState.inventoryOpen) return;
+                this.euler.setFromQuaternion(this.camera.quaternion);
+                this.euler.y -= (e.movementX || 0) * 0.002;
+                this.euler.x -= (e.movementY || 0) * 0.002;
+                this.euler.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.euler.x));
+                this.camera.quaternion.setFromEuler(this.euler);
+            };
+            document.addEventListener('pointerlockchange', () => {
+                this.isLocked = document.pointerLockElement === this.domElement;
+                if (this.isLocked) document.addEventListener('mousemove', this.onMouseMove);
+                else document.removeEventListener('mousemove', this.onMouseMove);
+            });
+        }
+        lock() { this.domElement.requestPointerLock(); }
+        unlock() { document.exitPointerLock(); }
+        getDirection() { return new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); }
+    }
+
+    const controls = new FirstPersonControls(camera, renderer.domElement);
+    const moveState = { forward: false, backward: false, left: false, right: false };
+
+    let dungeon = [], rooms = [], corridors = [], enemies = [], lootItems = [], traps = [], chests = [], exitDoor = null, dungeonMeshes = [];
+
+    class BSPNode {
+        constructor(x, y, w, h) { this.x = x; this.y = y; this.width = w; this.height = h; this.left = null; this.right = null; this.room = null; }
+        split(min) {
+            if (this.left || this.right) return false;
+            let splitH = Math.random() > 0.5;
+            if (this.width > this.height && this.width / this.height >= 1.25) splitH = false;
+            else if (this.height > this.width && this.height / this.width >= 1.25) splitH = true;
+            const max = (splitH ? this.height : this.width) - min;
+            if (max <= min) return false;
+            const split = Math.floor(Math.random() * (max - min)) + min;
+            if (splitH) { this.left = new BSPNode(this.x, this.y, this.width, split); this.right = new BSPNode(this.x, this.y + split, this.width, this.height - split); }
+            else { this.left = new BSPNode(this.x, this.y, split, this.height); this.right = new BSPNode(this.x + split, this.y, this.width - split, this.height); }
+            return true;
+        }
+        createRooms(min) {
+            if (this.left || this.right) { if (this.left) this.left.createRooms(min); if (this.right) this.right.createRooms(min); }
+            else {
+                const w = Math.floor(Math.random() * (this.width - min - 2)) + min;
+                const h = Math.floor(Math.random() * (this.height - min - 2)) + min;
+                const x = this.x + Math.floor(Math.random() * (this.width - w - 1)) + 1;
+                const y = this.y + Math.floor(Math.random() * (this.height - h - 1)) + 1;
+                this.room = { x, y, width: w, height: h };
+            }
+        }
+        getRoom() {
+            if (this.room) return this.room;
+            let l = null, r = null;
+            if (this.left) l = this.left.getRoom();
+            if (this.right) r = this.right.getRoom();
+            if (!l && !r) return null;
+            if (!l) return r; if (!r) return l;
+            return Math.random() > 0.5 ? l : r;
+        }
+    }
+
+    function generateDungeon() {
+        dungeon = Array(CONFIG.DUNGEON_HEIGHT).fill(null).map(() => Array(CONFIG.DUNGEON_WIDTH).fill(1));
+        rooms = []; corridors = [];
+        const root = new BSPNode(1, 1, CONFIG.DUNGEON_WIDTH - 2, CONFIG.DUNGEON_HEIGHT - 2);
+        const nodes = [root];
+        for (let i = 0; i < 4 + Math.floor(gameState.floor / 2); i++) {
+            [...nodes].forEach(n => { if (n.split(7)) nodes.push(n.left, n.right); });
+        }
+        root.createRooms(5);
+        function carve(node) {
+            if (node.room) {
+                rooms.push(node.room);
+                for (let y = node.room.y; y < node.room.y + node.room.height; y++)
+                    for (let x = node.room.x; x < node.room.x + node.room.width; x++)
+                        if (y > 0 && y < CONFIG.DUNGEON_HEIGHT - 1 && x > 0 && x < CONFIG.DUNGEON_WIDTH - 1) dungeon[y][x] = 0;
+            }
+            if (node.left) carve(node.left);
+            if (node.right) carve(node.right);
+        }
+        carve(root);
+        function connect(node) {
+            if (node.left && node.right) {
+                const l = node.left.getRoom(), r = node.right.getRoom();
+                if (l && r) {
+                    const x1 = Math.floor(l.x + l.width / 2), y1 = Math.floor(l.y + l.height / 2);
+                    const x2 = Math.floor(r.x + r.width / 2), y2 = Math.floor(r.y + r.height / 2);
+                    if (Math.random() > 0.5) { carveH(x1, x2, y1); carveV(y1, y2, x2); }
+                    else { carveV(y1, y2, x1); carveH(x1, x2, y2); }
+                }
+            }
+            if (node.left) connect(node.left);
+            if (node.right) connect(node.right);
+        }
+        function carveH(x1, x2, y) { for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) if (y > 0 && y < CONFIG.DUNGEON_HEIGHT - 1 && x > 0 && x < CONFIG.DUNGEON_WIDTH - 1) { dungeon[y][x] = 0; corridors.push({ x, y }); } }
+        function carveV(y1, y2, x) { for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) if (y > 0 && y < CONFIG.DUNGEON_HEIGHT - 1 && x > 0 && x < CONFIG.DUNGEON_WIDTH - 1) { dungeon[y][x] = 0; corridors.push({ x, y }); } }
+        connect(root);
+    }
+
+    function buildDungeon3D() {
+        dungeonMeshes.forEach(m => { scene.remove(m); if (m.geometry) m.geometry.dispose(); });
+        dungeonMeshes = [];
+        const cs = CONFIG.CELL_SIZE, wh = CONFIG.WALL_HEIGHT;
+        
+        const floorGeom = new THREE.PlaneGeometry(CONFIG.DUNGEON_WIDTH * cs, CONFIG.DUNGEON_HEIGHT * cs);
+        const floor = new THREE.Mesh(floorGeom, materials.floor);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.set((CONFIG.DUNGEON_WIDTH * cs) / 2, 0, (CONFIG.DUNGEON_HEIGHT * cs) / 2);
+        floor.receiveShadow = true;
+        scene.add(floor);
+        dungeonMeshes.push(floor);
+        
+        const ceiling = new THREE.Mesh(floorGeom.clone(), materials.ceiling);
+        ceiling.rotation.x = Math.PI / 2;
+        ceiling.position.set((CONFIG.DUNGEON_WIDTH * cs) / 2, wh, (CONFIG.DUNGEON_HEIGHT * cs) / 2);
+        scene.add(ceiling);
+        dungeonMeshes.push(ceiling);
+        
+        let wallCount = 0;
+        dungeon.forEach(row => row.forEach(cell => { if (cell === 1) wallCount++; }));
+        
+        const wallGeom = new THREE.BoxGeometry(cs, wh, cs);
+        const wallMesh = new THREE.InstancedMesh(wallGeom, materials.wall, wallCount);
+        wallMesh.castShadow = true;
+        wallMesh.receiveShadow = true;
+        const matrix = new THREE.Matrix4();
+        let idx = 0;
+        dungeon.forEach((row, y) => row.forEach((cell, x) => {
+            if (cell === 1) {
+                matrix.setPosition(x * cs + cs / 2, wh / 2, y * cs + cs / 2);
+                wallMesh.setMatrixAt(idx++, matrix);
+            }
+        }));
+        wallMesh.instanceMatrix.needsUpdate = true;
+        scene.add(wallMesh);
+        dungeonMeshes.push(wallMesh);
+        
+        rooms.forEach(room => {
+            const numTorches = Math.floor(room.width * room.height / 25) + 1;
+            for (let i = 0; i < numTorches; i++) {
+                const tx = (room.x + 1 + Math.random() * (room.width - 2)) * cs;
+                const tz = (room.y + 1 + Math.random() * (room.height - 2)) * cs;
+                const tColor = Math.random() > 0.7 ? 0x44ff44 : 0xff6600;
+                const tLight = new THREE.PointLight(tColor, 0.6, 14);
+                tLight.position.set(tx, wh - 0.8, tz);
+                tLight.userData = { baseIntensity: 0.6, flickerOffset: Math.random() * 100 };
+                scene.add(tLight);
+                dungeonMeshes.push(tLight);
+                const flameGeom = new THREE.ConeGeometry(0.12, 0.25, 8);
+                const flameMat = new THREE.MeshBasicMaterial({ color: tColor });
+                const flame = new THREE.Mesh(flameGeom, flameMat);
+                flame.position.set(tx, wh - 0.5, tz);
+                flame.userData = { isFlame: true, baseY: wh - 0.5 };
+                scene.add(flame);
+                dungeonMeshes.push(flame);
+            }
+        });
+    }
+
+    function spawnEntities() {
+        enemies.forEach(e => { scene.remove(e.mesh); if (e.healthBar) scene.remove(e.healthBar); });
+        enemies = [];
+        lootItems.forEach(l => scene.remove(l.mesh));
+        lootItems = [];
+        traps.forEach(t => { scene.remove(t.mesh); if (t.spikes) scene.remove(t.spikes); });
+        traps = [];
+        chests.forEach(c => scene.remove(c.mesh));
+        chests = [];
+        if (exitDoor) scene.remove(exitDoor);
+        
+        const cs = CONFIG.CELL_SIZE, floor = gameState.floor;
+        let enemyPool = floor <= 2 ? ['rat', 'bat', 'goblin'] : floor <= 4 ? ['goblin', 'skeleton', 'bat', 'orc'] : floor <= 6 ? ['skeleton', 'orc', 'ghost', 'goblin'] : floor <= 8 ? ['orc', 'ghost', 'demon', 'golem'] : ['demon', 'golem', 'dragon', 'lich'];
+        
+        const enemyCount = 5 + floor * 3;
+        for (let i = 1; i < rooms.length && enemies.length < enemyCount; i++) {
+            const room = rooms[i];
+            const roomEnemies = Math.floor(Math.random() * 3) + 1 + Math.floor(floor / 3);
+            for (let j = 0; j < roomEnemies && enemies.length < enemyCount; j++) {
+                const type = enemyPool[Math.floor(Math.random() * enemyPool.length)];
+                spawnEnemy((room.x + 1 + Math.random() * (room.width - 2)) * cs, (room.y + 1 + Math.random() * (room.height - 2)) * cs, type);
+            }
+        }
+        
+        if (floor % 3 === 0 && rooms.length > 2) {
+            const bossRoom = rooms[rooms.length - 2];
+            spawnEnemy((bossRoom.x + bossRoom.width / 2) * cs, (bossRoom.y + bossRoom.height / 2) * cs, floor >= 9 ? 'lich' : (floor >= 6 ? 'dragon' : 'golem'));
+        }
+        
+        for (let i = 0; i < rooms.length && lootItems.length < 15; i++) {
+            const room = rooms[i];
+            for (let j = 0; j < Math.floor(Math.random() * 3) + 1; j++) {
+                const x = (room.x + 1 + Math.random() * (room.width - 2)) * cs;
+                const z = (room.y + 1 + Math.random() * (room.height - 2)) * cs;
+                const roll = Math.random();
+                if (roll < 0.4) spawnLoot(x, z, 'gold_coin', Math.floor(Math.random() * 5) + 1);
+                else if (roll < 0.55) spawnLoot(x, z, 'gold_pile', Math.floor(Math.random() * 2) + 1);
+                else if (roll < 0.7) spawnLoot(x, z, 'health_potion', 1);
+                else if (roll < 0.8) spawnLoot(x, z, 'mana_potion', 1);
+                else { const equip = Object.keys(ITEMS).filter(k => [ITEM_TYPES.WEAPON, ITEM_TYPES.ARMOR, ITEM_TYPES.ACCESSORY].includes(ITEMS[k].type)); spawnLoot(x, z, equip[Math.floor(Math.random() * equip.length)], 1); }
+            }
+        }
+        
+        for (let i = 0; i < 2 + Math.floor(floor / 2) && i < rooms.length - 1; i++) {
+            const room = rooms[Math.floor(Math.random() * (rooms.length - 1)) + 1];
+            spawnChest((room.x + room.width / 2) * cs, (room.y + room.height / 2) * cs);
+        }
+        
+        const shuffledCorridors = [...corridors].sort(() => Math.random() - 0.5);
+        for (let i = 0; i < Math.min(3 + floor, shuffledCorridors.length); i++) {
+            spawnTrap(shuffledCorridors[i].x * cs + cs / 2, shuffledCorridors[i].y * cs + cs / 2);
+        }
+        
+        if (rooms.length > 0) {
+            const lastRoom = rooms[rooms.length - 1];
+            const exitX = (lastRoom.x + lastRoom.width / 2) * cs;
+            const exitZ = (lastRoom.y + lastRoom.height / 2) * cs;
+            exitDoor = new THREE.Mesh(new THREE.BoxGeometry(1.8, 3.2, 0.4), materials.exit);
+            exitDoor.position.set(exitX, 1.6, exitZ);
+            scene.add(exitDoor);
+            const exitLight = new THREE.PointLight(0x4169e1, 1.5, 12);
+            exitLight.position.set(exitX, 3, exitZ);
+            scene.add(exitLight);
+            dungeonMeshes.push(exitLight);
+        }
+    }
+
+    function spawnEnemy(x, z, type) {
+        const data = ENEMY_TYPES[type];
+        if (!data) return;
+        const geom = data.boss ? new THREE.DodecahedronGeometry(data.size * 0.6, 1) : new THREE.BoxGeometry(data.size * 0.7, data.size * 1.2, data.size * 0.7);
+        const mat = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.6, metalness: 0.3, emissive: data.emissive || 0, transparent: data.transparent || false, opacity: data.transparent ? 0.7 : 1 });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(x, data.size * 0.6, z);
+        mesh.castShadow = true;
+        const eyeGeom = new THREE.SphereGeometry(data.size * 0.08, 8, 8);
+        const eyeMat = new THREE.MeshBasicMaterial({ color: data.boss ? 0xffff00 : 0xff0000 });
+        const leftEye = new THREE.Mesh(eyeGeom, eyeMat);
+        leftEye.position.set(-data.size * 0.15, data.size * 0.3, -data.size * 0.35);
+        mesh.add(leftEye);
+        const rightEye = new THREE.Mesh(eyeGeom, eyeMat);
+        rightEye.position.set(data.size * 0.15, data.size * 0.3, -data.size * 0.35);
+        mesh.add(rightEye);
+        scene.add(mesh);
+        const hbGeom = new THREE.PlaneGeometry(1.2, 0.12);
+        const hbMat = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+        const healthBar = new THREE.Mesh(hbGeom, hbMat);
+        healthBar.position.set(x, data.size * 1.5, z);
+        scene.add(healthBar);
+        const scaledHealth = Math.floor(data.health * (1 + gameState.floor * 0.15));
+        const scaledDamage = Math.floor(data.damage * (1 + gameState.floor * 0.1));
+        enemies.push({ mesh, healthBar, type, data, health: scaledHealth, maxHealth: scaledHealth, damage: scaledDamage, state: 'idle', lastStateChange: Date.now(), targetPosition: null, attackCooldown: 0, size: data.size });
+    }
+
+    function spawnLoot(x, z, itemId, count = 1) {
+        const data = ITEMS[itemId];
+        if (!data) return;
+        const geom = data.type === ITEM_TYPES.GOLD ? new THREE.CylinderGeometry(0.25, 0.25, 0.08, 12) : new THREE.BoxGeometry(0.4, 0.4, 0.4);
+        const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(data.rarity.color), roughness: 0.3, metalness: 0.7, emissive: new THREE.Color(data.rarity.color).multiplyScalar(0.2) });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(x, 0.4, z);
+        if (data.type === ITEM_TYPES.GOLD) mesh.rotation.x = Math.PI / 2;
+        scene.add(mesh);
+        lootItems.push({ mesh, itemId, count, baseY: 0.4 });
+    }
+
+    function spawnChest(x, z) {
+        const chest = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.5), materials.chest);
+        chest.position.set(x, 0.3, z);
+        const lid = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.15, 0.55), materials.chest);
+        lid.position.y = 0.35;
+        chest.add(lid);
+        const trim = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.1), materials.chestGold);
+        trim.position.set(0, 0.1, -0.25);
+        chest.add(trim);
+        scene.add(chest);
+        chests.push({ mesh: chest, x, z, opened: false });
+    }
+
+    function spawnTrap(x, z) {
+        const base = new THREE.Mesh(new THREE.BoxGeometry(2, 0.1, 2), materials.trap);
+        base.position.set(x, 0.05, z);
+        scene.add(base);
+        const spikes = new THREE.Group();
+        for (let i = 0; i < 9; i++) {
+            const spike = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.5, 4), materials.spike);
+            spike.position.set((i % 3 - 1) * 0.5, -0.3, (Math.floor(i / 3) - 1) * 0.5);
+            spikes.add(spike);
+        }
+        spikes.position.set(x, 0, z);
+        scene.add(spikes);
+        traps.push({ mesh: base, spikes, x, z, triggered: false, cooldown: 0 });
+    }
+
+    function isWall(x, z) {
+        const gx = Math.floor(x / CONFIG.CELL_SIZE), gz = Math.floor(z / CONFIG.CELL_SIZE);
+        if (gz < 0 || gz >= dungeon.length || gx < 0 || gx >= dungeon[0].length) return true;
+        return dungeon[gz][gx] === 1;
+    }
+
+    function checkCollision(x, z, r = 0.4) {
+        const points = [[x + r, z], [x - r, z], [x, z + r], [x, z - r], [x + r * 0.7, z + r * 0.7], [x - r * 0.7, z - r * 0.7], [x + r * 0.7, z - r * 0.7], [x - r * 0.7, z + r * 0.7]];
+        return points.some(([px, pz]) => isWall(px, pz));
+    }
+
+    function addToInventory(itemId, count = 1) {
+        const data = ITEMS[itemId];
+        if (!data) return false;
+        if (data.type === ITEM_TYPES.GOLD) { gameState.gold += data.value * count; return true; }
+        if (data.stackable) {
+            const existing = gameState.inventory.find(i => i.itemId === itemId);
+            if (existing) { existing.count = Math.min(existing.count + count, data.maxStack); return true; }
+        }
+        if (gameState.inventory.length < CONFIG.INVENTORY_SIZE) { gameState.inventory.push({ itemId, count }); return true; }
+        return false;
+    }
+
+    function removeFromInventory(index, count = 1) {
+        if (index < 0 || index >= gameState.inventory.length) return false;
+        gameState.inventory[index].count -= count;
+        if (gameState.inventory[index].count <= 0) gameState.inventory.splice(index, 1);
+        return true;
+    }
+
+    function equipItem(index) {
+        if (index < 0 || index >= gameState.inventory.length) return;
+        const invItem = gameState.inventory[index];
+        const data = ITEMS[invItem.itemId];
+        if (!data || ![ITEM_TYPES.WEAPON, ITEM_TYPES.ARMOR, ITEM_TYPES.ACCESSORY].includes(data.type)) return;
+        const slot = data.type;
+        const current = gameState.equipment[slot];
+        gameState.equipment[slot] = invItem.itemId;
+        if (current) gameState.inventory[index] = { itemId: current, count: 1 };
+        else gameState.inventory.splice(index, 1);
+        updateEquipmentDisplay(); updateInventoryUI(); calculateStats();
+    }
+
+    function unequipItem(slot) {
+        if (!gameState.equipment[slot]) return;
+        if (gameState.inventory.length >= CONFIG.INVENTORY_SIZE) { showMessage('Inventory full!', 'damage'); return; }
+        gameState.inventory.push({ itemId: gameState.equipment[slot], count: 1 });
+        gameState.equipment[slot] = null;
+        updateEquipmentDisplay(); updateInventoryUI(); calculateStats();
+    }
+
+    function useItem(index) {
+        if (index < 0 || index >= gameState.inventory.length) return;
+        const invItem = gameState.inventory[index];
+        const data = ITEMS[invItem.itemId];
+        if (!data || data.type !== ITEM_TYPES.CONSUMABLE) return;
+        if (data.heal) { gameState.playerHealth = Math.min(gameState.playerMaxHealth, gameState.playerHealth + data.heal); showMessage(`+${data.heal} Health`, 'heal'); }
+        if (data.mana) { gameState.playerMana = Math.min(gameState.playerMaxMana, gameState.playerMana + data.mana); showMessage(`+${data.mana} Mana`, 'heal'); }
+        if (data.buff) { gameState.buffs[data.buff] = { duration: data.duration, startTime: Date.now() }; showMessage(`${data.name} active!`, 'loot'); }
+        removeFromInventory(index, 1);
+        updateHealthUI(); updateInventoryUI(); updateHotbar();
+    }
+
+    function useHotbarItem() {
+        const hotbarItem = gameState.hotbar[gameState.selectedHotbar];
+        if (!hotbarItem) return;
+        const invIndex = gameState.inventory.findIndex(i => i.itemId === hotbarItem);
+        if (invIndex >= 0) useItem(invIndex);
+    }
+
+    function assignToHotbar(invIndex, hotbarSlot) {
+        if (invIndex < 0 || invIndex >= gameState.inventory.length) return;
+        const data = ITEMS[gameState.inventory[invIndex].itemId];
+        if (data.type === ITEM_TYPES.CONSUMABLE) { gameState.hotbar[hotbarSlot] = gameState.inventory[invIndex].itemId; updateHotbar(); }
+    }
+
+    function calculateStats() {
+        let attack = CONFIG.BASE_ATTACK, defense = CONFIG.BASE_DEFENSE, speed = 100, critChance = 5, lifesteal = 0, maxHealthBonus = 0;
+        ['weapon', 'armor', 'accessory'].forEach(slot => {
+            const itemId = gameState.equipment[slot];
+            if (itemId) {
+                const item = ITEMS[itemId];
+                if (item.attack) attack += item.attack;
+                if (item.defense) defense += item.defense;
+                if (item.speed) speed += item.speed;
+                if (item.critChance) critChance += item.critChance;
+                if (item.lifesteal) lifesteal += item.lifesteal;
+                if (item.maxHealth) maxHealthBonus += item.maxHealth;
+            }
+        });
+        if (gameState.buffs.strength && Date.now() - gameState.buffs.strength.startTime < gameState.buffs.strength.duration * 1000) attack = Math.floor(attack * 1.5);
+        if (gameState.buffs.shield && Date.now() - gameState.buffs.shield.startTime < gameState.buffs.shield.duration * 1000) defense = Math.floor(defense * 1.5);
+        if (gameState.buffs.speed && Date.now() - gameState.buffs.speed.startTime < gameState.buffs.speed.duration * 1000) speed = Math.floor(speed * 1.5);
+        gameState.stats = { attack, defense, speed, critChance, lifesteal, maxHealthBonus };
+        gameState.playerMaxHealth = CONFIG.PLAYER_MAX_HEALTH + maxHealthBonus;
+        updateStatsDisplay();
+    }
+
+    function updateEnemies(dt) {
+        const playerPos = camera.position.clone();
+        const now = Date.now();
+        enemies.forEach(enemy => {
+            if (enemy.health <= 0) return;
+            const dist = enemy.mesh.position.distanceTo(playerPos);
+            switch (enemy.state) {
+                case 'idle':
+                    if (dist < CONFIG.SIGHT_RANGE) { enemy.state = 'chase'; enemy.lastStateChange = now; }
+                    else if (now - enemy.lastStateChange > 2500 + Math.random() * 2000) {
+                        enemy.state = 'patrol'; enemy.lastStateChange = now;
+                        const angle = Math.random() * Math.PI * 2, d = Math.random() * 4 + 2;
+                        enemy.targetPosition = new THREE.Vector3(enemy.mesh.position.x + Math.cos(angle) * d, enemy.mesh.position.y, enemy.mesh.position.z + Math.sin(angle) * d);
+                    }
+                    break;
+                case 'patrol':
+                    if (dist < CONFIG.SIGHT_RANGE) { enemy.state = 'chase'; enemy.lastStateChange = now; }
+                    else if (enemy.targetPosition) {
+                        const dir = enemy.targetPosition.clone().sub(enemy.mesh.position).normalize();
+                        const speed = enemy.data.speed * dt;
+                        const nx = enemy.mesh.position.x + dir.x * speed, nz = enemy.mesh.position.z + dir.z * speed;
+                        if (!checkCollision(nx, nz, enemy.size * 0.4)) { enemy.mesh.position.x = nx; enemy.mesh.position.z = nz; }
+                        enemy.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+                        if (enemy.mesh.position.distanceTo(enemy.targetPosition) < 1) { enemy.state = 'idle'; enemy.lastStateChange = now; }
+                    }
+                    break;
+                case 'chase':
+                    if (dist > CONFIG.SIGHT_RANGE * 1.5) { enemy.state = 'idle'; enemy.lastStateChange = now; }
+                    else if (dist < 1.8) {
+                        if (enemy.attackCooldown <= 0) {
+                            const damage = Math.max(1, enemy.damage - Math.floor(gameState.stats.defense * 0.5));
+                            damagePlayer(damage);
+                            addCombatLog(`${enemy.data.name} hits for ${damage}!`, 'damage');
+                            enemy.attackCooldown = 1200;
+                        }
+                    } else {
+                        const dir = playerPos.clone().sub(enemy.mesh.position).normalize();
+                        const speed = enemy.data.speed * dt * (enemy.data.boss ? 0.8 : 1);
+                        const nx = enemy.mesh.position.x + dir.x * speed, nz = enemy.mesh.position.z + dir.z * speed;
+                        if (!checkCollision(nx, nz, enemy.size * 0.4)) { enemy.mesh.position.x = nx; enemy.mesh.position.z = nz; }
+                        enemy.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+                    }
+                    break;
+            }
+            if (enemy.attackCooldown > 0) enemy.attackCooldown -= dt * 1000;
+            enemy.healthBar.position.set(enemy.mesh.position.x, enemy.mesh.position.y + enemy.size * 0.9, enemy.mesh.position.z);
+            enemy.healthBar.lookAt(camera.position);
+            enemy.healthBar.scale.x = Math.max(0, enemy.health / enemy.maxHealth);
+            const bob = enemy.data.flying ? Math.sin(now * 0.008) * 0.3 : Math.sin(now * 0.005) * 0.05;
+            enemy.mesh.position.y = enemy.size * 0.6 + bob;
+        });
+    }
+
+    function damagePlayer(amount) {
+        const finalDamage = Math.max(1, amount - Math.floor(gameState.stats.defense * 0.3));
+        gameState.playerHealth -= finalDamage;
+        updateHealthUI();
+        document.getElementById('damage-flash').classList.add('active');
+        setTimeout(() => document.getElementById('damage-flash').classList.remove('active'), 150);
+        if (gameState.playerHealth <= 0) gameOver();
+    }
+
+    function attack() {
+        const now = Date.now();
+        if (now - gameState.lastAttackTime < CONFIG.ATTACK_COOLDOWN) return;
+        gameState.lastAttackTime = now;
+        const playerPos = camera.position.clone();
+        const direction = controls.getDirection().normalize();
+        let hitEnemy = null, closestDist = CONFIG.ATTACK_RANGE;
+        enemies.forEach(enemy => {
+            if (enemy.health <= 0) return;
+            const toEnemy = enemy.mesh.position.clone().sub(playerPos);
+            const dist = toEnemy.length();
+            if (dist < closestDist) {
+                toEnemy.normalize();
+                if (direction.dot(toEnemy) > 0.4) { hitEnemy = enemy; closestDist = dist; }
+            }
+        });
+        if (hitEnemy) {
+            let damage = gameState.stats.attack;
+            const isCrit = Math.random() * 100 < gameState.stats.critChance;
+            if (isCrit) damage = Math.floor(damage * 2);
+            hitEnemy.health -= damage;
+            if (gameState.stats.lifesteal > 0) {
+                const heal = Math.floor(damage * gameState.stats.lifesteal / 100);
+                gameState.playerHealth = Math.min(gameState.playerMaxHealth, gameState.playerHealth + heal);
+                updateHealthUI();
+            }
+            hitEnemy.mesh.material.emissive.setHex(0xffffff);
+            setTimeout(() => { if (hitEnemy.mesh.material) hitEnemy.mesh.material.emissive.setHex(hitEnemy.data.emissive || 0); }, 100);
+            showMessage(`${damage}${isCrit ? ' CRIT!' : ''}`, 'damage');
+            addCombatLog(`Hit ${hitEnemy.data.name} for ${damage}${isCrit ? ' CRIT!' : ''}`, 'damage');
+            if (hitEnemy.health <= 0) killEnemy(hitEnemy);
+        }
+    }
+
+    function killEnemy(enemy) {
+        scene.remove(enemy.mesh);
+        scene.remove(enemy.healthBar);
+        const xp = Math.floor(enemy.data.xp * (1 + gameState.floor * 0.1));
+        gainXP(xp);
+        gameState.score += enemy.data.boss ? 500 : 50;
+        gameState.kills++;
+        showMessage(`+${xp} XP`, 'xp');
+        addCombatLog(`${enemy.data.name} defeated! +${xp} XP`, 'loot');
+        enemy.data.lootTable.forEach(drop => {
+            if (Math.random() < drop.chance) {
+                const count = drop.count ? Math.floor(Math.random() * (drop.count[1] - drop.count[0] + 1)) + drop.count[0] : 1;
+                spawnLoot(enemy.mesh.position.x, enemy.mesh.position.z, drop.item, count);
+            }
+        });
+        updateScoreUI();
+    }
+
+    function gainXP(amount) {
+        gameState.playerXP += amount;
+        while (gameState.playerXP >= gameState.xpToLevel) {
+            gameState.playerXP -= gameState.xpToLevel;
+            gameState.playerLevel++;
+            gameState.xpToLevel = Math.floor(CONFIG.XP_BASE * Math.pow(CONFIG.XP_MULTIPLIER, gameState.playerLevel - 1));
+            gameState.playerMaxHealth += 10;
+            gameState.playerHealth = gameState.playerMaxHealth;
+            gameState.playerMaxMana += 5;
+            gameState.playerMana = gameState.playerMaxMana;
+            showMessage(`LEVEL UP! Now level ${gameState.playerLevel}`, 'levelup');
+            document.getElementById('levelup-effect').classList.add('active');
+            setTimeout(() => document.getElementById('levelup-effect').classList.remove('active'), 1000);
+        }
+        updateHealthUI();
+    }
+
+    function interact() {
+        const playerPos = camera.position.clone();
+        if (exitDoor && playerPos.distanceTo(exitDoor.position) < 2.5) { levelComplete(); return; }
+        for (const chest of chests) {
+            if (chest.opened) continue;
+            if (Math.sqrt(Math.pow(playerPos.x - chest.x, 2) + Math.pow(playerPos.z - chest.z, 2)) < 2) { openChest(chest); return; }
+        }
+        for (let i = lootItems.length - 1; i >= 0; i--) {
+            if (playerPos.distanceTo(lootItems[i].mesh.position) < 2) { collectLoot(lootItems[i], i); return; }
+        }
+    }
+
+    function openChest(chest) {
+        chest.opened = true;
+        chest.mesh.children[0].rotation.x = -Math.PI / 2;
+        showMessage('Chest opened!', 'loot');
+        const numItems = Math.floor(Math.random() * 2) + 2;
+        for (let i = 0; i < numItems; i++) {
+            const roll = Math.random();
+            let itemId;
+            if (roll < 0.3) itemId = 'treasure_chest';
+            else if (roll < 0.5) itemId = gameState.floor > 5 ? 'elixir' : 'greater_health';
+            else { const equipPool = Object.keys(ITEMS).filter(k => [ITEM_TYPES.WEAPON, ITEM_TYPES.ARMOR, ITEM_TYPES.ACCESSORY].includes(ITEMS[k].type)); itemId = equipPool[Math.floor(Math.random() * equipPool.length)]; }
+            spawnLoot(chest.x + (i - numItems / 2) * 0.5, chest.z + 1, itemId, 1);
+        }
+    }
+
+    function collectLoot(item, index) {
+        const data = ITEMS[item.itemId];
+        if (addToInventory(item.itemId, item.count)) {
+            scene.remove(item.mesh);
+            lootItems.splice(index, 1);
+            showMessage(data.type === ITEM_TYPES.GOLD ? `+${data.value * item.count} Gold` : `Got ${data.name}!`, 'loot');
+            updateScoreUI(); updateInventoryUI(); updateHotbar();
+        } else showMessage('Inventory full!', 'damage');
+    }
+
+    function updateTraps(dt) {
+        const playerPos = camera.position.clone();
+        traps.forEach(trap => {
+            const dist = Math.sqrt(Math.pow(playerPos.x - trap.x, 2) + Math.pow(playerPos.z - trap.z, 2));
+            if (dist < 1.2 && trap.cooldown <= 0) {
+                trap.triggered = true;
+                trap.cooldown = 2500;
+                const spikes = trap.spikes;
+                const animate = () => {
+                    if (spikes.position.y < 0.35) { spikes.position.y += 0.15; requestAnimationFrame(animate); }
+                    else setTimeout(() => { const retract = () => { if (spikes.position.y > 0) { spikes.position.y -= 0.08; requestAnimationFrame(retract); } }; retract(); }, 400);
+                };
+                animate();
+                const trapDamage = 10 + gameState.floor * 3;
+                damagePlayer(trapDamage);
+                showMessage(`Trap! -${trapDamage}`, 'damage');
+            }
+            if (trap.cooldown > 0) trap.cooldown -= dt * 1000;
+        });
+    }
+
+    function updateHealthUI() {
+        document.getElementById('health-fill').style.width = (gameState.playerHealth / gameState.playerMaxHealth) * 100 + '%';
+        document.getElementById('health-text').textContent = `${Math.max(0, Math.floor(gameState.playerHealth))}/${gameState.playerMaxHealth}`;
+        document.getElementById('mana-fill').style.width = (gameState.playerMana / gameState.playerMaxMana) * 100 + '%';
+        document.getElementById('mana-text').textContent = `${Math.floor(gameState.playerMana)}/${gameState.playerMaxMana}`;
+        document.getElementById('xp-fill').style.width = (gameState.playerXP / gameState.xpToLevel) * 100 + '%';
+        document.getElementById('xp-text').textContent = `${gameState.playerXP}/${gameState.xpToLevel}`;
+        document.getElementById('player-level').textContent = gameState.playerLevel;
+    }
+
+    function updateScoreUI() {
+        document.getElementById('score-display').textContent = gameState.score;
+        document.getElementById('gold-display').textContent = gameState.gold;
+        document.getElementById('floor-display').textContent = gameState.floor;
+        document.getElementById('kills-display').textContent = gameState.kills;
+    }
+
+    function updateEquipmentDisplay() {
+        document.getElementById('equipped-weapon').textContent = gameState.equipment.weapon ? ITEMS[gameState.equipment.weapon].icon : '🗡️';
+        document.getElementById('equipped-armor').textContent = gameState.equipment.armor ? ITEMS[gameState.equipment.armor].icon : '👕';
+        document.getElementById('equipped-accessory').textContent = gameState.equipment.accessory ? ITEMS[gameState.equipment.accessory].icon : '💍';
+    }
+
+    function updateStatsDisplay() {
+        document.getElementById('stat-attack').textContent = gameState.stats.attack;
+        document.getElementById('stat-defense').textContent = gameState.stats.defense;
+        document.getElementById('stat-speed').textContent = gameState.stats.speed + '%';
+        document.getElementById('stat-crit').textContent = gameState.stats.critChance + '%';
+    }
+
+    function updateInventoryUI() {
+        const grid = document.getElementById('inventory-grid');
+        grid.innerHTML = '';
+        for (let i = 0; i < CONFIG.INVENTORY_SIZE; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            if (i < gameState.inventory.length) {
+                const invItem = gameState.inventory[i];
+                const data = ITEMS[invItem.itemId];
+                slot.textContent = data.icon;
+                slot.style.borderColor = data.rarity.color;
+                if (invItem.count > 1) { const countEl = document.createElement('span'); countEl.className = 'item-count'; countEl.textContent = invItem.count; slot.appendChild(countEl); }
+                slot.addEventListener('mouseenter', e => showTooltip(e, invItem.itemId, i));
+                slot.addEventListener('mouseleave', hideTooltip);
+                slot.addEventListener('click', () => handleInventoryClick(i));
+                slot.addEventListener('contextmenu', e => { e.preventDefault(); assignToHotbar(i, gameState.selectedHotbar); });
+            }
+            grid.appendChild(slot);
+        }
+        ['weapon', 'armor', 'accessory'].forEach(slot => {
+            const el = document.getElementById(`inv-${slot}`);
+            const itemId = gameState.equipment[slot];
+            el.innerHTML = (itemId ? ITEMS[itemId].icon : '') + `<span class="slot-label">${slot}</span>`;
+            if (itemId) {
+                el.addEventListener('mouseenter', e => showTooltip(e, itemId, -1, slot));
+                el.addEventListener('mouseleave', hideTooltip);
+                el.addEventListener('click', () => unequipItem(slot));
+            }
+        });
+    }
+
+    function updateHotbar() {
+        for (let i = 0; i < 5; i++) {
+            const slot = document.getElementById(`hotbar-${i}`);
+            const itemId = gameState.hotbar[i];
+            slot.innerHTML = `<span class="hotbar-key">${i + 1}</span>`;
+            if (itemId) {
+                slot.innerHTML += ITEMS[itemId].icon;
+                const invItem = gameState.inventory.find(inv => inv.itemId === itemId);
+                if (invItem) slot.innerHTML += `<span class="hotbar-count">${invItem.count}</span>`;
+            }
+            slot.classList.toggle('selected', i === gameState.selectedHotbar);
+        }
+    }
+
+    function handleInventoryClick(index) {
+        const data = ITEMS[gameState.inventory[index].itemId];
+        if (data.type === ITEM_TYPES.CONSUMABLE) useItem(index);
+        else if ([ITEM_TYPES.WEAPON, ITEM_TYPES.ARMOR, ITEM_TYPES.ACCESSORY].includes(data.type)) equipItem(index);
+    }
+
+    function showTooltip(event, itemId, index, slot = null) {
+        const tooltip = document.getElementById('item-tooltip');
+        const data = ITEMS[itemId];
+        tooltip.querySelector('.tooltip-name').textContent = data.name;
+        tooltip.querySelector('.tooltip-name').className = `tooltip-name ${data.rarity.name}`;
+        tooltip.querySelector('.tooltip-type').textContent = data.type.toUpperCase();
+        let stats = '';
+        if (data.attack) stats += `+${data.attack} Attack\n`;
+        if (data.defense) stats += `+${data.defense} Defense\n`;
+        if (data.critChance) stats += `+${data.critChance}% Crit\n`;
+        if (data.speed) stats += `${data.speed > 0 ? '+' : ''}${data.speed}% Speed\n`;
+        if (data.lifesteal) stats += `+${data.lifesteal}% Lifesteal\n`;
+        if (data.maxHealth) stats += `+${data.maxHealth} Max Health\n`;
+        if (data.heal) stats += `Restores ${data.heal} Health\n`;
+        if (data.mana) stats += `Restores ${data.mana} Mana\n`;
+        tooltip.querySelector('.tooltip-stats').textContent = stats;
+        tooltip.querySelector('.tooltip-desc').textContent = data.desc;
+        let action = '';
+        if (data.type === ITEM_TYPES.CONSUMABLE) action = 'Click to use | Right-click to assign';
+        else if ([ITEM_TYPES.WEAPON, ITEM_TYPES.ARMOR, ITEM_TYPES.ACCESSORY].includes(data.type)) action = slot ? 'Click to unequip' : 'Click to equip';
+        tooltip.querySelector('.tooltip-action').textContent = action;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.clientX + 15) + 'px';
+        tooltip.style.top = (event.clientY + 15) + 'px';
+    }
+
+    function hideTooltip() { document.getElementById('item-tooltip').style.display = 'none'; }
+
+    function showMessage(text, type = '') {
+        const container = document.getElementById('message-container');
+        const msg = document.createElement('div');
+        msg.className = `game-message ${type}`;
+        msg.textContent = text;
+        container.appendChild(msg);
+        setTimeout(() => msg.remove(), 2500);
+    }
+
+    function addCombatLog(text, type = '') {
+        const log = document.getElementById('combat-log');
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        entry.textContent = text;
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+        while (log.children.length > 20) log.removeChild(log.firstChild);
+    }
+
+    function toggleInventory() {
+        gameState.inventoryOpen = !gameState.inventoryOpen;
+        document.getElementById('inventory-panel').classList.toggle('open', gameState.inventoryOpen);
+        if (gameState.inventoryOpen) updateInventoryUI();
+    }
+
+    function updateMinimap() {
+        const canvas = document.getElementById('minimap-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.height = 160;
+        const scale = 160 / CONFIG.DUNGEON_WIDTH;
+        const cs = CONFIG.CELL_SIZE;
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, 160, 160);
+        const pgx = Math.floor(camera.position.x / cs), pgz = Math.floor(camera.position.z / cs);
+        dungeon.forEach((row, y) => row.forEach((cell, x) => {
+            if (Math.sqrt(Math.pow(x - pgx, 2) + Math.pow(y - pgz, 2)) < 10) gameState.discoveredCells.add(`${x},${y}`);
+            if (gameState.discoveredCells.has(`${x},${y}`)) {
+                ctx.fillStyle = cell === 1 ? '#333' : '#1a1a1a';
+                ctx.fillRect(x * scale, y * scale, scale, scale);
+            }
+        }));
+        if (exitDoor) { ctx.fillStyle = '#4169e1'; ctx.fillRect(exitDoor.position.x / cs * scale - 3, exitDoor.position.z / cs * scale - 3, 6, 6); }
+        ctx.fillStyle = '#ff4444';
+        enemies.forEach(e => { if (e.health > 0) { ctx.beginPath(); ctx.arc(e.mesh.position.x / cs * scale, e.mesh.position.z / cs * scale, e.data.boss ? 4 : 2, 0, Math.PI * 2); ctx.fill(); } });
+        ctx.fillStyle = '#ffd700';
+        lootItems.forEach(l => ctx.fillRect(l.mesh.position.x / cs * scale - 1, l.mesh.position.z / cs * scale - 1, 2, 2));
+        ctx.fillStyle = '#8B4513';
+        chests.forEach(c => { if (!c.opened) ctx.fillRect(c.x / cs * scale - 2, c.z / cs * scale - 2, 4, 4); });
+        const px = camera.position.x / cs * scale, pz = camera.position.z / cs * scale;
+        ctx.fillStyle = '#00ff00';
+        ctx.beginPath(); ctx.arc(px, pz, 4, 0, Math.PI * 2); ctx.fill();
+        const dir = controls.getDirection();
+        ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(px, pz); ctx.lineTo(px + dir.x * 10, pz + dir.z * 10); ctx.stroke();
+    }
+
+    function animateWorld(time) {
+        lootItems.forEach(item => { item.mesh.position.y = item.baseY + Math.sin(time * 0.003 + item.mesh.position.x) * 0.15; item.mesh.rotation.y += 0.02; });
+        dungeonMeshes.forEach(mesh => {
+            if (mesh.isPointLight && mesh.userData.baseIntensity) mesh.intensity = mesh.userData.baseIntensity + Math.sin(time * 0.02 + mesh.userData.flickerOffset) * 0.15;
+            if (mesh.userData?.isFlame) { mesh.scale.setScalar(0.8 + Math.sin(time * 0.015 + mesh.position.x) * 0.25); mesh.position.y = mesh.userData.baseY + Math.sin(time * 0.02) * 0.05; }
+        });
+        if (exitDoor) exitDoor.material.emissiveIntensity = Math.sin(time * 0.003) * 0.3 + 0.7;
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').classList.add('hidden');
+        controls.lock();
+        gameState = { isPlaying: true, inventoryOpen: false, floor: 1, score: 0, gold: 0, kills: 0, playerHealth: CONFIG.PLAYER_MAX_HEALTH, playerMaxHealth: CONFIG.PLAYER_MAX_HEALTH, playerMana: CONFIG.PLAYER_MAX_MANA, playerMaxMana: CONFIG.PLAYER_MAX_MANA, playerLevel: 1, playerXP: 0, xpToLevel: CONFIG.XP_BASE, lastAttackTime: 0, discoveredCells: new Set(), buffs: {}, inventory: [], equipment: { weapon: null, armor: null, accessory: null }, hotbar: [null, null, null, null, null], selectedHotbar: 0, stats: { attack: CONFIG.BASE_ATTACK, defense: CONFIG.BASE_DEFENSE, speed: 100, critChance: 5, lifesteal: 0, maxHealthBonus: 0 } };
+        addToInventory('rusty_sword', 1);
+        addToInventory('health_potion', 3);
+        equipItem(0);
+        gameState.hotbar[0] = 'health_potion';
+        initLevel();
+        calculateStats();
+        updateHealthUI(); updateScoreUI(); updateEquipmentDisplay(); updateHotbar();
+    }
+
+    function initLevel() {
+        generateDungeon(); buildDungeon3D(); spawnEntities();
+        if (rooms.length > 0) {
+            const startRoom = rooms[0];
+            camera.position.set((startRoom.x + startRoom.width / 2) * CONFIG.CELL_SIZE, CONFIG.PLAYER_HEIGHT, (startRoom.y + startRoom.height / 2) * CONFIG.CELL_SIZE);
+        }
+        gameState.discoveredCells.clear();
+        showMessage(`Floor ${gameState.floor}`, 'levelup');
+        document.getElementById('combat-log').innerHTML = '';
+        addCombatLog(`Entered Floor ${gameState.floor}`);
+    }
+
+    function levelComplete() {
+        gameState.floor++;
+        gameState.score += 200 * gameState.floor;
+        if (gameState.floor > CONFIG.MAX_FLOORS) { victory(); return; }
+        showMessage(`Floor Complete! +${200 * (gameState.floor - 1)} Score`, 'loot');
+        setTimeout(() => { initLevel(); updateScoreUI(); }, 1500);
+    }
+
+    function gameOver() {
+        gameState.isPlaying = false;
+        controls.unlock();
+        document.getElementById('final-score').textContent = gameState.score;
+        document.getElementById('final-floor').textContent = gameState.floor;
+        document.getElementById('final-kills').textContent = gameState.kills;
+        document.getElementById('final-gold').textContent = gameState.gold;
+        document.getElementById('gameover-screen').classList.remove('hidden');
+    }
+
+    function victory() {
+        gameState.isPlaying = false;
+        controls.unlock();
+        document.getElementById('victory-score').textContent = gameState.score;
+        document.getElementById('victory-level').textContent = gameState.playerLevel;
+        document.getElementById('victory-kills').textContent = gameState.kills;
+        document.getElementById('victory-gold').textContent = gameState.gold;
+        document.getElementById('victory-screen').classList.remove('hidden');
+    }
+
+    function restartGame() {
+        document.getElementById('gameover-screen').classList.add('hidden');
+        document.getElementById('victory-screen').classList.add('hidden');
+        startGame();
+    }
+
+    document.addEventListener('keydown', e => {
+        if (!gameState.isPlaying) return;
+        switch (e.code) {
+            case 'KeyW': moveState.forward = true; break;
+            case 'KeyS': moveState.backward = true; break;
+            case 'KeyA': moveState.left = true; break;
+            case 'KeyD': moveState.right = true; break;
+            case 'KeyE': interact(); break;
+            case 'KeyQ': useHotbarItem(); break;
+            case 'KeyI': case 'Tab': e.preventDefault(); toggleInventory(); break;
+            case 'KeyR': initLevel(); gameState.playerHealth = gameState.playerMaxHealth; updateHealthUI(); showMessage('Level Restarted'); break;
+            case 'Digit1': gameState.selectedHotbar = 0; updateHotbar(); break;
+            case 'Digit2': gameState.selectedHotbar = 1; updateHotbar(); break;
+            case 'Digit3': gameState.selectedHotbar = 2; updateHotbar(); break;
+            case 'Digit4': gameState.selectedHotbar = 3; updateHotbar(); break;
+            case 'Digit5': gameState.selectedHotbar = 4; updateHotbar(); break;
+            case 'Escape': if (gameState.inventoryOpen) toggleInventory(); break;
+        }
+    });
+
+    document.addEventListener('keyup', e => {
+        switch (e.code) {
+            case 'KeyW': moveState.forward = false; break;
+            case 'KeyS': moveState.backward = false; break;
+            case 'KeyA': moveState.left = false; break;
+            case 'KeyD': moveState.right = false; break;
+        }
+    });
+
+    document.addEventListener('click', () => { if (gameState.isPlaying && controls.isLocked && !gameState.inventoryOpen) attack(); });
+
+    document.getElementById('start-button').addEventListener('click', startGame);
+    document.getElementById('restart-button').addEventListener('click', restartGame);
+    document.getElementById('victory-restart').addEventListener('click', restartGame);
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    let lastTime = 0;
+    function gameLoop(currentTime) {
+        requestAnimationFrame(gameLoop);
+        const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+        lastTime = currentTime;
+        if (gameState.isPlaying && controls.isLocked && !gameState.inventoryOpen) {
+            const direction = new THREE.Vector3(Number(moveState.right) - Number(moveState.left), 0, Number(moveState.forward) - Number(moveState.backward)).normalize();
+            if (moveState.forward || moveState.backward || moveState.left || moveState.right) {
+                const speedMod = gameState.stats.speed / 100;
+                const moveSpeed = CONFIG.PLAYER_SPEED * dt * speedMod;
+                const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+                const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+                const moveVec = new THREE.Vector3().addScaledVector(forward, direction.z * moveSpeed).addScaledVector(right, direction.x * moveSpeed);
+                const nx = camera.position.x + moveVec.x, nz = camera.position.z + moveVec.z;
+                if (!checkCollision(nx, camera.position.z)) camera.position.x = nx;
+                if (!checkCollision(camera.position.x, nz)) camera.position.z = nz;
+            }
+            playerLight.position.copy(camera.position); playerLight.position.y += 0.5;
+            playerLight2.position.copy(camera.position); playerLight2.position.y -= 0.3;
+            updateEnemies(dt);
+            updateTraps(dt);
+            animateWorld(currentTime);
+            updateMinimap();
+            const playerPos = camera.position.clone();
+            for (let i = lootItems.length - 1; i >= 0; i--) if (playerPos.distanceTo(lootItems[i].mesh.position) < 1.5) collectLoot(lootItems[i], i);
+            Object.keys(gameState.buffs).forEach(buff => {
+                if (Date.now() - gameState.buffs[buff].startTime >= gameState.buffs[buff].duration * 1000) {
+                    delete gameState.buffs[buff];
+                    showMessage(`${buff} wore off`, 'damage');
+                    calculateStats();
+                }
+            });
+            if (gameState.playerMana < gameState.playerMaxMana) { gameState.playerMana = Math.min(gameState.playerMaxMana, gameState.playerMana + dt * 2); updateHealthUI(); }
+        }
+        renderer.render(scene, camera);
+    }
+
+    gameLoop(0);
+    </script>
+</body>
+</html>

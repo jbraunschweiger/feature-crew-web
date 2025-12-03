@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metropolis - City Generator & Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            overflow: hidden;
+            background: #0a0a0f;
+            font-family: 'Rajdhani', sans-serif;
+            color: #e0e0e0;
+        }
+        
+        #canvas-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+        }
+        
+        #ui-panel {
+            position: fixed;
+            top: 20px; left: 20px;
+            width: 300px;
+            background: linear-gradient(135deg, rgba(10, 15, 30, 0.95) 0%, rgba(20, 25, 45, 0.95) 100%);
+            border: 1px solid rgba(100, 180, 255, 0.3);
+            border-radius: 12px;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 60px rgba(100, 180, 255, 0.1);
+            overflow: hidden;
+        }
+        
+        #ui-header {
+            background: linear-gradient(90deg, rgba(100, 180, 255, 0.15) 0%, rgba(150, 100, 255, 0.15) 100%);
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(100, 180, 255, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        #ui-header h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, #64b4ff, #a078ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        #toggle-panel {
+            background: none;
+            border: 1px solid rgba(100, 180, 255, 0.3);
+            color: #64b4ff;
+            width: 26px; height: 26px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        #toggle-panel:hover {
+            background: rgba(100, 180, 255, 0.15);
+        }
+        
+        #ui-content {
+            padding: 14px 18px;
+            max-height: calc(100vh - 140px);
+            overflow-y: auto;
+        }
+        
+        #ui-content::-webkit-scrollbar { width: 5px; }
+        #ui-content::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.03); }
+        #ui-content::-webkit-scrollbar-thumb { background: rgba(100, 180, 255, 0.25); border-radius: 3px; }
+        
+        .section { margin-bottom: 18px; }
+        
+        .section-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            color: #64b4ff;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .section-title::before {
+            content: '';
+            width: 3px; height: 12px;
+            background: linear-gradient(180deg, #64b4ff, #a078ff);
+            border-radius: 2px;
+        }
+        
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .control-label { font-size: 12px; color: #a0a0b0; font-weight: 500; }
+        
+        .control-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            color: #64b4ff;
+            min-width: 50px;
+            text-align: right;
+        }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%; height: 4px;
+            background: rgba(100, 180, 255, 0.15);
+            border-radius: 2px;
+            margin: 6px 0;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            background: linear-gradient(135deg, #64b4ff, #a078ff);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(100, 180, 255, 0.4);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 6px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #64b4ff 0%, #a078ff 100%);
+            color: #0a0a1a;
+            box-shadow: 0 4px 15px rgba(100, 180, 255, 0.25);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(100, 180, 255, 0.4);
+        }
+        
+        .btn-secondary {
+            background: rgba(100, 180, 255, 0.08);
+            color: #64b4ff;
+            border: 1px solid rgba(100, 180, 255, 0.25);
+        }
+        
+        .btn-secondary:hover { background: rgba(100, 180, 255, 0.15); }
+        
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .btn-group .btn { margin-bottom: 0; }
+        
+        .toggle-switch {
+            position: relative;
+            width: 40px; height: 22px;
+            background: rgba(100, 180, 255, 0.15);
+            border-radius: 11px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .toggle-switch.active { background: linear-gradient(90deg, #64b4ff, #a078ff); }
+        
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px; left: 3px;
+            width: 16px; height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        
+        .toggle-switch.active::after { left: 21px; }
+        
+        #stats-panel {
+            position: fixed;
+            top: 20px; right: 20px;
+            width: 250px;
+            background: linear-gradient(135deg, rgba(10, 15, 30, 0.95) 0%, rgba(20, 25, 45, 0.95) 100%);
+            border: 1px solid rgba(100, 180, 255, 0.25);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+        }
+        
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        .stat-item {
+            background: rgba(100, 180, 255, 0.06);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 180, 255, 0.1);
+        }
+        
+        .stat-label {
+            font-size: 9px;
+            color: #707080;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 3px;
+        }
+        
+        .stat-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            color: #64b4ff;
+        }
+        
+        .stat-value.positive { color: #50fa7b; }
+        .stat-value.negative { color: #ff5555; }
+        
+        #time-display {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, rgba(10, 15, 30, 0.95) 0%, rgba(20, 25, 45, 0.95) 100%);
+            border: 1px solid rgba(100, 180, 255, 0.25);
+            border-radius: 25px;
+            padding: 10px 25px;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        #time-display .time {
+            font-family: 'Orbitron', monospace;
+            font-size: 22px;
+            font-weight: 700;
+            color: #64b4ff;
+        }
+        
+        #time-display .date { font-size: 11px; color: #707080; }
+        #time-display .weather-icon { font-size: 22px; }
+        
+        #minimap {
+            position: fixed;
+            bottom: 20px; right: 20px;
+            width: 180px; height: 180px;
+            background: rgba(10, 15, 30, 0.95);
+            border: 2px solid rgba(100, 180, 255, 0.3);
+            border-radius: 10px;
+            z-index: 100;
+            overflow: hidden;
+        }
+        
+        #minimap-canvas { width: 100%; height: 100%; }
+        
+        #help-tooltip {
+            position: fixed;
+            bottom: 80px; left: 20px;
+            background: rgba(10, 15, 30, 0.95);
+            border: 1px solid rgba(100, 180, 255, 0.25);
+            border-radius: 8px;
+            padding: 12px;
+            z-index: 100;
+            font-size: 11px;
+            max-width: 200px;
+        }
+        
+        #help-tooltip h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            color: #64b4ff;
+            margin-bottom: 8px;
+        }
+        
+        #help-tooltip p { margin-bottom: 4px; color: #909090; }
+        
+        #help-tooltip kbd {
+            background: rgba(100, 180, 255, 0.15);
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            color: #64b4ff;
+        }
+        
+        #loading-screen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #050510 0%, #101025 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.6s, visibility 0.6s;
+        }
+        
+        #loading-screen.hidden { opacity: 0; visibility: hidden; }
+        
+        #loading-screen h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 42px;
+            font-weight: 900;
+            background: linear-gradient(90deg, #64b4ff, #a078ff, #ff78a0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 40px;
+            letter-spacing: 6px;
+        }
+        
+        .loading-bar {
+            width: 280px; height: 4px;
+            background: rgba(100, 180, 255, 0.15);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #64b4ff, #a078ff);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        #loading-status {
+            margin-top: 15px;
+            font-size: 11px;
+            color: #606070;
+            letter-spacing: 1px;
+        }
+        
+        .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #909090; }
+        .legend-color { width: 10px; height: 10px; border-radius: 2px; }
+        
+        #notification {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: linear-gradient(135deg, rgba(10, 15, 30, 0.98) 0%, rgba(20, 25, 45, 0.98) 100%);
+            border: 1px solid rgba(100, 180, 255, 0.35);
+            border-radius: 14px;
+            padding: 25px 35px;
+            z-index: 200;
+            text-align: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+        
+        #notification.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        
+        #notification h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            color: #64b4ff;
+            margin-bottom: 8px;
+        }
+        
+        #notification p { color: #909090; font-size: 12px; }
+        
+        .weather-btns { display: flex; gap: 4px; }
+        .weather-btn { padding: 6px 10px !important; font-size: 14px !important; min-width: 36px; }
+        .weather-btn.active { background: rgba(100, 180, 255, 0.25) !important; border-color: #64b4ff !important; }
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <h1>METROPOLIS</h1>
+        <div class="loading-bar">
+            <div class="loading-progress" id="loading-progress"></div>
+        </div>
+        <div id="loading-status">Initializing...</div>
+    </div>
+    
+    <div id="canvas-container"></div>
+    
+    <div id="ui-panel">
+        <div id="ui-header">
+            <h1>CITY CONTROL</h1>
+            <button id="toggle-panel">−</button>
+        </div>
+        <div id="ui-content">
+            <div class="section">
+                <div class="section-title">Generation</div>
+                <div class="control-row">
+                    <span class="control-label">City Seed</span>
+                    <span class="control-value" id="seed-value">12345</span>
+                </div>
+                <input type="range" id="seed-slider" min="1" max="99999" value="12345">
+                
+                <div class="control-row">
+                    <span class="control-label">City Size</span>
+                    <span class="control-value" id="size-value">Medium</span>
+                </div>
+                <input type="range" id="size-slider" min="1" max="5" value="3">
+                
+                <div class="control-row">
+                    <span class="control-label">Density</span>
+                    <span class="control-value" id="density-value">60%</span>
+                </div>
+                <input type="range" id="density-slider" min="20" max="100" value="60">
+                
+                <button class="btn btn-primary" id="generate-btn">⟳ GENERATE NEW CITY</button>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">Simulation</div>
+                <div class="control-row">
+                    <span class="control-label">Speed</span>
+                    <span class="control-value" id="speed-value">1x</span>
+                </div>
+                <input type="range" id="speed-slider" min="0" max="4" value="2">
+                
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="pause-btn">❚❚ PAUSE</button>
+                    <button class="btn btn-secondary" id="play-btn">▶ PLAY</button>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">Environment</div>
+                <div class="control-row">
+                    <span class="control-label">Time of Day</span>
+                    <span class="control-value" id="time-value">12:00</span>
+                </div>
+                <input type="range" id="time-slider" min="0" max="24" value="12" step="0.1">
+                
+                <div class="control-row">
+                    <span class="control-label">Weather</span>
+                    <div class="weather-btns">
+                        <button class="btn btn-secondary weather-btn active" data-weather="clear">☀</button>
+                        <button class="btn btn-secondary weather-btn" data-weather="cloudy">☁</button>
+                        <button class="btn btn-secondary weather-btn" data-weather="rain">🌧</button>
+                        <button class="btn btn-secondary weather-btn" data-weather="snow">❄</button>
+                    </div>
+                </div>
+                
+                <div class="control-row">
+                    <span class="control-label">Day/Night Cycle</span>
+                    <div class="toggle-switch active" id="cycle-toggle"></div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">View Options</div>
+                <div class="control-row">
+                    <span class="control-label">Show Traffic</span>
+                    <div class="toggle-switch active" id="traffic-toggle"></div>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Show Pedestrians</span>
+                    <div class="toggle-switch active" id="pedestrian-toggle"></div>
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Show Parks</span>
+                    <div class="toggle-switch active" id="parks-toggle"></div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">Districts</div>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-color" style="background: #4a90d9;"></div>Downtown</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #50c878;"></div>Residential</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #f4a460;"></div>Commercial</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #8b7355;"></div>Industrial</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #90ee90;"></div>Parks</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #deb887;"></div>Suburban</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="stats-panel">
+        <div class="section-title" style="margin-bottom: 12px;">City Statistics</div>
+        <div class="stat-grid">
+            <div class="stat-item">
+                <div class="stat-label">Population</div>
+                <div class="stat-value" id="stat-population">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Buildings</div>
+                <div class="stat-value" id="stat-buildings">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Vehicles</div>
+                <div class="stat-value" id="stat-vehicles">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Economy</div>
+                <div class="stat-value positive" id="stat-economy">+2.4%</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Happiness</div>
+                <div class="stat-value" id="stat-happiness">78%</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Traffic</div>
+                <div class="stat-value" id="stat-traffic">Low</div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="time-display">
+        <div>
+            <div class="time" id="display-time">12:00</div>
+            <div class="date" id="display-date">Day 1, Year 1</div>
+        </div>
+        <div class="weather-icon" id="display-weather">☀️</div>
+    </div>
+    
+    <div id="minimap">
+        <canvas id="minimap-canvas"></canvas>
+    </div>
+    
+    <div id="help-tooltip">
+        <h3>Controls</h3>
+        <p><kbd>Left Drag</kbd> Rotate</p>
+        <p><kbd>Right Drag</kbd> Pan</p>
+        <p><kbd>Scroll</kbd> Zoom</p>
+        <p><kbd>Space</kbd> Pause/Play</p>
+        <p><kbd>R</kbd> Reset Camera</p>
+    </div>
+    
+    <div id="notification">
+        <h2>City Generated!</h2>
+        <p id="notification-text">A new city has been created.</p>
+    </div>
+
+    <script>
+    // ============================================
+    // METROPOLIS - CITY GENERATOR & SIMULATION
+    // Production-Ready Optimized Version
+    // ============================================
+    
+    // Configuration - limit objects to prevent GPU overload
+    const CONFIG = {
+        MAX_BUILDINGS: 250,
+        MAX_VEHICLES: 100,
+        MAX_PEDESTRIANS: 120,
+        MAX_STREET_LIGHTS: 60,
+        CELL_SIZE: 5,
+        MAIN_ROAD_SPACING: 20
+    };
+    
+    // Global State
+    const state = {
+        seed: 12345,
+        citySize: 3,
+        density: 0.6,
+        simulationSpeed: 1,
+        isPaused: false,
+        timeOfDay: 12,
+        weather: 'clear',
+        dayNightCycle: true,
+        showTraffic: true,
+        showPedestrians: true,
+        showParks: true,
+        day: 1,
+        year: 1,
+        population: 0,
+        economy: 2.4,
+        happiness: 78,
+        isNight: false,
+        lastNightState: null
+    };
+    
+    // City Data
+    let cityData = {
+        buildings: [],
+        roads: [],
+        vehicles: [],
+        pedestrians: [],
+        parks: [],
+        districts: [],
+        streetLights: []
+    };
+    
+    // Three.js Setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+    
+    // Camera State
+    const cameraState = {
+        target: new THREE.Vector3(0, 0, 0),
+        spherical: { radius: 250, phi: Math.PI / 3.5, theta: Math.PI / 4 },
+        isDragging: false,
+        isPanning: false,
+        prevMouse: { x: 0, y: 0 }
+    };
+    
+    // Lighting
+    let ambientLight, directionalLight, hemisphereLight;
+    
+    // Scene Groups
+    const buildingGroup = new THREE.Group();
+    const roadGroup = new THREE.Group();
+    const vehicleGroup = new THREE.Group();
+    const pedestrianGroup = new THREE.Group();
+    const parkGroup = new THREE.Group();
+    const weatherGroup = new THREE.Group();
+    const lightGroup = new THREE.Group();
+    
+    scene.add(buildingGroup, roadGroup, vehicleGroup, pedestrianGroup, parkGroup, weatherGroup, lightGroup);
+    
+    // Shared Materials - reuse to reduce draw calls
+    const sharedMaterials = {
+        road: new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 }),
+        grass: new THREE.MeshStandardMaterial({ color: 0x2d5a27, roughness: 1 }),
+        parkGrass: new THREE.MeshStandardMaterial({ color: 0x228b22, roughness: 1 }),
+        water: new THREE.MeshStandardMaterial({ color: 0x3a7ca5, roughness: 0.2, metalness: 0.3 }),
+        trunk: new THREE.MeshStandardMaterial({ color: 0x4a3728 }),
+        pole: new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.6 })
+    };
+    
+    // District color palettes
+    const districtColors = {
+        downtown: [0x4a6a8a, 0x5a7a9a, 0x3a5a7a, 0x6080a0],
+        commercial: [0xc49a6c, 0xb08050, 0xd4aa7c, 0xa07040],
+        residential: [0x6a9a6a, 0x5a8a5a, 0x7aaa7a, 0x4a7a4a],
+        industrial: [0x7a6a5a, 0x6a5a4a, 0x8a7a6a, 0x5a4a3a],
+        suburban: [0xc4a882, 0xd4b892, 0xb49872, 0xa48862]
+    };
+    
+    // Minimap
+    const minimapCanvas = document.getElementById('minimap-canvas');
+    const minimapCtx = minimapCanvas.getContext('2d');
+    minimapCanvas.width = 180;
+    minimapCanvas.height = 180;
+    
+    // ============================================
+    // INITIALIZATION
+    // ============================================
+    
+    function init() {
+        setupLighting();
+        updateCameraPosition();
+        setupEventListeners();
+        generateCity();
+        animate();
+        
+        setTimeout(() => {
+            document.getElementById('loading-screen').classList.add('hidden');
+        }, 500);
+    }
+    
+    function updateLoadingProgress(progress, status) {
+        document.getElementById('loading-progress').style.width = progress + '%';
+        document.getElementById('loading-status').textContent = status;
+    }
+    
+    // ============================================
+    // LIGHTING
+    // ============================================
+    
+    function setupLighting() {
+        ambientLight = new THREE.AmbientLight(0x404060, 0.4);
+        scene.add(ambientLight);
+        
+        hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x3d5c3d, 0.5);
+        scene.add(hemisphereLight);
+        
+        directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(100, 200, 100);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 10;
+        directionalLight.shadow.camera.far = 500;
+        directionalLight.shadow.camera.left = -200;
+        directionalLight.shadow.camera.right = 200;
+        directionalLight.shadow.camera.top = 200;
+        directionalLight.shadow.camera.bottom = -200;
+        directionalLight.shadow.bias = -0.0005;
+        scene.add(directionalLight);
+        
+        scene.fog = new THREE.FogExp2(0x87ceeb, 0.0015);
+        scene.background = new THREE.Color(0x87ceeb);
+    }
+    
+    // ============================================
+    // CAMERA
+    // ============================================
+    
+    function updateCameraPosition() {
+        const { radius, phi, theta } = cameraState.spherical;
+        camera.position.x = cameraState.target.x + radius * Math.sin(phi) * Math.cos(theta);
+        camera.position.y = cameraState.target.y + radius * Math.cos(phi);
+        camera.position.z = cameraState.target.z + radius * Math.sin(phi) * Math.sin(theta);
+        camera.lookAt(cameraState.target);
+    }
+    
+    function resetCamera() {
+        cameraState.target.set(0, 0, 0);
+        cameraState.spherical = { radius: 250, phi: Math.PI / 3.5, theta: Math.PI / 4 };
+        updateCameraPosition();
+    }
+    
+    // ============================================
+    // EVENT LISTENERS
+    // ============================================
+    
+    function setupEventListeners() {
+        const canvas = renderer.domElement;
+        
+        canvas.addEventListener('mousedown', e => {
+            if (e.button === 0) cameraState.isDragging = true;
+            else if (e.button === 2) cameraState.isPanning = true;
+            cameraState.prevMouse = { x: e.clientX, y: e.clientY };
+        });
+        
+        canvas.addEventListener('mousemove', e => {
+            const dx = e.clientX - cameraState.prevMouse.x;
+            const dy = e.clientY - cameraState.prevMouse.y;
+            
+            if (cameraState.isDragging) {
+                cameraState.spherical.theta -= dx * 0.005;
+                cameraState.spherical.phi = Math.max(0.2, Math.min(Math.PI / 2 - 0.1, cameraState.spherical.phi + dy * 0.005));
+                updateCameraPosition();
+            }
+            
+            if (cameraState.isPanning) {
+                const speed = cameraState.spherical.radius * 0.001;
+                cameraState.target.x -= dx * speed;
+                cameraState.target.z += dy * speed;
+                updateCameraPosition();
+            }
+            
+            cameraState.prevMouse = { x: e.clientX, y: e.clientY };
+        });
+        
+        canvas.addEventListener('mouseup', () => { cameraState.isDragging = false; cameraState.isPanning = false; });
+        canvas.addEventListener('mouseleave', () => { cameraState.isDragging = false; cameraState.isPanning = false; });
+        
+        canvas.addEventListener('wheel', e => {
+            const zoom = e.deltaY > 0 ? 1.1 : 0.9;
+            cameraState.spherical.radius = Math.max(50, Math.min(600, cameraState.spherical.radius * zoom));
+            updateCameraPosition();
+        }, { passive: true });
+        
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+        
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Space') { e.preventDefault(); state.isPaused = !state.isPaused; }
+            else if (e.code === 'KeyR') resetCamera();
+        });
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // UI Controls
+        document.getElementById('seed-slider').addEventListener('input', e => {
+            state.seed = parseInt(e.target.value);
+            document.getElementById('seed-value').textContent = state.seed;
+        });
+        
+        document.getElementById('size-slider').addEventListener('input', e => {
+            state.citySize = parseInt(e.target.value);
+            const sizes = ['Tiny', 'Small', 'Medium', 'Large', 'Massive'];
+            document.getElementById('size-value').textContent = sizes[state.citySize - 1];
+        });
+        
+        document.getElementById('density-slider').addEventListener('input', e => {
+            state.density = parseInt(e.target.value) / 100;
+            document.getElementById('density-value').textContent = e.target.value + '%';
+        });
+        
+        document.getElementById('speed-slider').addEventListener('input', e => {
+            const speeds = [0, 0.5, 1, 2, 4];
+            state.simulationSpeed = speeds[parseInt(e.target.value)];
+            document.getElementById('speed-value').textContent = state.simulationSpeed + 'x';
+        });
+        
+        document.getElementById('time-slider').addEventListener('input', e => {
+            state.timeOfDay = parseFloat(e.target.value);
+            updateTimeDisplay();
+            updateLighting();
+        });
+        
+        document.getElementById('generate-btn').addEventListener('click', () => {
+            generateCity();
+            showNotification('City Generated!', `Seed: ${state.seed} | Buildings: ${cityData.buildings.length}`);
+        });
+        
+        document.getElementById('pause-btn').addEventListener('click', () => state.isPaused = true);
+        document.getElementById('play-btn').addEventListener('click', () => state.isPaused = false);
+        
+        document.getElementById('toggle-panel').addEventListener('click', () => {
+            const content = document.getElementById('ui-content');
+            const btn = document.getElementById('toggle-panel');
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            btn.textContent = content.style.display === 'none' ? '+' : '−';
+        });
+        
+        document.querySelectorAll('.weather-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.weather-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.weather = btn.dataset.weather;
+                updateWeather();
+            });
+        });
+        
+        document.getElementById('cycle-toggle').addEventListener('click', function() {
+            this.classList.toggle('active');
+            state.dayNightCycle = this.classList.contains('active');
+        });
+        
+        document.getElementById('traffic-toggle').addEventListener('click', function() {
+            this.classList.toggle('active');
+            state.showTraffic = this.classList.contains('active');
+            vehicleGroup.visible = state.showTraffic;
+        });
+        
+        document.getElementById('pedestrian-toggle').addEventListener('click', function() {
+            this.classList.toggle('active');
+            state.showPedestrians = this.classList.contains('active');
+            pedestrianGroup.visible = state.showPedestrians;
+        });
+        
+        document.getElementById('parks-toggle').addEventListener('click', function() {
+            this.classList.toggle('active');
+            state.showParks = this.classList.contains('active');
+            parkGroup.visible = state.showParks;
+        });
+    }
+    
+    // ============================================
+    // CITY GENERATION
+    // ============================================
+    
+    function generateCity() {
+        clearCity();
+        
+        const noise = new SimplexNoise(state.seed);
+        const gridSize = 15 + state.citySize * 10;
+        const worldSize = gridSize * CONFIG.CELL_SIZE;
+        
+        generateDistricts(noise, gridSize);
+        generateGround(worldSize);
+        generateRoads(gridSize, worldSize);
+        generateBuildings(noise, gridSize, worldSize);
+        generateParks(noise, gridSize, worldSize);
+        generateStreetLights(gridSize, worldSize);
+        generateVehicles(worldSize);
+        generatePedestrians(worldSize);
+        
+        // Force initial lighting state
+        state.lastNightState = null;
+        updateStatistics();
+        updateMinimap();
+        updateLighting();
+    }
+    
+    function clearCity() {
+        [buildingGroup, roadGroup, vehicleGroup, pedestrianGroup, parkGroup, weatherGroup, lightGroup].forEach(group => {
+            while (group.children.length > 0) {
+                const child = group.children[0];
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(m => { if (!isSharedMaterial(m)) m.dispose(); });
+                    } else if (!isSharedMaterial(child.material)) {
+                        child.material.dispose();
+                    }
+                }
+                group.remove(child);
+            }
+        });
+        
+        cityData = { buildings: [], roads: [], vehicles: [], pedestrians: [], parks: [], districts: [], streetLights: [] };
+    }
+    
+    function isSharedMaterial(mat) {
+        return Object.values(sharedMaterials).includes(mat);
+    }
+    
+    function generateDistricts(noise, gridSize) {
+        cityData.districts = [];
+        for (let x = 0; x < gridSize; x++) {
+            const row = [];
+            for (let z = 0; z < gridSize; z++) {
+                const nx = (x - gridSize / 2) / (gridSize / 2);
+                const nz = (z - gridSize / 2) / (gridSize / 2);
+                const dist = Math.sqrt(nx * nx + nz * nz);
+                const n = noise.noise2D(x * 0.05, z * 0.05);
+                
+                let district;
+                if (dist < 0.2) district = 'downtown';
+                else if (dist < 0.4) district = n > 0.1 ? 'commercial' : 'residential';
+                else if (dist < 0.65) district = n < -0.2 ? 'industrial' : (n > 0.3 ? 'commercial' : 'residential');
+                else district = n > 0.4 ? 'park' : 'suburban';
+                
+                row.push(district);
+            }
+            cityData.districts.push(row);
+        }
+    }
+    
+    function getDistrict(x, z, gridSize) {
+        const ix = Math.floor(x + gridSize / 2);
+        const iz = Math.floor(z + gridSize / 2);
+        if (ix >= 0 && ix < gridSize && iz >= 0 && iz < gridSize && cityData.districts[ix]) {
+            return cityData.districts[ix][iz] || 'suburban';
+        }
+        return 'suburban';
+    }
+    
+    function generateGround(worldSize) {
+        const geo = new THREE.PlaneGeometry(worldSize * 2, worldSize * 2);
+        const ground = new THREE.Mesh(geo, sharedMaterials.grass);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.1;
+        ground.receiveShadow = true;
+        roadGroup.add(ground);
+    }
+    
+    function generateRoads(gridSize, worldSize) {
+        const half = worldSize / 2;
+        const spacing = CONFIG.MAIN_ROAD_SPACING * CONFIG.CELL_SIZE;
+        
+        // Base road layer
+        const baseGeo = new THREE.PlaneGeometry(worldSize, worldSize);
+        const base = new THREE.Mesh(baseGeo, new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9 }));
+        base.rotation.x = -Math.PI / 2;
+        base.position.y = 0.01;
+        base.receiveShadow = true;
+        roadGroup.add(base);
+        
+        // Main roads with center lines
+        for (let pos = -half; pos <= half; pos += spacing) {
+            // Horizontal road
+            const hGeo = new THREE.PlaneGeometry(worldSize, 5);
+            const hRoad = new THREE.Mesh(hGeo, sharedMaterials.road);
+            hRoad.rotation.x = -Math.PI / 2;
+            hRoad.position.set(0, 0.02, pos);
+            hRoad.receiveShadow = true;
+            roadGroup.add(hRoad);
+            
+            // Center line
+            const hLineGeo = new THREE.PlaneGeometry(worldSize, 0.3);
+            const hLine = new THREE.Mesh(hLineGeo, new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+            hLine.rotation.x = -Math.PI / 2;
+            hLine.position.set(0, 0.03, pos);
+            roadGroup.add(hLine);
+            
+            // Vertical road
+            const vGeo = new THREE.PlaneGeometry(5, worldSize);
+            const vRoad = new THREE.Mesh(vGeo, sharedMaterials.road);
+            vRoad.rotation.x = -Math.PI / 2;
+            vRoad.position.set(pos, 0.02, 0);
+            vRoad.receiveShadow = true;
+            roadGroup.add(vRoad);
+            
+            // Center line
+            const vLineGeo = new THREE.PlaneGeometry(0.3, worldSize);
+            const vLine = new THREE.Mesh(vLineGeo, new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+            vLine.rotation.x = -Math.PI / 2;
+            vLine.position.set(pos, 0.03, 0);
+            roadGroup.add(vLine);
+            
+            cityData.roads.push({ pos, isHorizontal: true });
+            cityData.roads.push({ pos, isHorizontal: false });
+        }
+    }
+    
+    function generateBuildings(noise, gridSize, worldSize) {
+        const maxBuildings = Math.min(CONFIG.MAX_BUILDINGS, Math.floor(gridSize * gridSize * state.density * 0.1));
+        const spacing = CONFIG.MAIN_ROAD_SPACING * CONFIG.CELL_SIZE;
+        
+        let count = 0;
+        const occupied = new Set();
+        
+        for (let attempt = 0; attempt < maxBuildings * 5 && count < maxBuildings; attempt++) {
+            const x = (Math.random() - 0.5) * worldSize * 0.9;
+            const z = (Math.random() - 0.5) * worldSize * 0.9;
+            
+            // Check roads
+            let onRoad = false;
+            for (const road of cityData.roads) {
+                if (road.isHorizontal && Math.abs(z - road.pos) < 5) { onRoad = true; break; }
+                if (!road.isHorizontal && Math.abs(x - road.pos) < 5) { onRoad = true; break; }
+            }
+            if (onRoad) continue;
+            
+            const key = `${Math.floor(x / 12)},${Math.floor(z / 12)}`;
+            if (occupied.has(key)) continue;
+            occupied.add(key);
+            
+            const district = getDistrict(x / CONFIG.CELL_SIZE, z / CONFIG.CELL_SIZE, gridSize);
+            if (district === 'park') continue;
+            
+            const building = createBuilding(x, z, district, noise);
+            if (building) {
+                buildingGroup.add(building.mesh);
+                cityData.buildings.push(building);
+                count++;
+            }
+        }
+    }
+    
+    // KEY FIX: Use canvas textures for windows instead of individual meshes
+    function createBuilding(x, z, district, noise) {
+        let height, width, depth;
+        const v = noise.noise2D(x * 0.03, z * 0.03);
+        
+        switch (district) {
+            case 'downtown':
+                height = 50 + Math.random() * 70 + v * 30;
+                width = 10 + Math.random() * 10;
+                depth = 10 + Math.random() * 10;
+                break;
+            case 'commercial':
+                height = 20 + Math.random() * 35;
+                width = 12 + Math.random() * 12;
+                depth = 12 + Math.random() * 12;
+                break;
+            case 'residential':
+                height = 12 + Math.random() * 20;
+                width = 10 + Math.random() * 8;
+                depth = 10 + Math.random() * 8;
+                break;
+            case 'industrial':
+                height = 10 + Math.random() * 12;
+                width = 18 + Math.random() * 20;
+                depth = 25 + Math.random() * 25;
+                break;
+            case 'suburban':
+                height = 6 + Math.random() * 5;
+                width = 12 + Math.random() * 6;
+                depth = 15 + Math.random() * 8;
+                break;
+            default:
+                return null;
+        }
+        
+        const group = new THREE.Group();
+        const palette = districtColors[district] || districtColors.suburban;
+        const baseColor = palette[Math.floor(Math.random() * palette.length)];
+        
+        // Create procedural window texture using canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        
+        // Base building color
+        const color = new THREE.Color(baseColor);
+        ctx.fillStyle = `rgb(${Math.floor(color.r * 255)},${Math.floor(color.g * 255)},${Math.floor(color.b * 255)})`;
+        ctx.fillRect(0, 0, 64, 128);
+        
+        // Calculate window grid
+        const windowRows = Math.min(Math.floor(height / 5), 12);
+        const windowCols = 4;
+        const ww = 10, wh = 14;
+        const sx = 64 / windowCols;
+        const sy = 128 / windowRows;
+        
+        // Pre-generate random window lit states (stored for night mode toggle)
+        const windowStates = [];
+        for (let r = 0; r < windowRows; r++) {
+            for (let c = 0; c < windowCols; c++) {
+                windowStates.push(Math.random() > 0.5);
+            }
+        }
+        
+        // Draw windows - initial day mode (all dark)
+        windowStates.forEach((isLit, i) => {
+            const r = Math.floor(i / windowCols);
+            const c = i % windowCols;
+            ctx.fillStyle = '#303040';
+            ctx.fillRect(c * sx + (sx - ww) / 2, r * sy + (sy - wh) / 2 + 6, ww, wh);
+        });
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(Math.ceil(width / 10), Math.ceil(height / 25));
+        
+        const material = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7, metalness: 0.1 });
+        const geo = new THREE.BoxGeometry(width, height, depth);
+        const mesh = new THREE.Mesh(geo, material);
+        mesh.position.y = height / 2;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        
+        // Roof details for tall buildings
+        if (height > 60 && Math.random() > 0.5) {
+            const antennaGeo = new THREE.CylinderGeometry(0.2, 0.3, 10, 6);
+            const antennaMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.8 });
+            const antenna = new THREE.Mesh(antennaGeo, antennaMat);
+            antenna.position.y = height + 5;
+            group.add(antenna);
+            
+            const lightGeo = new THREE.SphereGeometry(0.5, 8, 8);
+            const lightMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const light = new THREE.Mesh(lightGeo, lightMat);
+            light.position.y = height + 10;
+            light.userData.blink = true;
+            light.userData.offset = Math.random() * Math.PI * 2;
+            group.add(light);
+        }
+        
+        // Peaked roof for residential/suburban
+        if ((district === 'residential' || district === 'suburban') && Math.random() > 0.3) {
+            const roofGeo = new THREE.ConeGeometry(Math.max(width, depth) * 0.6, height * 0.12, 4);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = height + height * 0.06;
+            roof.rotation.y = Math.PI / 4;
+            roof.castShadow = true;
+            group.add(roof);
+        }
+        
+        group.position.set(x, 0, z);
+        
+        return {
+            x, z, district, height, width, depth,
+            mesh: group,
+            material: material,
+            texture: texture,
+            canvas: canvas,
+            windowStates: windowStates,
+            windowRows: windowRows,
+            windowCols: windowCols,
+            baseColor: baseColor
+        };
+    }
+    
+    function generateParks(noise, gridSize, worldSize) {
+        const count = Math.floor(gridSize * state.density * 0.12);
+        
+        for (let i = 0; i < count; i++) {
+            const x = (Math.random() - 0.5) * worldSize * 0.8;
+            const z = (Math.random() - 0.5) * worldSize * 0.8;
+            
+            const district = getDistrict(x / CONFIG.CELL_SIZE, z / CONFIG.CELL_SIZE, gridSize);
+            if (district === 'downtown' || district === 'industrial') continue;
+            
+            const park = createPark(x, z);
+            parkGroup.add(park);
+            cityData.parks.push({ x, z, mesh: park });
+        }
+    }
+    
+    function createPark(x, z) {
+        const group = new THREE.Group();
+        const size = 15 + Math.random() * 20;
+        
+        const groundGeo = new THREE.CircleGeometry(size, 24);
+        const ground = new THREE.Mesh(groundGeo, sharedMaterials.parkGrass);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0.05;
+        ground.receiveShadow = true;
+        group.add(ground);
+        
+        // Trees
+        const treeCount = Math.floor(4 + Math.random() * 5);
+        for (let i = 0; i < treeCount; i++) {
+            const tree = createTree();
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * size * 0.75;
+            tree.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+            tree.scale.setScalar(0.7 + Math.random() * 0.5);
+            group.add(tree);
+        }
+        
+        // Pond
+        if (Math.random() > 0.5) {
+            const pondGeo = new THREE.CircleGeometry(size * 0.25, 16);
+            const pond = new THREE.Mesh(pondGeo, sharedMaterials.water);
+            pond.rotation.x = -Math.PI / 2;
+            pond.position.y = 0.06;
+            group.add(pond);
+        }
+        
+        group.position.set(x, 0, z);
+        return group;
+    }
+    
+    function createTree() {
+        const group = new THREE.Group();
+        
+        const trunkGeo = new THREE.CylinderGeometry(0.25, 0.4, 2.5, 6);
+        const trunk = new THREE.Mesh(trunkGeo, sharedMaterials.trunk);
+        trunk.position.y = 1.25;
+        trunk.castShadow = true;
+        group.add(trunk);
+        
+        const foliageColor = new THREE.Color().setHSL(0.28 + Math.random() * 0.08, 0.5, 0.3 + Math.random() * 0.1);
+        const foliageGeo = new THREE.SphereGeometry(1.8, 8, 6);
+        const foliageMat = new THREE.MeshStandardMaterial({ color: foliageColor });
+        const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+        foliage.position.y = 3.5;
+        foliage.scale.set(1, 1.3, 1);
+        foliage.castShadow = true;
+        group.add(foliage);
+        
+        return group;
+    }
+    
+    // FIXED: No PointLights - just visual mesh indicators
+    function generateStreetLights(gridSize, worldSize) {
+        const spacing = CONFIG.MAIN_ROAD_SPACING * CONFIG.CELL_SIZE;
+        const half = worldSize / 2;
+        const lightSpacing = 30;
+        let count = 0;
+        
+        for (let roadPos = -half; roadPos <= half && count < CONFIG.MAX_STREET_LIGHTS; roadPos += spacing) {
+            for (let pos = -half; pos <= half && count < CONFIG.MAX_STREET_LIGHTS; pos += lightSpacing) {
+                if (Math.random() > 0.6) continue;
+                
+                const light = createStreetLight();
+                light.position.set(roadPos + 6, 0, pos);
+                lightGroup.add(light);
+                
+                // Store reference to bulb mesh for day/night toggle
+                const bulb = light.children.find(c => c.userData.isStreetLight);
+                cityData.streetLights.push({ mesh: bulb });
+                count++;
+            }
+        }
+    }
+    
+    function createStreetLight() {
+        const group = new THREE.Group();
+        
+        const poleGeo = new THREE.CylinderGeometry(0.12, 0.18, 5, 6);
+        const pole = new THREE.Mesh(poleGeo, sharedMaterials.pole);
+        pole.position.y = 2.5;
+        group.add(pole);
+        
+        const armGeo = new THREE.BoxGeometry(1.5, 0.12, 0.12);
+        const arm = new THREE.Mesh(armGeo, sharedMaterials.pole);
+        arm.position.set(0.75, 4.9, 0);
+        group.add(arm);
+        
+        const fixtureGeo = new THREE.CylinderGeometry(0.3, 0.25, 0.4, 8);
+        const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+        const fixture = new THREE.Mesh(fixtureGeo, fixtureMat);
+        fixture.position.set(1.5, 4.7, 0);
+        group.add(fixture);
+        
+        const bulbGeo = new THREE.SphereGeometry(0.2, 8, 8);
+        const bulbMat = new THREE.MeshBasicMaterial({ color: 0x666666 });
+        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+        bulb.position.set(1.5, 4.5, 0);
+        bulb.userData.isStreetLight = true;
+        group.add(bulb);
+        
+        return group;
+    }
+    
+    function generateVehicles(worldSize) {
+        const count = Math.min(CONFIG.MAX_VEHICLES, Math.floor(20 + state.citySize * 18 * state.density));
+        
+        for (let i = 0; i < count; i++) {
+            const vehicle = createVehicle();
+            const road = cityData.roads[Math.floor(Math.random() * cityData.roads.length)];
+            
+            if (road.isHorizontal) {
+                vehicle.position.set((Math.random() - 0.5) * worldSize, 0.4, road.pos + (Math.random() > 0.5 ? 1.5 : -1.5));
+                vehicle.rotation.y = Math.random() > 0.5 ? 0 : Math.PI;
+            } else {
+                vehicle.position.set(road.pos + (Math.random() > 0.5 ? 1.5 : -1.5), 0.4, (Math.random() - 0.5) * worldSize);
+                vehicle.rotation.y = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
+            }
+            
+            vehicle.userData.speed = 0.15 + Math.random() * 0.25;
+            vehicle.userData.worldSize = worldSize;
+            
+            vehicleGroup.add(vehicle);
+            cityData.vehicles.push(vehicle);
+        }
+    }
+    
+    function createVehicle() {
+        const group = new THREE.Group();
+        const colors = [0xcc3333, 0x3333cc, 0x33cc33, 0xcccc33, 0xffffff, 0x222222, 0x666666];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        const bodyGeo = new THREE.BoxGeometry(2.5, 0.8, 1.4);
+        const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.5, roughness: 0.3 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.4;
+        body.castShadow = true;
+        group.add(body);
+        
+        const cabinGeo = new THREE.BoxGeometry(1.2, 0.6, 1.2);
+        const cabinMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, metalness: 0.3 });
+        const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+        cabin.position.set(-0.2, 0.9, 0);
+        group.add(cabin);
+        
+        // Headlights and taillights - stored for night mode
+        const lightGeo = new THREE.SphereGeometry(0.1, 6, 6);
+        const headlightMat = new THREE.MeshBasicMaterial({ color: 0x888888 });
+        const taillightMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+        
+        [-0.4, 0.4].forEach(z => {
+            const hl = new THREE.Mesh(lightGeo, headlightMat.clone());
+            hl.position.set(1.25, 0.4, z);
+            hl.userData.isHeadlight = true;
+            group.add(hl);
+            
+            const tl = new THREE.Mesh(lightGeo, taillightMat);
+            tl.position.set(-1.25, 0.4, z);
+            group.add(tl);
+        });
+        
+        return group;
+    }
+    
+    function generatePedestrians(worldSize) {
+        const count = Math.min(CONFIG.MAX_PEDESTRIANS, Math.floor(30 + state.citySize * 25 * state.density));
+        
+        for (let i = 0; i < count; i++) {
+            const ped = createPedestrian();
+            ped.position.set((Math.random() - 0.5) * worldSize * 0.8, 0, (Math.random() - 0.5) * worldSize * 0.8);
+            ped.userData.targetX = ped.position.x + (Math.random() - 0.5) * 50;
+            ped.userData.targetZ = ped.position.z + (Math.random() - 0.5) * 50;
+            ped.userData.speed = 0.02 + Math.random() * 0.03;
+            ped.userData.worldSize = worldSize;
+            
+            pedestrianGroup.add(ped);
+            cityData.pedestrians.push(ped);
+        }
+    }
+    
+    function createPedestrian() {
+        const group = new THREE.Group();
+        const colors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        const bodyGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 6);
+        const bodyMat = new THREE.MeshStandardMaterial({ color });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.55;
+        group.add(body);
+        
+        const headGeo = new THREE.SphereGeometry(0.15, 8, 8);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.y = 1.1;
+        group.add(head);
+        
+        return group;
+    }
+    
+    // ============================================
+    // SIMULATION
+    // ============================================
+    
+    function updateSimulation(dt) {
+        if (state.isPaused) return;
+        
+        const speed = state.simulationSpeed * dt;
+        
+        // Time progression
+        if (state.dayNightCycle) {
+            state.timeOfDay += speed * 0.015;
+            if (state.timeOfDay >= 24) {
+                state.timeOfDay -= 24;
+                state.day++;
+                if (state.day > 365) { state.day = 1; state.year++; }
+            }
+            document.getElementById('time-slider').value = state.timeOfDay;
+        }
+        
+        // Update vehicles
+        cityData.vehicles.forEach(v => {
+            const dir = new THREE.Vector3(Math.sin(v.rotation.y), 0, Math.cos(v.rotation.y));
+            v.position.add(dir.multiplyScalar(v.userData.speed * speed * 60));
+            
+            const limit = v.userData.worldSize / 2;
+            if (v.position.x > limit) v.position.x = -limit;
+            if (v.position.x < -limit) v.position.x = limit;
+            if (v.position.z > limit) v.position.z = -limit;
+            if (v.position.z < -limit) v.position.z = limit;
+        });
+        
+        // Update pedestrians
+        cityData.pedestrians.forEach(p => {
+            const dx = p.userData.targetX - p.position.x;
+            const dz = p.userData.targetZ - p.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            
+            if (dist < 1) {
+                p.userData.targetX = p.position.x + (Math.random() - 0.5) * 50;
+                p.userData.targetZ = p.position.z + (Math.random() - 0.5) * 50;
+            } else {
+                p.position.x += (dx / dist) * p.userData.speed * speed * 60;
+                p.position.z += (dz / dist) * p.userData.speed * speed * 60;
+                p.rotation.y = Math.atan2(dx, dz);
+            }
+            
+            const limit = p.userData.worldSize / 2 * 0.9;
+            p.position.x = Math.max(-limit, Math.min(limit, p.position.x));
+            p.position.z = Math.max(-limit, Math.min(limit, p.position.z));
+        });
+        
+        // Blinking antenna lights
+        const phase = Date.now() * 0.003;
+        buildingGroup.traverse(obj => {
+            if (obj.userData.blink) {
+                obj.visible = Math.sin(phase + (obj.userData.offset || 0)) > 0;
+            }
+        });
+        
+        // Economic fluctuation
+        if (Math.random() < 0.005) {
+            state.economy += (Math.random() - 0.5) * 0.2;
+            state.economy = Math.max(-5, Math.min(10, state.economy));
+            state.happiness += (Math.random() - 0.5) * 1;
+            state.happiness = Math.max(40, Math.min(100, state.happiness));
+        }
+        
+        updateTimeDisplay();
+        updateLighting();
+    }
+    
+    // ============================================
+    // LIGHTING & ENVIRONMENT
+    // ============================================
+    
+    function updateLighting() {
+        const time = state.timeOfDay;
+        const isNight = time < 6 || time > 19;
+        
+        // Sun position
+        const sunAngle = ((time - 6) / 12) * Math.PI;
+        const sunHeight = Math.sin(sunAngle);
+        directionalLight.position.set(Math.cos(sunAngle) * 150, Math.max(20, sunHeight * 200), 80);
+        
+        // Calculate lighting based on time of day
+        let skyColor, ambientInt, sunInt;
+        
+        if (time >= 5 && time < 7) {
+            // Sunrise
+            const t = (time - 5) / 2;
+            skyColor = new THREE.Color(0x1a1a2e).lerp(new THREE.Color(0xff9966), t);
+            ambientInt = 0.15 + t * 0.35;
+            sunInt = t * 0.8;
+        } else if (time >= 7 && time < 17) {
+            // Day
+            skyColor = new THREE.Color(0x87ceeb);
+            ambientInt = 0.5;
+            sunInt = 1;
+        } else if (time >= 17 && time < 20) {
+            // Sunset
+            const t = (time - 17) / 3;
+            skyColor = new THREE.Color(0x87ceeb).lerp(new THREE.Color(0xff6b35), t * 0.7);
+            skyColor.lerp(new THREE.Color(0x1a1a2e), t * 0.5);
+            ambientInt = 0.5 - t * 0.35;
+            sunInt = 1 - t * 0.9;
+        } else {
+            // Night
+            skyColor = new THREE.Color(0x0a0a1a);
+            ambientInt = 0.12;
+            sunInt = 0;
+        }
+        
+        // Weather effects
+        if (state.weather === 'cloudy') {
+            skyColor.multiplyScalar(0.7);
+            sunInt *= 0.5;
+        } else if (state.weather === 'rain') {
+            skyColor.multiplyScalar(0.5);
+            sunInt *= 0.3;
+        } else if (state.weather === 'snow') {
+            skyColor.lerp(new THREE.Color(0xaaaaaa), 0.4);
+            sunInt *= 0.6;
+        }
+        
+        scene.background = skyColor;
+        scene.fog.color = skyColor;
+        ambientLight.intensity = ambientInt;
+        directionalLight.intensity = sunInt;
+        hemisphereLight.intensity = ambientInt + 0.1;
+        
+        // KEY FIX: Only update windows when day/night state changes, not every frame
+        if (isNight !== state.lastNightState) {
+            state.lastNightState = isNight;
+            updateNightMode(isNight);
+        }
+    }
+    
+    // Called only on day/night transition - NOT every frame
+    function updateNightMode(isNight) {
+        // Street lights
+        cityData.streetLights.forEach(sl => {
+            if (sl.mesh) {
+                sl.mesh.material.color.set(isNight ? 0xffffcc : 0x666666);
+            }
+        });
+        
+        // Vehicle headlights
+        vehicleGroup.traverse(obj => {
+            if (obj.userData.isHeadlight) {
+                obj.material.color.set(isNight ? 0xffffcc : 0x888888);
+            }
+        });
+        
+        // Building windows - update canvas textures
+        updateBuildingWindows(isNight);
+    }
+    
+    function updateBuildingWindows(isNight) {
+        cityData.buildings.forEach(b => {
+            if (!b.canvas || !b.texture) return;
+            
+            const ctx = b.canvas.getContext('2d');
+            const baseColor = new THREE.Color(b.baseColor);
+            
+            // Redraw base color
+            ctx.fillStyle = `rgb(${Math.floor(baseColor.r * 255)},${Math.floor(baseColor.g * 255)},${Math.floor(baseColor.b * 255)})`;
+            ctx.fillRect(0, 0, 64, 128);
+            
+            // Redraw windows
+            const ww = 10, wh = 14;
+            const sx = 64 / b.windowCols;
+            const sy = 128 / b.windowRows;
+            
+            b.windowStates.forEach((isLit, i) => {
+                const r = Math.floor(i / b.windowCols);
+                const c = i % b.windowCols;
+                const showLit = isNight ? isLit : false;
+                ctx.fillStyle = showLit ? '#ffffcc' : '#303040';
+                ctx.fillRect(c * sx + (sx - ww) / 2, r * sy + (sy - wh) / 2 + 6, ww, wh);
+            });
+            
+            b.texture.needsUpdate = true;
+        });
+    }
+    
+    function updateWeather() {
+        // Clear existing weather
+        while (weatherGroup.children.length > 0) {
+            const c = weatherGroup.children[0];
+            if (c.geometry) c.geometry.dispose();
+            if (c.material) c.material.dispose();
+            weatherGroup.remove(c);
+        }
+        
+        const icons = { clear: '☀️', cloudy: '☁️', rain: '🌧️', snow: '❄️' };
+        document.getElementById('display-weather').textContent = icons[state.weather];
+        
+        if (state.weather === 'rain') createRain();
+        else if (state.weather === 'snow') createSnow();
+        
+        updateLighting();
+    }
+    
+    function createRain() {
+        const count = 2000;
+        const pos = new Float32Array(count * 3);
+        for (let i = 0; i < count * 3; i += 3) {
+            pos[i] = (Math.random() - 0.5) * 500;
+            pos[i + 1] = Math.random() * 250;
+            pos[i + 2] = (Math.random() - 0.5) * 500;
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.PointsMaterial({ color: 0x8888aa, size: 0.8, transparent: true, opacity: 0.5 });
+        const rain = new THREE.Points(geo, mat);
+        rain.userData.type = 'rain';
+        weatherGroup.add(rain);
+    }
+    
+    function createSnow() {
+        const count = 1200;
+        const pos = new Float32Array(count * 3);
+        for (let i = 0; i < count * 3; i += 3) {
+            pos[i] = (Math.random() - 0.5) * 500;
+            pos[i + 1] = Math.random() * 250;
+            pos[i + 2] = (Math.random() - 0.5) * 500;
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5, transparent: true, opacity: 0.8 });
+        const snow = new THREE.Points(geo, mat);
+        snow.userData.type = 'snow';
+        weatherGroup.add(snow);
+    }
+    
+    function updateWeatherParticles() {
+        weatherGroup.children.forEach(p => {
+            const pos = p.geometry.attributes.position.array;
+            if (p.userData.type === 'rain') {
+                for (let i = 1; i < pos.length; i += 3) {
+                    pos[i] -= 3;
+                    if (pos[i] < 0) pos[i] = 250;
+                }
+            } else if (p.userData.type === 'snow') {
+                const t = Date.now() * 0.001;
+                for (let i = 0; i < pos.length; i += 3) {
+                    pos[i] += Math.sin(t + i * 0.01) * 0.15;
+                    pos[i + 1] -= 0.4;
+                    if (pos[i + 1] < 0) pos[i + 1] = 250;
+                }
+            }
+            p.geometry.attributes.position.needsUpdate = true;
+        });
+    }
+    
+    // ============================================
+    // UI
+    // ============================================
+    
+    function updateTimeDisplay() {
+        const h = Math.floor(state.timeOfDay);
+        const m = Math.floor((state.timeOfDay % 1) * 60);
+        const str = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        document.getElementById('display-time').textContent = str;
+        document.getElementById('time-value').textContent = str;
+        document.getElementById('display-date').textContent = `Day ${state.day}, Year ${state.year}`;
+    }
+    
+    function updateStatistics() {
+        const res = cityData.buildings.filter(b => b.district === 'residential' || b.district === 'suburban').length;
+        state.population = res * 45 + cityData.buildings.length * 8;
+        
+        document.getElementById('stat-population').textContent = state.population.toLocaleString();
+        document.getElementById('stat-buildings').textContent = cityData.buildings.length;
+        document.getElementById('stat-vehicles').textContent = cityData.vehicles.length;
+        
+        const econ = document.getElementById('stat-economy');
+        econ.textContent = (state.economy >= 0 ? '+' : '') + state.economy.toFixed(1) + '%';
+        econ.className = 'stat-value ' + (state.economy >= 0 ? 'positive' : 'negative');
+        
+        document.getElementById('stat-happiness').textContent = Math.round(state.happiness) + '%';
+        
+        const traffic = cityData.vehicles.length < 35 ? 'Low' : cityData.vehicles.length < 70 ? 'Medium' : 'Heavy';
+        document.getElementById('stat-traffic').textContent = traffic;
+    }
+    
+    function updateMinimap() {
+        const ctx = minimapCtx;
+        ctx.fillStyle = '#0a0a1a';
+        ctx.fillRect(0, 0, 180, 180);
+        
+        const gridSize = 15 + state.citySize * 10;
+        const scale = 180 / (gridSize * CONFIG.CELL_SIZE * 2.2);
+        const offset = 90;
+        
+        const colors = {
+            downtown: '#4a90d9',
+            commercial: '#f4a460',
+            residential: '#50c878',
+            industrial: '#8b7355',
+            suburban: '#deb887'
+        };
+        
+        cityData.buildings.forEach(b => {
+            ctx.fillStyle = colors[b.district] || '#888';
+            ctx.fillRect(b.x * scale + offset - 2, b.z * scale + offset - 2, 4, 4);
+        });
+        
+        ctx.fillStyle = '#228b22';
+        cityData.parks.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x * scale + offset, p.z * scale + offset, 4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        
+        const cx = cameraState.target.x * scale + offset;
+        const cz = cameraState.target.z * scale + offset;
+        ctx.fillStyle = '#ff4444';
+        ctx.beginPath();
+        ctx.arc(cx, cz, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = '#ff4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cz);
+        ctx.lineTo(cx + Math.cos(cameraState.spherical.theta) * 12, cz + Math.sin(cameraState.spherical.theta) * 12);
+        ctx.stroke();
+    }
+    
+    function showNotification(title, text) {
+        const n = document.getElementById('notification');
+        n.querySelector('h2').textContent = title;
+        document.getElementById('notification-text').textContent = text;
+        n.classList.add('show');
+        setTimeout(() => n.classList.remove('show'), 2500);
+    }
+    
+    // ============================================
+    // ANIMATION LOOP
+    // ============================================
+    
+    let lastTime = 0;
+    let frameCount = 0;
+    
+    function animate(time = 0) {
+        requestAnimationFrame(animate);
+        
+        const dt = Math.min((time - lastTime) / 1000, 0.1);
+        lastTime = time;
+        
+        updateSimulation(dt);
+        updateWeatherParticles();
+        
+        // Update stats/minimap less frequently for performance
+        frameCount++;
+        if (frameCount % 30 === 0) {
+            updateStatistics();
+            updateMinimap();
+        }
+        
+        renderer.render(scene, camera);
+    }
+    
+    // ============================================
+    // START
+    // ============================================
+    
+    let step = 0;
+    const steps = [
+        { p: 20, s: 'Loading Three.js...' },
+        { p: 40, s: 'Preparing shaders...' },
+        { p: 60, s: 'Setting up scene...' },
+        { p: 80, s: 'Generating terrain...' },
+        { p: 100, s: 'Ready!' }
+    ];
+    
+    const loadInterval = setInterval(() => {
+        if (step < steps.length) {
+            updateLoadingProgress(steps[step].p, steps[step].s);
+            step++;
+        } else {
+            clearInterval(loadInterval);
+            init();
+        }
+    }, 150);
+    </script>
+</body>
+</html>
