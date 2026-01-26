@@ -3,208 +3,582 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Binaural Beats Visualizer</title>
+  <title>Brainwave Beats (Product-ish Single File)</title>
   <style>
-    :root {
-      /* A near-black background */
-      --background-color: #0b0b0b;
+    :root{
+      --bg:#0b0b0b;
+      --panel:#141414;
+      --panel2:#1a1a1a;
+      --btn:#2a2a2a;
+      --btnH:#343434;
+      --text:#d6d6d6;
+      --muted:#9a9a9a;
+      --accent:#8a8a8a;
+      --good:#6fdc8c;
+      --warn:#ffcc66;
+      --danger:#ff6b6b;
+      --radius:12px;
 
-      /* Subtle, dark control bar */
-      --control-bg-color: #1a1a1a;
-
-      /* Buttons: dark gray, with slightly lighter hover */
-      --button-bg-color: #2a2a2a;
-      --button-hover-bg-color: #333;
-
-      /* Text color is a neutral light gray */
-      --text-color: #ccc;
-
-      /* Accent color is subdued gray (used for active delta button and play state) */
-      --accent-color: #888;
-
-      /* Base HSL values for the noise color mapping (keeps the purple-ish gradient) */
+      /* Visual palette */
       --base-hue: 235;
-      --hue-range: 50;
-      --base-saturation: 70;
-      --saturation-range: 20;
-      --base-lightness: 45;
-      --lightness-range: 15;
+      --hue-range: 55;
+      --base-sat: 70;
+      --sat-range: 20;
+      --base-lit: 45;
+      --lit-range: 18;
     }
 
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      background-color: var(--background-color);
-      color: var(--text-color);
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
+    html,body{
+      height:100%;
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      overflow:hidden;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
 
-    #visualizer-container {
-      flex-grow: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      position: relative;
+    .app{
+      height:100%;
+      display:flex;
+      flex-direction:column;
+      gap:0;
     }
 
-    #visualizerCanvas {
-      /* Size set by JS; keep it flexible */
-      max-width: 85vmin;
-      max-height: 85vmin;
-      border-radius: 50%;
-      background-color: transparent;
-      /* Remove or keep minimal shadow if desired
-         box-shadow: 0 0 20px rgba(255,255,255,0.03); */
+    /* Top bar */
+    .topbar{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      background:linear-gradient(to bottom, rgba(255,255,255,0.03), rgba(255,255,255,0.00));
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      flex-wrap:wrap;
     }
 
-    #controls {
-      background-color: var(--control-bg-color);
-      padding: 10px 15px;
-      border-radius: 8px;
-      /* Minimal or no shadow to reduce distraction */
-      box-shadow: none;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-      max-width: 90%;
+    .pill{
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:999px;
+      padding:6px 10px;
+      display:flex;
+      align-items:center;
+      gap:8px;
     }
 
-    .control-group {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      /* Very subtle background for grouping */
-      background-color: rgba(255, 255, 255, 0.03);
-      padding: 5px 8px;
-      border-radius: 5px;
+    button, select, input[type="number"]{
+      background:var(--btn);
+      color:var(--text);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:10px;
+      padding:9px 11px;
+      font-size:13px;
+      outline:none;
     }
+    button:hover{ background:var(--btnH); }
+    button:active{ transform:scale(0.98); }
 
-    #controls button {
-      background-color: var(--button-bg-color);
-      color: var(--text-color);
-      border: none;
-      padding: 6px 10px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 0.9em;
-      transition: background-color 0.2s ease, transform 0.1s ease;
-      min-width: 40px;
-      text-align: center;
+    button.primary{
+      background:var(--accent);
+      color:#000;
+      border-color: rgba(0,0,0,0.25);
+      font-weight:800;
     }
-
-    #controls button:hover {
-      background-color: var(--button-hover-bg-color);
+    button.primary.playing{
+      background:var(--good);
+      color:#000;
     }
-
-    #controls button:active {
-      transform: scale(0.95);
+    button.subtle{
+      background:rgba(255,255,255,0.05);
+      border-color: rgba(255,255,255,0.08);
     }
-
-    /* Accent for the active delta button */
-    #controls button.active-delta {
-      background-color: var(--accent-color);
-      color: #000;
-      font-weight: bold;
-    }
-
-    #controls span {
-      font-weight: bold;
-      min-width: 30px;
-      text-align: center;
+    button.danger{
+      background: rgba(255,107,107,0.18);
+      border-color: rgba(255,107,107,0.25);
       color: #fff;
     }
 
-    #playPauseButton {
-      font-weight: bold;
-      width: 80px;
+    select{
+      cursor:pointer;
+      padding-right:28px;
     }
 
-    #playPauseButton.playing {
-      background-color: var(--accent-color);
-      color: #000;
+    .label{
+      font-size:12px;
+      color:var(--muted);
+      user-select:none;
+    }
+
+    .mono{
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1;
+    }
+
+    input[type="range"]{
+      accent-color: var(--accent);
+      width: 140px;
+    }
+
+    .spacer{ flex:1; }
+
+    /* Main */
+    .main{
+      flex:1;
+      display:grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap:12px;
+      padding:12px;
+      min-height:0;
+    }
+    @media (max-width: 980px){
+      .main{ grid-template-columns: 1fr; }
+    }
+
+    /* Visualizer */
+    .vizWrap{
+      position:relative;
+      background:rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:var(--radius);
+      overflow:hidden;
+      min-height:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    canvas#viz{
+      width:min(78vmin, 720px);
+      height:min(78vmin, 720px);
+      max-width:100%;
+      max-height:100%;
+      border-radius:50%;
+    }
+
+    .vizHud{
+      position:absolute;
+      left:12px;
+      top:12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      pointer-events:none;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background:rgba(0,0,0,0.38);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:999px;
+      padding:7px 10px;
+      backdrop-filter: blur(6px);
+      font-size:12px;
+      color:rgba(255,255,255,0.92);
+    }
+
+    .dot{
+      width:8px;height:8px;border-radius:50%;
+      background:var(--warn);
+      box-shadow:0 0 14px rgba(255,204,102,0.35);
+    }
+    .dot.ok{
+      background:var(--good);
+      box-shadow:0 0 14px rgba(111,220,140,0.35);
+    }
+
+    .layerDots{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .ld{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      color:rgba(255,255,255,0.85);
+    }
+    .ld .b{
+      width:8px;height:8px;border-radius:50%;
+      background:rgba(255,255,255,0.35);
+      box-shadow:none;
+    }
+    .ld.on .b{
+      background:rgba(255,255,255,0.85);
+      box-shadow:0 0 14px rgba(255,255,255,0.20);
+    }
+    .hudToggle{
+      position:absolute;
+      right:12px;
+      top:12px;
+      pointer-events:auto;
+      display:flex;
+      gap:8px;
+    }
+
+    /* Right panel */
+    .panel{
+      background:rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:var(--radius);
+      overflow:auto;
+      min-height:0;
+      padding:10px;
+    }
+
+    .sectionTitle{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin:6px 4px 8px;
+      color:#fff;
+      font-weight:900;
+      letter-spacing:0.2px;
+    }
+
+    .smallHelp{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.35;
+      margin:0 4px 10px;
+    }
+
+    .layers{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding:4px;
+    }
+
+    .card{
+      background:rgba(0,0,0,0.36);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:14px;
+      padding:10px;
+    }
+
+    .cardHeader{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:8px;
+      flex-wrap:wrap;
+    }
+
+    .cardTitle{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-weight:900;
+      color:#fff;
+    }
+
+    .toggle{
+      display:inline-flex;
+      gap:8px;
+      align-items:center;
+      user-select:none;
+      cursor:pointer;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .toggle input{ transform: translateY(1px); }
+
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    @media (max-width: 980px){
+      .grid2{ grid-template-columns: 1fr; }
+    }
+
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin:6px 0;
+    }
+
+    .row .label{
+      min-width:98px;
+    }
+
+    .row .value{
+      min-width:64px;
+      text-align:right;
+      color:#fff;
+    }
+
+    .inline{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
+    .mini{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:6px;
+      line-height:1.35;
+    }
+
+    details{
+      margin-top:8px;
+      border-top:1px solid rgba(255,255,255,0.10);
+      padding-top:8px;
+    }
+    summary{
+      cursor:pointer;
+      color:rgba(255,255,255,0.92);
+      font-weight:900;
+      list-style:none;
+    }
+    summary::-webkit-details-marker{ display:none; }
+
+    /* Headphones tip */
+    .toast{
+      position:absolute;
+      left:50%;
+      bottom:14px;
+      transform:translateX(-50%);
+      background:rgba(0,0,0,0.55);
+      border:1px solid rgba(255,255,255,0.12);
+      color:rgba(255,255,255,0.95);
+      border-radius:999px;
+      padding:10px 14px;
+      font-size:12px;
+      backdrop-filter: blur(8px);
+      display:flex;
+      align-items:center;
+      gap:10px;
+      pointer-events:auto;
+      max-width: min(92vw, 680px);
+    }
+    .toast button{
+      padding:8px 10px;
+      border-radius:999px;
+      font-weight:800;
+    }
+
+    /* Make tap targets bigger on mobile */
+    @media (max-width: 520px){
+      button, select, input[type="number"]{ padding:10px 12px; }
+      input[type="range"]{ width: 130px; }
     }
   </style>
 </head>
 <body>
-  <div id="visualizer-container">
-    <canvas id="visualizerCanvas"></canvas>
-  </div>
+<div class="app">
+  <div class="topbar">
+    <button id="playBtn" class="primary">Play</button>
 
-  <div id="controls">
-    <button id="playPauseButton">Play</button>
-
-    <div class="control-group" id="delta-controls">
-      <span>Δ:</span>
-      <button data-delta="1">1 Hz</button>
-      <button data-delta="4">4 Hz</button>
-      <button data-delta="8">8 Hz</button>
-      <button data-delta="12">12 Hz</button>
-      <button data-delta="20">20 Hz</button>
-      <button data-delta="40">40 Hz</button>
-      <span id="currentDeltaDisplay">1</span>Hz
+    <div class="pill">
+      <span class="label">Preset</span>
+      <select id="presetSelect"></select>
+      <button id="applyPresetBtn">Apply</button>
+      <button id="savePresetBtn" class="subtle">Save</button>
+      <button id="resetBtn" class="danger">Reset</button>
     </div>
 
-    <div class="control-group" id="base-freq-controls">
-      <span>Base:</span>
-      <button id="baseFreqDown">-</button>
-      <span id="currentBaseFreqDisplay">100</span>Hz
-      <button id="baseFreqUp">+</button>
+    <div class="pill">
+      <span class="label">Master</span>
+      <input id="masterDb" type="range" min="-36" max="-6" step="1" value="-12" />
+      <span class="mono" id="masterDbLabel">-12 dB</span>
+    </div>
+
+    <div class="pill">
+      <span class="label">Limiter</span>
+      <label class="toggle"><input type="checkbox" id="limiterOn" checked />On</label>
+      <span class="label">Comfort EQ</span>
+      <label class="toggle"><input type="checkbox" id="comfortEqOn" checked />On</label>
+    </div>
+
+    <div class="pill">
+      <span class="label">Quick</span>
+      <button id="betaUpBtn" class="subtle">Beta +</button>
+      <button id="betaDownBtn" class="subtle">Beta −</button>
+      <button id="alphaUpBtn" class="subtle">Alpha +</button>
+      <button id="alphaDownBtn" class="subtle">Alpha −</button>
+      <button id="gammaToggleBtn" class="subtle">Gamma</button>
+      <button id="noiseToggleBtn" class="subtle">Noise</button>
+    </div>
+
+    <div class="pill">
+      <span class="label">Session</span>
+      <span class="mono" id="sessionClock">00:00</span>
+      <span class="label" id="phaseLabel">Idle</span>
+    </div>
+
+    <div class="pill">
+      <span class="label">Duration</span>
+      <select id="durationSelect">
+        <option value="0">∞</option>
+        <option value="1500">25m</option>
+        <option value="2700">45m</option>
+        <option value="3600" selected>60m</option>
+        <option value="5400">90m</option>
+      </select>
+      <button id="stopAtEndBtn" class="subtle">Auto Fade</button>
+    </div>
+
+    <div class="pill">
+      <span class="label">Pomodoro</span>
+      <label class="toggle"><input type="checkbox" id="pomoOn" />On</label>
+      <span class="label">Work</span><input id="pomoWork" type="number" min="5" max="120" step="1" value="25" style="width:64px"/>
+      <span class="label">Break</span><input id="pomoBreak" type="number" min="1" max="60" step="1" value="5" style="width:64px"/>
+      <span class="label">Reps</span><input id="pomoReps" type="number" min="1" max="20" step="1" value="4" style="width:64px"/>
+    </div>
+
+    <div class="pill">
+      <span class="label">Viz FPS</span>
+      <input id="vizFps" type="range" min="12" max="60" step="1" value="30" />
+      <span class="mono" id="vizFpsLabel">30</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="pill">
+      <button id="collapseHudBtn" class="subtle">HUD</button>
     </div>
   </div>
 
-  <script>
-    // --- Simplex Noise Implementation (same as before) ---
-    var SimplexNoise = (function() {
-      function Alea() {
-        let s0 = 0; let s1 = 0; let s2 = 0; let c = 1;
-        const mash = (function() {
-          let n = 0xefc8249d;
-          return function(data) {
-            data = data.toString();
-            for (let i = 0; i < data.length; i++) {
-              n += data.charCodeAt(i);
-              let h = 0.02519603282416938 * n;
-              n = h >>> 0;
-              h -= n; h *= n; n = h >>> 0; h -= n; n += h * 0x100000000;
-            }
-            return (n >>> 0) * 2.3283064365386963e-10;
-          };
-        })();
-        return {
-          next: function() {
-            const t = 2091639 * s0 + c * 2.3283064365386963e-10;
-            s0 = s1; s1 = s2; return s2 = t - (c = t | 0);
-          },
-          seed: function(...args) {
-            s0 = mash(' '); s1 = mash(' '); s2 = mash(' ');
-            c = 1;
-            for (const arg of args) {
-              s0 -= mash(arg); if (s0 < 0) s0 += 1;
-              s1 -= mash(arg); if (s1 < 0) s1 += 1;
-              s2 -= mash(arg); if (s2 < 0) s2 += 1;
-            }
-          }
-        };
+  <div class="main">
+    <div class="vizWrap">
+      <canvas id="viz"></canvas>
+
+      <div class="vizHud" id="vizHud">
+        <div class="badge">
+          <span class="dot" id="statusDot"></span>
+          <span id="statusText">Idle</span>
+          <span class="label mono" id="mixLabel">—</span>
+        </div>
+
+        <div class="badge" id="hudExpanded">
+          <span class="mono">Low</span><span class="mono" id="bandLow">0.00</span>
+          <span class="mono">Mid</span><span class="mono" id="bandMid">0.00</span>
+          <span class="mono">High</span><span class="mono" id="bandHigh">0.00</span>
+        </div>
+
+        <div class="badge">
+          <div class="layerDots" id="layerDots"></div>
+        </div>
+      </div>
+
+      <div class="hudToggle">
+        <button id="hudExpandBtn" class="subtle">Details</button>
+      </div>
+
+      <div class="toast" id="headphonesToast" style="display:none;">
+        <span>🎧 Headphones recommended (binaural requires stereo).</span>
+        <button id="dismissHeadphonesBtn" class="subtle">Got it</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="sectionTitle">
+        <div>Layers</div>
+        <div class="label mono" id="mixLabel2">—</div>
+      </div>
+      <p class="smallHelp">
+        Binaural layers are <span class="mono">carrier ± beat/2</span> (stereo). Stabilizers should be quiet.
+        If you feel “edgy,” lower Beta gain or nudge Alpha up a touch.
+      </p>
+
+      <div class="layers" id="layersRoot"></div>
+
+      <div style="height:10px"></div>
+
+      <div class="sectionTitle">Safety rails</div>
+      <p class="smallHelp">
+        Keep volume comfortable. This app caps master gain at <span class="mono">-6 dB</span>. Limiter prevents spikes.
+        Beta sessions late at night may interfere with sleep.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Utilities
+   ========================= */
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const dbToGain = (db) => Math.pow(10, db / 20);
+const gainToDb = (g) => 20 * Math.log10(Math.max(1e-8, g));
+const fmt2 = (x) => (Math.round(x * 100) / 100).toFixed(2);
+const nowSec = () => performance.now() / 1000;
+
+function formatTime(sec){
+  sec = Math.max(0, Math.floor(sec));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function structuredCloneSafe(x){
+  try { return structuredClone(x); } catch(e) { return JSON.parse(JSON.stringify(x)); }
+}
+
+/* =========================
+   Simplex Noise (same approach)
+   ========================= */
+var SimplexNoise = (function() {
+  function Alea() {
+    let s0 = 0; let s1 = 0; let s2 = 0; let c = 1;
+    const mash = (function() {
+      let n = 0xefc8249d;
+      return function(data) {
+        data = data.toString();
+        for (let i = 0; i < data.length; i++) {
+          n += data.charCodeAt(i);
+          let h = 0.02519603282416938 * n;
+          n = h >>> 0;
+          h -= n; h *= n; n = h >>> 0; h -= n; n += h * 0x100000000;
+        }
+        return (n >>> 0) * 2.3283064365386963e-10;
+      };
+    })();
+    return {
+      next: function() {
+        const t = 2091639 * s0 + c * 2.3283064365386963e-10;
+        s0 = s1; s1 = s2; return s2 = t - (c = t | 0);
+      },
+      seed: function(...args) {
+        s0 = mash(' '); s1 = mash(' '); s2 = mash(' ');
+        c = 1;
+        for (const arg of args) {
+          s0 -= mash(arg); if (s0 < 0) s0 += 1;
+          s1 -= mash(arg); if (s1 < 0) s1 += 1;
+          s2 -= mash(arg); if (s2 < 0) s2 += 1;
+        }
       }
-      const F3 = 1.0 / 3.0; const G3 = 1.0 / 6.0;
-      const grad3 = new Float32Array([
-        1,1,0,-1,1,0,1,-1,0,-1,-1,0,
-        1,0,1,-1,0,1,1,0,-1,-1,0,-1,
-        0,1,1,0,-1,1,0,1,-1,0,-1,-1
-      ]);
-      const p = new Uint8Array(256); const perm = new Uint8Array(512);
-      const permMod12 = new Uint8Array(512);
-      const random = Alea(); random.seed(Date.now());
+    };
+  }
+  const F3 = 1.0 / 3.0; const G3 = 1.0 / 6.0;
+  const grad3 = new Float32Array([
+    1,1,0,-1,1,0,1,-1,0,-1,-1,0,
+    1,0,1,-1,0,1,1,0,-1,-1,0,-1,
+    0,1,1,0,-1,1,0,1,-1,0,-1,-1
+  ]);
+  const p = new Uint8Array(256); const perm = new Uint8Array(512);
+  const permMod12 = new Uint8Array(512);
+  const random = Alea(); random.seed(Date.now());
+  for (let i = 0; i < 256; i++) { p[i] = i; }
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(random.next() * (i + 1));
+    [p[i], p[j]] = [p[j], p[i]];
+  }
+  for (let i = 0; i < 512; i++) {
+    perm[i] = p[i & 255];
+    permMod12[i] = perm[i] % 12;
+  }
+  return class SimplexNoise {
+    constructor(seed) {
+      if (seed) random.seed(seed);
       for (let i = 0; i < 256; i++) { p[i] = i; }
       for (let i = 255; i > 0; i--) {
         const j = Math.floor(random.next() * (i + 1));
@@ -214,389 +588,1869 @@
         perm[i] = p[i & 255];
         permMod12[i] = perm[i] % 12;
       }
-      return class SimplexNoise {
-        constructor(seed) {
-          if (seed) random.seed(seed);
-          for (let i = 0; i < 256; i++) { p[i] = i; }
-          for (let i = 255; i > 0; i--) {
-            const j = Math.floor(random.next() * (i + 1));
-            [p[i], p[j]] = [p[j], p[i]];
-          }
-          for (let i = 0; i < 512; i++) {
-            perm[i] = p[i & 255];
-            permMod12[i] = perm[i] % 12;
-          }
+    }
+    noise3D(xin, yin, zin) {
+      let n0, n1, n2, n3;
+      const s = (xin + yin + zin) * F3;
+      const i = Math.floor(xin + s);
+      const j = Math.floor(yin + s);
+      const k = Math.floor(zin + s);
+      const t = (i + j + k) * G3;
+      const X0 = i - t; const Y0 = j - t; const Z0 = k - t;
+      const x0 = xin - X0; const y0 = yin - Y0; const z0 = zin - Z0;
+      let i1, j1, k1; let i2, j2, k2;
+      if (x0 >= y0) {
+        if (y0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=1; k2=0; }
+        else if (x0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=0; k2=1; }
+        else { i1=0; j1=0; k1=1; i2=1; j2=0; k2=1; }
+      } else {
+        if (y0 < z0) { i1=0; j1=0; k1=1; i2=0; j2=1; k2=1; }
+        else if (x0 < z0) { i1=0; j1=1; k1=0; i2=0; j2=1; k2=1; }
+        else { i1=0; j1=1; k1=0; i2=1; j2=1; k2=0; }
+      }
+      const x1 = x0 - i1 + G3; const y1 = y0 - j1 + G3; const z1 = z0 - k1 + G3;
+      const x2 = x0 - i2 + 2.0*G3; const y2 = y0 - j2 + 2.0*G3; const z2 = z0 - k2 + 2.0*G3;
+      const x3 = x0 - 1.0 + 3.0*G3; const y3 = y0 - 1.0 + 3.0*G3; const z3 = z0 - 1.0 + 3.0*G3;
+      const ii = i & 255; const jj = j & 255; const kk = k & 255;
+      let t0 = 0.6 - x0*x0 - y0*y0 - z0*z0;
+      if (t0 < 0) n0 = 0.0;
+      else {
+        const gi0 = permMod12[ii + perm[jj + perm[kk]]];
+        t0 *= t0;
+        n0 = t0 * t0 * (grad3[gi0*3] * x0 + grad3[gi0*3+1] * y0 + grad3[gi0*3+2] * z0);
+      }
+      let t1 = 0.6 - x1*x1 - y1*y1 - z1*z1;
+      if (t1 < 0) n1 = 0.0;
+      else {
+        const gi1 = permMod12[ii + i1 + perm[jj + j1 + perm[kk + k1]]];
+        t1 *= t1;
+        n1 = t1 * t1 * (grad3[gi1*3] * x1 + grad3[gi1*3+1] * y1 + grad3[gi1*3+2] * z1);
+      }
+      let t2 = 0.6 - x2*x2 - y2*y2 - z2*z2;
+      if (t2 < 0) n2 = 0.0;
+      else {
+        const gi2 = permMod12[ii + i2 + perm[jj + j2 + perm[kk + k2]]];
+        t2 *= t2;
+        n2 = t2 * t2 * (grad3[gi2*3] * x2 + grad3[gi2*3+1] * y2 + grad3[gi2*3+2] * z2);
+      }
+      let t3 = 0.6 - x3*x3 - y3*y3 - z3*z3;
+      if (t3 < 0) n3 = 0.0;
+      else {
+        const gi3 = permMod12[ii + 1 + perm[jj + 1 + perm[kk + 1]]];
+        t3 *= t3;
+        n3 = t3 * t3 * (grad3[gi3*3] * x3 + grad3[gi3*3+1] * y3 + grad3[gi3*3+2] * z3);
+      }
+      return 32.0 * (n0 + n1 + n2 + n3);
+    }
+  };
+})();
+
+function hslToRgb(h, s, l) {
+  let r, g, b;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+/* =========================
+   Presets
+   ========================= */
+const PRESETS = [
+  {
+    id:"focus_stack",
+    name:"Focus Stack (16 + 9.5 + optional 40 + pink)",
+    masterDb: -12,
+    limiter: true,
+    comfortEq: true,
+    layers: [
+      {
+        id:"beta", name:"Beta Spine", mode:"binaural", enabled:true,
+        carrierHz: 220, beatHz: 16.0, gainDb: -6,
+        ramp: { enabled:true, fromHz:10.0, toHz:16.0, durationSec: 5*60 },
+        drift:{ enabled:true, amountHz:0.10, periodSec:180 },
+        muted:false, solo:false
+      },
+      {
+        id:"alpha", name:"Alpha Stabilizer", mode:"binaural", enabled:true,
+        carrierHz: 180, beatHz: 9.5, gainDb: -20,
+        ramp: { enabled:false, fromHz:9.5, toHz:9.5, durationSec: 60 },
+        drift:{ enabled:false, amountHz:0.05, periodSec:240 },
+        muted:false, solo:false
+      },
+      {
+        id:"gamma", name:"Gamma Spark (very subtle)", mode:"binaural", enabled:false,
+        carrierHz: 420, beatHz: 40.0, gainDb: -30,
+        ramp: { enabled:false, fromHz:40.0, toHz:40.0, durationSec: 60 },
+        drift:{ enabled:false, amountHz:0.20, periodSec:240 },
+        muted:false, solo:false
+      },
+      {
+        id:"noise", name:"Noise Bed", mode:"noise", enabled:true,
+        noiseType:"pink", gainDb: -16,
+        muted:false, solo:false
+      }
+    ]
+  },
+  {
+    id:"deep_work_14",
+    name:"Deep Work (14 + pink)",
+    masterDb: -12,
+    limiter: true,
+    comfortEq: true,
+    layers: [
+      { id:"beta", name:"Low Beta Focus", mode:"binaural", enabled:true, carrierHz: 220, beatHz: 14.0, gainDb: -8,
+        ramp:{ enabled:true, fromHz:10.0, toHz:14.0, durationSec: 4*60 },
+        drift:{ enabled:true, amountHz:0.08, periodSec:180 },
+        muted:false, solo:false
+      },
+      { id:"alpha", name:"Alpha Stabilizer", mode:"binaural", enabled:true, carrierHz: 180, beatHz: 9.5, gainDb: -22,
+        ramp:{ enabled:false, fromHz:9.5, toHz:9.5, durationSec:60 },
+        drift:{ enabled:false, amountHz:0.05, periodSec:240 },
+        muted:false, solo:false
+      },
+      { id:"noise", name:"Noise Bed", mode:"noise", enabled:true, noiseType:"pink", gainDb: -18,
+        muted:false, solo:false
+      }
+    ]
+  },
+  {
+    id:"calm_study_12",
+    name:"Calm Study (12 + brown)",
+    masterDb: -12,
+    limiter: true,
+    comfortEq: true,
+    layers: [
+      { id:"alpha", name:"SMR-ish (12Hz)", mode:"binaural", enabled:true, carrierHz: 200, beatHz: 12.0, gainDb: -10,
+        ramp:{ enabled:true, fromHz:9.0, toHz:12.0, durationSec: 5*60 },
+        drift:{ enabled:true, amountHz:0.06, periodSec:200 },
+        muted:false, solo:false
+      },
+      { id:"noise", name:"Noise Bed", mode:"noise", enabled:true, noiseType:"brown", gainDb: -16,
+        muted:false, solo:false
+      }
+    ]
+  }
+];
+
+/* =========================
+   Persistence
+   ========================= */
+const STORAGE_KEY = "bb_productish_state_v1";
+const PREFS_KEY = "bb_productish_prefs_v1";
+
+function loadPersisted(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    return obj;
+  }catch(e){ return null; }
+}
+function savePersisted(state){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){}
+}
+function loadPrefs(){
+  try{
+    const raw = localStorage.getItem(PREFS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  }catch(e){ return {}; }
+}
+function savePrefs(prefs){
+  try{
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  }catch(e){}
+}
+
+let saveTimer = null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => savePersisted(appState), 250);
+}
+
+/* =========================
+   App State
+   ========================= */
+const persisted = loadPersisted();
+let appState = persisted ? persisted : structuredCloneSafe(PRESETS[0]);
+
+// Non-preset runtime settings
+let runtime = {
+  durationSec: 3600,           // from UI
+  autoFadeEnabled: true,       // "Auto Fade" button toggles
+  pomo: {
+    enabled: false,
+    workMin: 25,
+    breakMin: 5,
+    reps: 4
+  },
+  hudCollapsed: false,
+  hudExpanded: true
+};
+
+const prefs = loadPrefs();
+if (typeof prefs.headphonesDismissed === "boolean") {
+  runtime.headphonesDismissed = prefs.headphonesDismissed;
+} else {
+  runtime.headphonesDismissed = false;
+}
+
+/* =========================
+   Audio Engine
+   - Layer graphs sum into preMaster
+   - Then split to bypass + limiter paths (crossfade without restart)
+   - Then sum -> comfort EQ -> analyser -> destination
+   ========================= */
+class AudioEngine {
+  constructor(){
+    this.ctx = null;
+
+    this.preMaster = null;      // layers sum here
+    this.masterGain = null;     // master volume
+    this.bypassGain = null;     // for limiter off
+    this.limiter = null;
+    this.limiterGain = null;    // for limiter on
+    this.postSum = null;        // sums bypass + limiter path
+    this.eq = null;             // comfort EQ
+    this.analyser = null;
+
+    this.layers = new Map();    // id -> graph
+    this.isPlaying = false;
+
+    this.startedAt = 0;
+    this.phase = "Idle";        // Idle / Work / Break / Playing
+    this.sessionOffset = 0;     // for pause/resume if you add it later
+
+    this.fftData = null;
+    this.timeData = null;
+
+    this._phaseTimer = null;
+    this._autoStopTimer = null;
+    this._autoFadeTimer = null;
+
+    this._breakSnapshot = null; // store layer settings for break mode
+  }
+
+  ensureContext(){
+    if (!this.ctx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+    }
+    return this.ctx;
+  }
+
+  buildGraph(config){
+    const ctx = this.ensureContext();
+
+    // Core nodes
+    this.preMaster = ctx.createGain();
+    this.masterGain = ctx.createGain();
+    this.preMaster.connect(this.masterGain);
+
+    // Split paths
+    this.bypassGain = ctx.createGain();
+    this.limiter = ctx.createDynamicsCompressor();
+    this.limiterGain = ctx.createGain();
+    this.postSum = ctx.createGain();
+
+    // Comfort EQ (gentle high-shelf down + tiny low-shelf)
+    this.eq = ctx.createBiquadFilter();
+    this.eq.type = "highshelf";
+    this.eq.frequency.value = 5000;
+    this.eq.gain.value = -4;
+
+    this.eq2 = ctx.createBiquadFilter();
+    this.eq2.type = "lowshelf";
+    this.eq2.frequency.value = 120;
+    this.eq2.gain.value = -1.5;
+
+    // analyser
+    this.analyser = ctx.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.analyser.smoothingTimeConstant = 0.85;
+    this.fftData = new Uint8Array(this.analyser.frequencyBinCount);
+    this.timeData = new Uint8Array(this.analyser.fftSize);
+
+    // Configure limiter
+    this.limiter.threshold.setValueAtTime(-8, ctx.currentTime);
+    this.limiter.knee.setValueAtTime(18, ctx.currentTime);
+    this.limiter.ratio.setValueAtTime(12, ctx.currentTime);
+    this.limiter.attack.setValueAtTime(0.003, ctx.currentTime);
+    this.limiter.release.setValueAtTime(0.25, ctx.currentTime);
+
+    // Routing:
+    // masterGain -> bypassGain -> postSum
+    // masterGain -> limiter -> limiterGain -> postSum
+    this.masterGain.connect(this.bypassGain);
+    this.bypassGain.connect(this.postSum);
+
+    this.masterGain.connect(this.limiter);
+    this.limiter.connect(this.limiterGain);
+    this.limiterGain.connect(this.postSum);
+
+    // postSum -> (eq?) -> analyser -> destination
+    this.postSum.connect(this.eq2);
+    this.eq2.connect(this.eq);
+    this.eq.connect(this.analyser);
+    this.analyser.connect(ctx.destination);
+
+    // Apply initial toggles (crossfade)
+    this.setLimiterEnabled(!!config.limiter, true);
+    this.setComfortEqEnabled(!!config.comfortEq, true);
+    this.setMasterDb(config.masterDb ?? -12, true);
+
+    // Build layers
+    this.layers.clear();
+    for (const layerCfg of config.layers){
+      const graph = this.createLayer(layerCfg);
+      this.layers.set(layerCfg.id, graph);
+      graph.output.connect(this.preMaster);
+      graph.apply(layerCfg, {soft:true});
+    }
+
+    // Apply effective mix (solo/mute logic)
+    this.applyMixRules();
+  }
+
+  destroyGraph(){
+    this.clearTimers();
+
+    for (const graph of this.layers.values()){
+      graph.destroy();
+    }
+    this.layers.clear();
+
+    const nodes = [this.analyser,this.eq,this.eq2,this.postSum,this.limiterGain,this.limiter,this.bypassGain,this.masterGain,this.preMaster];
+    for (const n of nodes){
+      if (!n) continue;
+      try { n.disconnect(); } catch(e){}
+    }
+
+    this.preMaster = null;
+    this.masterGain = null;
+    this.bypassGain = null;
+    this.limiter = null;
+    this.limiterGain = null;
+    this.postSum = null;
+    this.eq = null;
+    this.eq2 = null;
+    this.analyser = null;
+  }
+
+  createLayer(layerCfg){
+    const ctx = this.ensureContext();
+    if (layerCfg.mode === "binaural") return new BinauralLayerGraph(ctx, layerCfg);
+    if (layerCfg.mode === "noise") return new NoiseLayerGraph(ctx, layerCfg);
+    return new SilentLayerGraph(ctx, layerCfg);
+  }
+
+  start(config){
+    const ctx = this.ensureContext();
+    this.stop(true);
+
+    this.buildGraph(config);
+
+    // Fade in master cleanly
+    const now = ctx.currentTime;
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.setValueAtTime(0.0001, now);
+    this.masterGain.gain.exponentialRampToValueAtTime(dbToGain(config.masterDb ?? -12), now + 0.35);
+
+    // Start layers
+    for (const layerCfg of config.layers){
+      const graph = this.layers.get(layerCfg.id);
+      if (graph) graph.start(layerCfg);
+    }
+
+    this.isPlaying = true;
+    this.startedAt = nowSec();
+    this.phase = "Playing";
+  }
+
+  stop(immediate=false){
+    if (!this.ctx) return;
+    if (!this.isPlaying && !immediate) return;
+
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+
+    this.clearTimers();
+
+    if (!immediate && this.masterGain){
+      const current = this.masterGain.gain.value;
+      this.masterGain.gain.cancelScheduledValues(now);
+      this.masterGain.gain.setValueAtTime(Math.max(0.0001, current), now);
+      this.masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+      setTimeout(() => this.destroyGraph(), 420);
+    } else {
+      this.destroyGraph();
+    }
+
+    this.isPlaying = false;
+    this.phase = "Idle";
+    this._breakSnapshot = null;
+  }
+
+  clearTimers(){
+    if (this._phaseTimer){ clearInterval(this._phaseTimer); this._phaseTimer = null; }
+    if (this._autoStopTimer){ clearTimeout(this._autoStopTimer); this._autoStopTimer = null; }
+    if (this._autoFadeTimer){ clearTimeout(this._autoFadeTimer); this._autoFadeTimer = null; }
+  }
+
+  setMasterDb(db, immediate=false){
+    if (!this.ctx || !this.masterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const target = dbToGain(db);
+    if (immediate) this.masterGain.gain.setValueAtTime(target, now);
+    else this.masterGain.gain.setTargetAtTime(target, now, 0.07);
+  }
+
+  setLimiterEnabled(on, immediate=false){
+    if (!this.ctx || !this.bypassGain || !this.limiterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const t = immediate ? 0.001 : 0.08;
+
+    // Crossfade: if limiter ON -> limiterGain 1, bypass 0
+    const a = on ? 0.0001 : 1.0;
+    const b = on ? 1.0 : 0.0001;
+
+    this.bypassGain.gain.setTargetAtTime(a, now, t);
+    this.limiterGain.gain.setTargetAtTime(b, now, t);
+  }
+
+  setComfortEqEnabled(on, immediate=false){
+    if (!this.ctx || !this.eq || !this.eq2) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const t = immediate ? 0.001 : 0.15;
+
+    // Comfort EQ: gentle high shelf down + tiny low shelf
+    const hs = on ? -4 : 0;
+    const ls = on ? -1.5 : 0;
+
+    this.eq.gain.setTargetAtTime(hs, now, t);
+    this.eq2.gain.setTargetAtTime(ls, now, t);
+  }
+
+  updateLayer(id, layerCfg){
+    const graph = this.layers.get(id);
+    if (!graph) return;
+    graph.apply(layerCfg, {soft:true});
+    this.applyMixRules();
+  }
+
+  applyMixRules(){
+    // If any solo is active: only solo layers that are enabled + not muted
+    const anySolo = appState.layers.some(l => !!l.solo);
+    for (const l of appState.layers){
+      const graph = this.layers.get(l.id);
+      if (!graph) continue;
+
+      const shouldPlay = anySolo
+        ? (!!l.solo && !!l.enabled && !l.muted)
+        : (!!l.enabled && !l.muted);
+
+      graph.setEnabled(shouldPlay);
+    }
+  }
+
+  // --- Session features ---
+  scheduleAutoStop(durationSec, fadeSec=12){
+    this.clearAutoStopOnly();
+    if (!this.ctx || !this.isPlaying) return;
+    if (!durationSec || durationSec <= 0) return;
+
+    // Begin fade 'fadeSec' before end
+    const msUntilFade = Math.max(0, (durationSec - fadeSec) * 1000);
+    const msUntilStop = durationSec * 1000;
+
+    this._autoFadeTimer = setTimeout(() => {
+      if (!this.isPlaying) return;
+      // fade master down smoothly
+      this.fadeMasterTo(-36, fadeSec);
+    }, msUntilFade);
+
+    this._autoStopTimer = setTimeout(() => {
+      if (!this.isPlaying) return;
+      this.stop(false);
+      // reset UI via callback outside
+    }, msUntilStop);
+  }
+
+  clearAutoStopOnly(){
+    if (this._autoStopTimer){ clearTimeout(this._autoStopTimer); this._autoStopTimer = null; }
+    if (this._autoFadeTimer){ clearTimeout(this._autoFadeTimer); this._autoFadeTimer = null; }
+  }
+
+  fadeMasterTo(targetDb, durationSec){
+    if (!this.ctx || !this.masterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const target = dbToGain(targetDb);
+
+    this.masterGain.gain.cancelScheduledValues(now);
+    this.masterGain.gain.setValueAtTime(Math.max(0.0001, this.masterGain.gain.value), now);
+    // exponential-ish fade with setTargetAtTime; close enough
+    const tau = Math.max(0.05, durationSec / 6);
+    this.masterGain.gain.setTargetAtTime(target, now, tau);
+  }
+
+  // Pomodoro: Work = normal state; Break = "soft break mode"
+  startPomodoro({workMin, breakMin, reps}){
+    if (!this.isPlaying) return;
+
+    const workSec = Math.max(60, workMin * 60);
+    const breakSec = Math.max(30, breakMin * 60);
+    reps = clamp(reps, 1, 20);
+
+    // Snapshot the current layer config so break mode can revert cleanly
+    this._breakSnapshot = structuredCloneSafe(appState.layers);
+
+    let cycle = 1;
+    let phase = "Work";
+    let phaseStartedAt = nowSec();
+
+    const enterWork = () => {
+      phase = "Work";
+      this.phase = "Work";
+      phaseStartedAt = nowSec();
+      // restore snapshot
+      if (this._breakSnapshot){
+        for (let i=0;i<appState.layers.length;i++){
+          const snap = this._breakSnapshot.find(x => x.id === appState.layers[i].id);
+          if (snap) appState.layers[i] = structuredCloneSafe(snap);
         }
-        noise3D(xin, yin, zin) {
-          let n0, n1, n2, n3;
-          const s = (xin + yin + zin) * F3;
-          const i = Math.floor(xin + s);
-          const j = Math.floor(yin + s);
-          const k = Math.floor(zin + s);
-          const t = (i + j + k) * G3;
-          const X0 = i - t; const Y0 = j - t; const Z0 = k - t;
-          const x0 = xin - X0; const y0 = yin - Y0; const z0 = zin - Z0;
-          let i1, j1, k1; let i2, j2, k2;
-          if (x0 >= y0) {
-            if (y0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=1; k2=0; }
-            else if (x0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=0; k2=1; }
-            else { i1=0; j1=0; k1=1; i2=1; j2=0; k2=1; }
-          } else {
-            if (y0 < z0) { i1=0; j1=0; k1=1; i2=0; j2=1; k2=1; }
-            else if (x0 < z0) { i1=0; j1=1; k1=0; i2=0; j2=1; k2=1; }
-            else { i1=0; j1=1; k1=0; i2=1; j2=1; k2=0; }
-          }
-          const x1 = x0 - i1 + G3; const y1 = y0 - j1 + G3; const z1 = z0 - k1 + G3;
-          const x2 = x0 - i2 + 2.0*G3; const y2 = y0 - j2 + 2.0*G3; const z2 = z0 - k2 + 2.0*G3;
-          const x3 = x0 - 1.0 + 3.0*G3; const y3 = y0 - 1.0 + 3.0*G3; const z3 = z0 - 1.0 + 3.0*G3;
-          const ii = i & 255; const jj = j & 255; const kk = k & 255;
-          let t0 = 0.6 - x0*x0 - y0*y0 - z0*z0;
-          if (t0 < 0) n0 = 0.0;
-          else {
-            const gi0 = permMod12[ii + perm[jj + perm[kk]]];
-            t0 *= t0;
-            n0 = t0 * t0 * (grad3[gi0*3] * x0 + grad3[gi0*3+1] * y0 + grad3[gi0*3+2] * z0);
-          }
-          let t1 = 0.6 - x1*x1 - y1*y1 - z1*z1;
-          if (t1 < 0) n1 = 0.0;
-          else {
-            const gi1 = permMod12[ii + i1 + perm[jj + j1 + perm[kk + k1]]];
-            t1 *= t1;
-            n1 = t1 * t1 * (grad3[gi1*3] * x1 + grad3[gi1*3+1] * y1 + grad3[gi1*3+2] * z1);
-          }
-          let t2 = 0.6 - x2*x2 - y2*y2 - z2*z2;
-          if (t2 < 0) n2 = 0.0;
-          else {
-            const gi2 = permMod12[ii + i2 + perm[jj + j2 + perm[kk + k2]]];
-            t2 *= t2;
-            n2 = t2 * t2 * (grad3[gi2*3] * x2 + grad3[gi2*3+1] * y2 + grad3[gi2*3+2] * z2);
-          }
-          let t3 = 0.6 - x3*x3 - y3*y3 - z3*z3;
-          if (t3 < 0) n3 = 0.0;
-          else {
-            const gi3 = permMod12[ii + 1 + perm[jj + 1 + perm[kk + 1]]];
-            t3 *= t3;
-            n3 = t3 * t3 * (grad3[gi3*3] * x3 + grad3[gi3*3+1] * y3 + grad3[gi3*3+2] * z3);
-          }
-          return 32.0 * (n0 + n1 + n2 + n3);
+        // update engine layer params
+        for (const l of appState.layers){
+          this.updateLayer(l.id, l);
         }
+      }
+      uiSyncAll(); // re-render + persistence
+    };
+
+    const enterBreak = () => {
+      phase = "Break";
+      this.phase = "Break";
+      phaseStartedAt = nowSec();
+
+      // "Break mode": disable beta & gamma, keep alpha + noise if present,
+      // also soften master slightly (but don’t fight user’s master slider)
+      for (const l of appState.layers){
+        if (l.id === "beta" || l.id === "gamma"){
+          l.enabled = false;
+        }
+        // keep alpha/noise enabled if they exist
+        if (l.id === "alpha" || l.id === "noise"){
+          l.enabled = true;
+        }
+      }
+      for (const l of appState.layers){
+        this.updateLayer(l.id, l);
+      }
+
+      // gentle fade down a touch for break
+      this.fadeMasterTo((appState.masterDb ?? -12) - 3, 3);
+      uiSyncAll();
+    };
+
+    // start in work immediately
+    enterWork();
+
+    const tick = () => {
+      const t = nowSec() - phaseStartedAt;
+      if (phase === "Work" && t >= workSec){
+        enterBreak();
+      } else if (phase === "Break" && t >= breakSec){
+        cycle++;
+        if (cycle > reps){
+          // finish: restore + stop auto fade? leave playing as-is (most expected), but clear pomodoro state
+          this.phase = "Playing";
+          clearInterval(this._phaseTimer);
+          this._phaseTimer = null;
+
+          // restore snapshot again at end
+          enterWork();
+          this.phase = "Playing";
+          uiSetPhaseLabel("Playing");
+          return;
+        }
+        enterWork();
+      }
+
+      uiSetPhaseLabel(`${phase} ${cycle}/${reps}`);
+    };
+
+    uiSetPhaseLabel(`Work 1/${reps}`);
+    this._phaseTimer = setInterval(tick, 250);
+  }
+
+  stopPomodoro(){
+    if (this._phaseTimer){
+      clearInterval(this._phaseTimer);
+      this._phaseTimer = null;
+    }
+    // restore from snapshot if we were in break mode
+    if (this._breakSnapshot){
+      for (let i=0;i<appState.layers.length;i++){
+        const snap = this._breakSnapshot.find(x => x.id === appState.layers[i].id);
+        if (snap) appState.layers[i] = structuredCloneSafe(snap);
+      }
+      for (const l of appState.layers){
+        this.updateLayer(l.id, l);
+      }
+    }
+    this._breakSnapshot = null;
+    this.phase = "Playing";
+    uiSetPhaseLabel("Playing");
+    uiSyncAll();
+  }
+
+  getBands(){
+    if (!this.analyser || !this.fftData || !this.ctx) return {low:0, mid:0, high:0, rms:0};
+    this.analyser.getByteFrequencyData(this.fftData);
+    this.analyser.getByteTimeDomainData(this.timeData);
+
+    // RMS
+    let sum = 0;
+    for (let i=0;i<this.timeData.length;i++){
+      const v = (this.timeData[i] - 128) / 128;
+      sum += v*v;
+    }
+    const rms = Math.sqrt(sum / this.timeData.length);
+
+    // Bands
+    const sr = this.ctx.sampleRate;
+    const binHz = sr / this.analyser.fftSize;
+    const bandAvg = (hzA, hzB) => {
+      const i0 = clamp(Math.floor(hzA / binHz), 0, this.fftData.length - 1);
+      const i1 = clamp(Math.floor(hzB / binHz), 0, this.fftData.length - 1);
+      let s = 0, c = 0;
+      for (let i=i0;i<=i1;i++){ s += this.fftData[i]; c++; }
+      return c ? (s / (c * 255)) : 0;
+    };
+
+    const low  = bandAvg(20, 200);
+    const mid  = bandAvg(200, 1200);
+    const high = bandAvg(1200, 6000);
+
+    return {low, mid, high, rms};
+  }
+}
+
+class SilentLayerGraph{
+  constructor(ctx, cfg){
+    this.ctx = ctx;
+    this.cfg = cfg;
+    this.output = ctx.createGain();
+    this.output.gain.value = 0;
+  }
+  start(){ }
+  apply(){ }
+  setEnabled(){ }
+  destroy(){ try{this.output.disconnect();}catch(e){} }
+}
+
+/* ===== Binaural Layer Graph ===== */
+class BinauralLayerGraph{
+  constructor(ctx, cfg){
+    this.ctx = ctx;
+    this.cfg = cfg;
+
+    this.oscL = null;
+    this.oscR = null;
+    this.gainL = null;
+    this.gainR = null;
+    this.merger = null;
+    this.output = ctx.createGain();
+
+    this.enabled = !!cfg.enabled;
+    this.driftStopper = null;
+    this.currentBeatHz = cfg.beatHz;
+    this.started = false;
+
+    this._build();
+  }
+
+  _build(){
+    const ctx = this.ctx;
+    this.oscL = ctx.createOscillator();
+    this.oscR = ctx.createOscillator();
+    this.oscL.type = "sine";
+    this.oscR.type = "sine";
+
+    this.gainL = ctx.createGain();
+    this.gainR = ctx.createGain();
+    this.merger = ctx.createChannelMerger(2);
+
+    this.oscL.connect(this.gainL);
+    this.oscR.connect(this.gainR);
+    this.gainL.connect(this.merger, 0, 0);
+    this.gainR.connect(this.merger, 0, 1);
+    this.merger.connect(this.output);
+
+    this.output.gain.value = 0.0001;
+  }
+
+  _setStereoFreq(carrierHz, beatHz, smoothing=0.06){
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const l = Math.max(20, carrierHz - beatHz/2);
+    const r = Math.max(20, carrierHz + beatHz/2);
+    this.oscL.frequency.setTargetAtTime(l, now, smoothing);
+    this.oscR.frequency.setTargetAtTime(r, now, smoothing);
+    this.currentBeatHz = beatHz;
+  }
+
+  _scheduleRamp(ramp, carrierHz){
+    if (!ramp?.enabled) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime + 0.02;
+
+    const from = Math.max(0.1, ramp.fromHz);
+    const to   = Math.max(0.1, ramp.toHz);
+    const dur  = Math.max(1, ramp.durationSec);
+
+    const l0 = Math.max(20, carrierHz - from/2);
+    const r0 = Math.max(20, carrierHz + from/2);
+    const l1 = Math.max(20, carrierHz - to/2);
+    const r1 = Math.max(20, carrierHz + to/2);
+
+    this.oscL.frequency.cancelScheduledValues(now);
+    this.oscR.frequency.cancelScheduledValues(now);
+
+    this.oscL.frequency.setValueAtTime(l0, now);
+    this.oscR.frequency.setValueAtTime(r0, now);
+    this.oscL.frequency.linearRampToValueAtTime(l1, now + dur);
+    this.oscR.frequency.linearRampToValueAtTime(r1, now + dur);
+
+    this.currentBeatHz = to;
+  }
+
+  _startDrift(drift, carrierHz){
+    this._stopDrift();
+    if (!drift?.enabled) return;
+    const ctx = this.ctx;
+    const amount = Math.max(0.001, drift.amountHz);
+    const period = Math.max(10, drift.periodSec);
+
+    this.driftStopper = setInterval(() => {
+      if (!this.enabled) return;
+      const wander = (Math.random()*2 - 1) * amount;
+      const targetBeat = Math.max(0.1, this.currentBeatHz + wander);
+
+      const now = ctx.currentTime;
+      const glide = 8.0;
+      const l = Math.max(20, carrierHz - targetBeat/2);
+      const r = Math.max(20, carrierHz + targetBeat/2);
+      this.oscL.frequency.setTargetAtTime(l, now, glide);
+      this.oscR.frequency.setTargetAtTime(r, now, glide);
+      this.currentBeatHz = targetBeat;
+    }, period * 1000);
+  }
+
+  _stopDrift(){
+    if (this.driftStopper){
+      clearInterval(this.driftStopper);
+      this.driftStopper = null;
+    }
+  }
+
+  start(cfg){
+    this.apply(cfg, {soft:false});
+
+    if (!this.started){
+      try { this.oscL.start(); } catch(e){}
+      try { this.oscR.start(); } catch(e){}
+      this.started = true;
+    }
+
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const targetGain = this.enabled ? dbToGain(cfg.gainDb ?? -18) : 0.0001;
+    this.output.gain.setValueAtTime(0.0001, now);
+    this.output.gain.exponentialRampToValueAtTime(Math.max(0.0001, targetGain), now + 0.25);
+
+    // apply ramp precisely at start
+    if (cfg.ramp?.enabled) this._scheduleRamp(cfg.ramp, cfg.carrierHz);
+    else this._setStereoFreq(cfg.carrierHz, cfg.beatHz);
+
+    this._startDrift(cfg.drift, cfg.carrierHz);
+  }
+
+  apply(cfg, {soft=true} = {}){
+    this.cfg = cfg;
+
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    this.enabled = !!cfg.enabled;
+
+    const targetGain = this.enabled ? dbToGain(cfg.gainDb ?? -18) : 0.0001;
+    this.output.gain.setTargetAtTime(Math.max(0.0001, targetGain), now, soft ? 0.08 : 0.02);
+
+    // Live edits:
+    // - carrier/beat updates apply immediately (if ramp on, we still follow currentBeatHz; ramp itself is applied on restart/start)
+    const beatNow = cfg.ramp?.enabled ? this.currentBeatHz : cfg.beatHz;
+    this._setStereoFreq(cfg.carrierHz, beatNow, 0.06);
+
+    // drift changes can apply live
+    this._startDrift(cfg.drift, cfg.carrierHz);
+  }
+
+  setEnabled(on){
+    this.enabled = !!on;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const targetGain = this.enabled ? dbToGain(this.cfg.gainDb ?? -18) : 0.0001;
+    this.output.gain.setTargetAtTime(Math.max(0.0001, targetGain), now, 0.08);
+  }
+
+  destroy(){
+    this._stopDrift();
+    try { this.output.disconnect(); } catch(e){}
+    try { this.merger.disconnect(); } catch(e){}
+    try { this.gainL.disconnect(); } catch(e){}
+    try { this.gainR.disconnect(); } catch(e){}
+    try { this.oscL.stop(); } catch(e){}
+    try { this.oscR.stop(); } catch(e){}
+    try { this.oscL.disconnect(); } catch(e){}
+    try { this.oscR.disconnect(); } catch(e){}
+  }
+}
+
+/* ===== Noise Layer Graph ===== */
+function generateNoiseBuffer(ctx, type="pink", durationSec=2){
+  const sr = ctx.sampleRate;
+  const len = Math.max(1, Math.floor(sr * durationSec));
+  const buffer = ctx.createBuffer(1, len, sr);
+  const data = buffer.getChannelData(0);
+
+  if (type === "brown"){
+    let last = 0;
+    for (let i=0;i<len;i++){
+      const white = (Math.random()*2 - 1) * 0.02;
+      last = (last + white) / 1.02;
+      data[i] = last * 3.5;
+    }
+  } else if (type === "white"){
+    for (let i=0;i<len;i++) data[i] = (Math.random()*2 - 1) * 0.25;
+  } else {
+    let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+    for (let i=0;i<len;i++){
+      const white = Math.random()*2 - 1;
+      b0 = 0.99886 * b0 + white * 0.0555179;
+      b1 = 0.99332 * b1 + white * 0.0750759;
+      b2 = 0.96900 * b2 + white * 0.1538520;
+      b3 = 0.86650 * b3 + white * 0.3104856;
+      b4 = 0.55000 * b4 + white * 0.5329522;
+      b5 = -0.7616 * b5 - white * 0.0168980;
+      const pink = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+      b6 = white * 0.115926;
+      data[i] = pink * 0.8;
+    }
+  }
+  return buffer;
+}
+
+class NoiseLayerGraph{
+  constructor(ctx, cfg){
+    this.ctx = ctx;
+    this.cfg = cfg;
+
+    this.source = null;
+    this.hp = null;
+    this.lp = null;
+    this.output = ctx.createGain();
+
+    this.enabled = !!cfg.enabled;
+    this._lastType = cfg.noiseType || "pink";
+    this.started = false;
+
+    this._build();
+  }
+
+  _build(){
+    const ctx = this.ctx;
+    this.hp = ctx.createBiquadFilter();
+    this.hp.type = "highpass";
+    this.hp.frequency.value = 18;
+
+    this.lp = ctx.createBiquadFilter();
+    this.lp.type = "lowpass";
+    this.lp.frequency.value = 8000;
+
+    this.hp.connect(this.lp);
+    this.lp.connect(this.output);
+    this.output.gain.value = 0.0001;
+  }
+
+  _createSource(type){
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = generateNoiseBuffer(ctx, type, 2);
+    src.loop = true;
+    return src;
+  }
+
+  start(cfg){
+    this.apply(cfg, {soft:false});
+
+    // build source
+    const type = cfg.noiseType || "pink";
+    this._lastType = type;
+    this.source = this._createSource(type);
+    this.source.connect(this.hp);
+
+    try { this.source.start(); } catch(e){}
+    this.started = true;
+
+    const now = this.ctx.currentTime;
+    const targetGain = this.enabled ? dbToGain(cfg.gainDb ?? -18) : 0.0001;
+    this.output.gain.setValueAtTime(0.0001, now);
+    this.output.gain.exponentialRampToValueAtTime(Math.max(0.0001, targetGain), now + 0.25);
+  }
+
+  apply(cfg, {soft=true} = {}){
+    this.cfg = cfg;
+    this.enabled = !!cfg.enabled;
+
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const targetGain = this.enabled ? dbToGain(cfg.gainDb ?? -18) : 0.0001;
+    this.output.gain.setTargetAtTime(Math.max(0.0001, targetGain), now, soft ? 0.08 : 0.02);
+
+    const t = cfg.noiseType || "pink";
+    if (t === "brown") this.lp.frequency.setTargetAtTime(5000, now, 0.2);
+    else if (t === "white") this.lp.frequency.setTargetAtTime(12000, now, 0.2);
+    else this.lp.frequency.setTargetAtTime(8000, now, 0.2);
+
+    // If playing and type changed, rebuild source
+    if (this.started && this.source && t !== this._lastType){
+      this._lastType = t;
+      try { this.source.stop(); } catch(e){}
+      try { this.source.disconnect(); } catch(e){}
+      this.source = this._createSource(t);
+      this.source.connect(this.hp);
+      try { this.source.start(); } catch(e){}
+    }
+  }
+
+  setEnabled(on){
+    this.enabled = !!on;
+    const now = this.ctx.currentTime;
+    const targetGain = this.enabled ? dbToGain(this.cfg.gainDb ?? -18) : 0.0001;
+    this.output.gain.setTargetAtTime(Math.max(0.0001, targetGain), now, 0.08);
+  }
+
+  destroy(){
+    try { this.output.disconnect(); } catch(e){}
+    try { this.lp.disconnect(); } catch(e){}
+    try { this.hp.disconnect(); } catch(e){}
+    if (this.source){
+      try { this.source.stop(); } catch(e){}
+      try { this.source.disconnect(); } catch(e){}
+      this.source = null;
+    }
+  }
+}
+
+/* =========================
+   UI Elements
+   ========================= */
+const engine = new AudioEngine();
+
+const playBtn = document.getElementById("playBtn");
+const presetSelect = document.getElementById("presetSelect");
+const applyPresetBtn = document.getElementById("applyPresetBtn");
+const savePresetBtn = document.getElementById("savePresetBtn");
+const resetBtn = document.getElementById("resetBtn");
+
+const masterDb = document.getElementById("masterDb");
+const masterDbLabel = document.getElementById("masterDbLabel");
+const limiterOn = document.getElementById("limiterOn");
+const comfortEqOn = document.getElementById("comfortEqOn");
+
+const betaUpBtn = document.getElementById("betaUpBtn");
+const betaDownBtn = document.getElementById("betaDownBtn");
+const alphaUpBtn = document.getElementById("alphaUpBtn");
+const alphaDownBtn = document.getElementById("alphaDownBtn");
+const gammaToggleBtn = document.getElementById("gammaToggleBtn");
+const noiseToggleBtn = document.getElementById("noiseToggleBtn");
+
+const sessionClock = document.getElementById("sessionClock");
+const phaseLabel = document.getElementById("phaseLabel");
+
+const durationSelect = document.getElementById("durationSelect");
+const stopAtEndBtn = document.getElementById("stopAtEndBtn");
+
+const pomoOn = document.getElementById("pomoOn");
+const pomoWork = document.getElementById("pomoWork");
+const pomoBreak = document.getElementById("pomoBreak");
+const pomoReps = document.getElementById("pomoReps");
+
+const vizFps = document.getElementById("vizFps");
+const vizFpsLabel = document.getElementById("vizFpsLabel");
+
+const layersRoot = document.getElementById("layersRoot");
+const mixLabel = document.getElementById("mixLabel");
+const mixLabel2 = document.getElementById("mixLabel2");
+
+const statusDot = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
+const bandLow = document.getElementById("bandLow");
+const bandMid = document.getElementById("bandMid");
+const bandHigh = document.getElementById("bandHigh");
+
+const vizHud = document.getElementById("vizHud");
+const hudExpanded = document.getElementById("hudExpanded");
+const hudExpandBtn = document.getElementById("hudExpandBtn");
+const collapseHudBtn = document.getElementById("collapseHudBtn");
+const layerDots = document.getElementById("layerDots");
+
+const headphonesToast = document.getElementById("headphonesToast");
+const dismissHeadphonesBtn = document.getElementById("dismissHeadphonesBtn");
+
+/* =========================
+   Preset select + apply
+   ========================= */
+function refreshPresetSelect(){
+  presetSelect.innerHTML = "";
+  for (const p of PRESETS){
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    presetSelect.appendChild(opt);
+  }
+  // If state id missing, default
+  presetSelect.value = appState.id || PRESETS[0].id;
+}
+
+function applyPresetById(id){
+  const p = PRESETS.find(x => x.id === id) || PRESETS[0];
+  appState = structuredCloneSafe(p);
+
+  // preserve UI runtime toggles but set base audio toggles from preset
+  limiterOn.checked = !!appState.limiter;
+  comfortEqOn.checked = !!appState.comfortEq;
+
+  masterDb.value = String(appState.masterDb ?? -12);
+  masterDbLabel.textContent = `${masterDb.value} dB`;
+
+  renderLayers();
+  renderHudDots();
+  renderMixLabel();
+
+  scheduleSave();
+
+  if (engine.isPlaying){
+    // Restart to apply ramps exactly
+    engine.start(appState);
+    // Re-apply toggles live
+    engine.setLimiterEnabled(!!appState.limiter);
+    engine.setComfortEqEnabled(!!appState.comfortEq);
+    engine.setMasterDb(appState.masterDb ?? -12);
+    engine.applyMixRules();
+    applySessionScheduling();
+    if (runtime.pomo.enabled) engine.startPomodoro(runtime.pomo);
+    else engine.stopPomodoro();
+  }
+}
+
+applyPresetBtn.addEventListener("click", () => applyPresetById(presetSelect.value));
+
+savePresetBtn.addEventListener("click", () => {
+  // Save current state into localStorage (already), and also overwrite "custom" if desired.
+  // Here: just persist now and show a tiny feedback by changing button text briefly.
+  savePersisted(appState);
+  savePresetBtn.textContent = "Saved";
+  setTimeout(() => savePresetBtn.textContent = "Save", 800);
+});
+
+resetBtn.addEventListener("click", () => {
+  appState = structuredCloneSafe(PRESETS[0]);
+  limiterOn.checked = !!appState.limiter;
+  comfortEqOn.checked = !!appState.comfortEq;
+  masterDb.value = String(appState.masterDb ?? -12);
+  masterDbLabel.textContent = `${masterDb.value} dB`;
+  runtime.durationSec = 3600;
+  durationSelect.value = "3600";
+  runtime.autoFadeEnabled = true;
+  stopAtEndBtn.textContent = "Auto Fade";
+  runtime.pomo.enabled = false;
+  pomoOn.checked = false;
+  pomoWork.value = 25;
+  pomoBreak.value = 5;
+  pomoReps.value = 4;
+  runtime.pomo.workMin = 25;
+  runtime.pomo.breakMin = 5;
+  runtime.pomo.reps = 4;
+
+  renderLayers();
+  renderHudDots();
+  renderMixLabel();
+  scheduleSave();
+
+  if (engine.isPlaying){
+    engine.start(appState);
+    applySessionScheduling();
+  }
+});
+
+/* =========================
+   Master + toggles
+   ========================= */
+masterDb.addEventListener("input", () => {
+  const db = parseFloat(masterDb.value);
+  appState.masterDb = db;
+  masterDbLabel.textContent = `${db} dB`;
+  scheduleSave();
+  if (engine.isPlaying) engine.setMasterDb(db);
+});
+
+limiterOn.addEventListener("change", () => {
+  appState.limiter = limiterOn.checked;
+  scheduleSave();
+  if (engine.isPlaying) engine.setLimiterEnabled(appState.limiter);
+});
+
+comfortEqOn.addEventListener("change", () => {
+  appState.comfortEq = comfortEqOn.checked;
+  scheduleSave();
+  if (engine.isPlaying) engine.setComfortEqEnabled(appState.comfortEq);
+});
+
+/* =========================
+   Session controls
+   ========================= */
+durationSelect.addEventListener("change", () => {
+  runtime.durationSec = parseInt(durationSelect.value, 10);
+  applySessionScheduling();
+});
+
+stopAtEndBtn.addEventListener("click", () => {
+  runtime.autoFadeEnabled = !runtime.autoFadeEnabled;
+  stopAtEndBtn.textContent = runtime.autoFadeEnabled ? "Auto Fade" : "No Fade";
+  applySessionScheduling();
+});
+
+function applySessionScheduling(){
+  if (!engine.isPlaying) return;
+  engine.clearAutoStopOnly();
+  if (runtime.durationSec > 0){
+    if (runtime.autoFadeEnabled){
+      engine.scheduleAutoStop(runtime.durationSec, 14);
+    } else {
+      engine.scheduleAutoStop(runtime.durationSec, 0.25);
+    }
+  }
+}
+
+pomoOn.addEventListener("change", () => {
+  runtime.pomo.enabled = pomoOn.checked;
+  if (engine.isPlaying){
+    if (runtime.pomo.enabled) engine.startPomodoro(runtime.pomo);
+    else engine.stopPomodoro();
+  }
+});
+
+function syncPomoFields(){
+  runtime.pomo.workMin = clamp(parseInt(pomoWork.value, 10) || 25, 5, 120);
+  runtime.pomo.breakMin = clamp(parseInt(pomoBreak.value, 10) || 5, 1, 60);
+  runtime.pomo.reps = clamp(parseInt(pomoReps.value, 10) || 4, 1, 20);
+  pomoWork.value = runtime.pomo.workMin;
+  pomoBreak.value = runtime.pomo.breakMin;
+  pomoReps.value = runtime.pomo.reps;
+
+  if (engine.isPlaying && runtime.pomo.enabled){
+    engine.startPomodoro(runtime.pomo); // restart the schedule cleanly
+  }
+}
+
+pomoWork.addEventListener("change", syncPomoFields);
+pomoBreak.addEventListener("change", syncPomoFields);
+pomoReps.addEventListener("change", syncPomoFields);
+
+/* =========================
+   Quick tweaks
+   ========================= */
+function findLayer(id){ return appState.layers.find(l => l.id === id) || null; }
+
+function bumpGain(layerId, deltaDb){
+  const l = findLayer(layerId);
+  if (!l) return;
+  l.gainDb = clamp((l.gainDb ?? -18) + deltaDb, -40, 0);
+  scheduleSave();
+  renderLayers();
+  renderMixLabel();
+  if (engine.isPlaying) engine.updateLayer(l.id, l);
+}
+
+betaUpBtn.addEventListener("click", () => bumpGain("beta", +2));
+betaDownBtn.addEventListener("click", () => bumpGain("beta", -2));
+alphaUpBtn.addEventListener("click", () => bumpGain("alpha", +2));
+alphaDownBtn.addEventListener("click", () => bumpGain("alpha", -2));
+
+gammaToggleBtn.addEventListener("click", () => {
+  const g = findLayer("gamma");
+  if (!g) return;
+  g.enabled = !g.enabled;
+  scheduleSave();
+  renderLayers();
+  renderHudDots();
+  renderMixLabel();
+  if (engine.isPlaying) engine.updateLayer(g.id, g);
+});
+
+noiseToggleBtn.addEventListener("click", () => {
+  const n = findLayer("noise");
+  if (!n) return;
+  n.enabled = !n.enabled;
+  scheduleSave();
+  renderLayers();
+  renderHudDots();
+  renderMixLabel();
+  if (engine.isPlaying) engine.updateLayer(n.id, n);
+});
+
+/* =========================
+   Layer UI
+   ========================= */
+function renderMixLabel(){
+  const bins = appState.layers.filter(l => l.enabled && !l.muted && l.mode === "binaural");
+  const beats = bins.map(l => l.beatHz).filter(x => typeof x === "number");
+  const anySolo = appState.layers.some(l => l.solo);
+
+  const txt = beats.length
+    ? `Δ: ${beats.map(b=>fmt2(b)).join(" / ")} Hz${anySolo ? " (solo)" : ""}`
+    : `—${anySolo ? " (solo)" : ""}`;
+
+  mixLabel.textContent = txt;
+  mixLabel2.textContent = txt;
+}
+
+function renderHudDots(){
+  layerDots.innerHTML = "";
+  const order = ["beta","alpha","gamma","noise"];
+  for (const id of order){
+    const l = findLayer(id);
+    if (!l) continue;
+    const el = document.createElement("div");
+    el.className = `ld ${l.enabled && !l.muted ? "on":""}`;
+    el.innerHTML = `<span class="b"></span><span class="mono">${id.toUpperCase()}</span>`;
+    layerDots.appendChild(el);
+  }
+}
+
+function renderLayers(){
+  layersRoot.innerHTML = "";
+  renderMixLabel();
+
+  for (const layer of appState.layers){
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const header = document.createElement("div");
+    header.className = "cardHeader";
+
+    const left = document.createElement("div");
+    left.className = "cardTitle";
+    left.innerHTML = `<span>${layer.name}</span> <span class="label mono">${layer.mode}</span>`;
+
+    const right = document.createElement("div");
+    right.className = "inline";
+
+    // Enabled
+    const enableWrap = document.createElement("label");
+    enableWrap.className = "toggle";
+    enableWrap.innerHTML = `<input type="checkbox" ${layer.enabled ? "checked":""}/> Enabled`;
+    const enableCb = enableWrap.querySelector("input");
+    enableCb.addEventListener("change", () => {
+      layer.enabled = enableCb.checked;
+      scheduleSave();
+      renderLayers();
+      renderHudDots();
+      if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+    });
+
+    // Mute
+    const muteBtn = document.createElement("button");
+    muteBtn.className = "subtle";
+    muteBtn.textContent = layer.muted ? "Muted" : "Mute";
+    muteBtn.addEventListener("click", () => {
+      layer.muted = !layer.muted;
+      scheduleSave();
+      renderLayers();
+      renderHudDots();
+      if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+    });
+
+    // Solo
+    const soloBtn = document.createElement("button");
+    soloBtn.className = "subtle";
+    soloBtn.textContent = layer.solo ? "Soloed" : "Solo";
+    soloBtn.addEventListener("click", () => {
+      layer.solo = !layer.solo;
+      scheduleSave();
+      renderLayers();
+      renderHudDots();
+      if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+    });
+
+    right.appendChild(enableWrap);
+    right.appendChild(muteBtn);
+    right.appendChild(soloBtn);
+
+    header.appendChild(left);
+    header.appendChild(right);
+
+    const body = document.createElement("div");
+    body.className = "grid2";
+
+    // Gain control
+    const gainBox = document.createElement("div");
+    const gainDb = layer.gainDb ?? -18;
+    gainBox.innerHTML = `
+      <div class="row">
+        <span class="label">Gain</span>
+        <div class="inline">
+          <input data-k="gainDb" type="range" min="-40" max="0" step="1" value="${gainDb}"/>
+          <span class="value mono" data-out="gainDb">${gainDb} dB</span>
+        </div>
+      </div>
+      <div class="mini">${layer.mode === "binaural" ? "Tip: keep stabilizers quieter than Beta." : "Tip: noise bed should be gentle."}</div>
+    `;
+    const gainSlider = gainBox.querySelector('input[data-k="gainDb"]');
+    const gainOut = gainBox.querySelector('[data-out="gainDb"]');
+    gainSlider.addEventListener("input", () => {
+      layer.gainDb = parseFloat(gainSlider.value);
+      gainOut.textContent = `${layer.gainDb} dB`;
+      scheduleSave();
+      renderMixLabel();
+      if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+    });
+
+    // Mode-specific controls
+    const controlsBox = document.createElement("div");
+
+    if (layer.mode === "binaural"){
+      controlsBox.innerHTML = `
+        <div class="row">
+          <span class="label">Carrier</span>
+          <div class="inline">
+            <input data-k="carrierHz" type="number" min="50" max="800" step="1" value="${layer.carrierHz ?? 220}" />
+            <span class="label mono">Hz</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <span class="label">Beat Δ</span>
+          <div class="inline">
+            <input data-k="beatHz" type="number" min="0.5" max="60" step="0.1" value="${layer.beatHz ?? 10}" />
+            <span class="label mono">Hz</span>
+          </div>
+        </div>
+
+        <details>
+          <summary>Ramp + Drift</summary>
+          <div class="mini">Ramp is applied when (re)starting playback to schedule time-based frequency easing. Drift updates live.</div>
+
+          <div class="row">
+            <span class="label">Ramp</span>
+            <label class="toggle"><input data-k="rampEnabled" type="checkbox" ${layer.ramp?.enabled ? "checked":""}/> On</label>
+          </div>
+          <div class="row">
+            <span class="label">From</span>
+            <div class="inline">
+              <input data-k="rampFrom" type="number" min="0.5" max="60" step="0.1" value="${layer.ramp?.fromHz ?? layer.beatHz}" />
+              <span class="label mono">Hz</span>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">To</span>
+            <div class="inline">
+              <input data-k="rampTo" type="number" min="0.5" max="60" step="0.1" value="${layer.ramp?.toHz ?? layer.beatHz}" />
+              <span class="label mono">Hz</span>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">Duration</span>
+            <div class="inline">
+              <input data-k="rampDur" type="number" min="10" max="3600" step="10" value="${layer.ramp?.durationSec ?? 60}" />
+              <span class="label mono">sec</span>
+            </div>
+          </div>
+
+          <div style="height:6px"></div>
+
+          <div class="row">
+            <span class="label">Drift</span>
+            <label class="toggle"><input data-k="driftEnabled" type="checkbox" ${layer.drift?.enabled ? "checked":""}/> On</label>
+          </div>
+          <div class="row">
+            <span class="label">Amount</span>
+            <div class="inline">
+              <input data-k="driftAmt" type="number" min="0.01" max="1.0" step="0.01" value="${layer.drift?.amountHz ?? 0.1}" />
+              <span class="label mono">Hz</span>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">Period</span>
+            <div class="inline">
+              <input data-k="driftPer" type="number" min="20" max="900" step="10" value="${layer.drift?.periodSec ?? 180}" />
+              <span class="label mono">sec</span>
+            </div>
+          </div>
+
+          <div style="height:8px"></div>
+          <button data-action="restartAudio" class="subtle">Restart audio (apply ramp)</button>
+        </details>
+      `;
+
+      const carrierInput = controlsBox.querySelector('input[data-k="carrierHz"]');
+      const beatInput = controlsBox.querySelector('input[data-k="beatHz"]');
+
+      carrierInput.addEventListener("change", () => {
+        layer.carrierHz = clamp(parseFloat(carrierInput.value), 50, 800);
+        carrierInput.value = layer.carrierHz;
+        scheduleSave();
+        if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+      });
+
+      beatInput.addEventListener("change", () => {
+        layer.beatHz = clamp(parseFloat(beatInput.value), 0.5, 60);
+        beatInput.value = layer.beatHz;
+        scheduleSave();
+        renderMixLabel();
+        if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+      });
+
+      const rampEnabled = controlsBox.querySelector('input[data-k="rampEnabled"]');
+      const rampFrom = controlsBox.querySelector('input[data-k="rampFrom"]');
+      const rampTo = controlsBox.querySelector('input[data-k="rampTo"]');
+      const rampDur = controlsBox.querySelector('input[data-k="rampDur"]');
+
+      rampEnabled.addEventListener("change", () => {
+        layer.ramp = layer.ramp || {};
+        layer.ramp.enabled = rampEnabled.checked;
+        scheduleSave();
+      });
+
+      const syncRamp = () => {
+        layer.ramp = layer.ramp || {};
+        layer.ramp.fromHz = clamp(parseFloat(rampFrom.value), 0.5, 60);
+        layer.ramp.toHz = clamp(parseFloat(rampTo.value), 0.5, 60);
+        layer.ramp.durationSec = clamp(parseFloat(rampDur.value), 10, 3600);
+        rampFrom.value = layer.ramp.fromHz;
+        rampTo.value = layer.ramp.toHz;
+        rampDur.value = layer.ramp.durationSec;
+        scheduleSave();
       };
-    })();
+      rampFrom.addEventListener("change", syncRamp);
+      rampTo.addEventListener("change", syncRamp);
+      rampDur.addEventListener("change", syncRamp);
 
-    // --- HSL to RGB Converter ---
-    function hslToRgb(h, s, l) {
-      let r, g, b;
-      if (s === 0) {
-        r = g = b = l;
-      } else {
-        const hue2rgb = (p, q, t) => {
-          if (t < 0) t += 1;
-          if (t > 1) t -= 1;
-          if (t < 1/6) return p + (q - p) * 6 * t;
-          if (t < 1/2) return q;
-          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-          return p;
-        };
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1/3);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1/3);
-      }
-      return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-    }
+      const driftEnabled = controlsBox.querySelector('input[data-k="driftEnabled"]');
+      const driftAmt = controlsBox.querySelector('input[data-k="driftAmt"]');
+      const driftPer = controlsBox.querySelector('input[data-k="driftPer"]');
 
-    // --- Variables and Elements ---
-    const canvas = document.getElementById('visualizerCanvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const playPauseButton = document.getElementById('playPauseButton');
-    const deltaButtons = document.querySelectorAll('#delta-controls button[data-delta]');
-    const currentDeltaDisplay = document.getElementById('currentDeltaDisplay');
-    const baseFreqDownButton = document.getElementById('baseFreqDown');
-    const baseFreqUpButton = document.getElementById('baseFreqUp');
-    const currentBaseFreqDisplay = document.getElementById('currentBaseFreqDisplay');
-
-    let audioContext = null;
-    let oscillatorL = null;
-    let oscillatorR = null;
-    let gainL = null;
-    let gainR = null;
-    let merger = null;
-    let isPlaying = false;
-    let baseFrequency = 100; // Hz
-    let delta = 1; // Hz
-    let animationFrameId = null;
-    let time = 0;
-    const noise = new SimplexNoise();
-    let imageData = null;
-    let pixelData = null;
-
-    const MIN_BASE_FREQ = 30;
-    const MAX_BASE_FREQ = 500;
-
-    // --- Audio Functions ---
-    function setupAudio() {
-      if (!audioContext) {
-        try {
-          window.AudioContext = window.AudioContext || window.webkitAudioContext;
-          audioContext = new AudioContext();
-        } catch(e) {
-          alert('Web Audio API is not supported in this browser');
-          return false;
-        }
-      }
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      stopAudioNodes();
-      oscillatorL = audioContext.createOscillator();
-      oscillatorR = audioContext.createOscillator();
-      oscillatorL.type = 'sine';
-      oscillatorR.type = 'sine';
-
-      gainL = audioContext.createGain();
-      gainR = audioContext.createGain();
-      gainL.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainR.gain.setValueAtTime(0.3, audioContext.currentTime);
-
-      merger = audioContext.createChannelMerger(2);
-      oscillatorL.connect(gainL);
-      oscillatorR.connect(gainR);
-      gainL.connect(merger, 0, 0);
-      gainR.connect(merger, 0, 1);
-      merger.connect(audioContext.destination);
-
-      updateFrequencies();
-      return true;
-    }
-
-    function startAudio() {
-      if (!audioContext || !oscillatorL || !oscillatorR) {
-        if (!setupAudio()) return;
-      }
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      try {
-        if (!oscillatorL.startTimeSet) {
-          oscillatorL.start(0);
-          oscillatorL.startTimeSet = true;
-        }
-        if (!oscillatorR.startTimeSet) {
-          oscillatorR.start(0);
-          oscillatorR.startTimeSet = true;
-        }
-      } catch (e) {
-        console.warn("Audio start error:", e);
-      }
-    }
-
-    function stopAudioNodes() {
-      if (oscillatorL) {
-        try { oscillatorL.stop(); } catch(e) {}
-        oscillatorL.disconnect();
-        oscillatorL = null;
-      }
-      if (oscillatorR) {
-        try { oscillatorR.stop(); } catch(e) {}
-        oscillatorR.disconnect();
-        oscillatorR = null;
-      }
-      if (gainL) {
-        gainL.disconnect();
-        gainL = null;
-      }
-      if (gainR) {
-        gainR.disconnect();
-        gainR = null;
-      }
-      if (merger) {
-        merger.disconnect();
-        merger = null;
-      }
-    }
-
-    function updateFrequencies() {
-      const freqL = baseFrequency - delta / 2;
-      const freqR = baseFrequency + delta / 2;
-      if (oscillatorL && oscillatorR && audioContext) {
-        const now = audioContext.currentTime;
-        const rampTime = 0.05;
-        oscillatorL.frequency.setTargetAtTime(Math.max(20, freqL), now, rampTime);
-        oscillatorR.frequency.setTargetAtTime(Math.max(20, freqR), now, rampTime);
-      }
-    }
-
-    // --- Visualizer Functions ---
-    function resizeCanvas() {
-      const container = document.getElementById('visualizer-container');
-      const size = Math.min(container.clientWidth, container.clientHeight) * 0.80;
-      const finalSize = Math.max(100, Math.floor(size));
-
-      if (canvas.width !== finalSize) {
-        canvas.width = finalSize;
-        canvas.height = finalSize;
-        imageData = ctx.createImageData(canvas.width, canvas.height);
-        pixelData = imageData.data;
-
-        if (!isPlaying) {
-          drawStaticVisualizer();
-        }
-      }
-    }
-
-    function drawStaticVisualizer(staticTime = 0.1) {
-      drawNoiseCircle(staticTime);
-    }
-
-    function drawNoiseCircle(currentTime) {
-      const width = canvas.width;
-      const height = canvas.height;
-      if (!imageData || !pixelData || width === 0 || height === 0) {
-        return;
-      }
-
-      const cx = width / 2;
-      const cy = height / 2;
-      const radius = Math.min(width, height) / 2;
-      const radiusSq = radius * radius;
-
-      const timeMultiplier = 4.0 + Math.sqrt(delta);
-      const baseVisualScale = 0.3;
-      const visualScaleXY = baseVisualScale * Math.sqrt(delta);
-      const noiseScaleZ = 0.2;
-      const noiseZ = currentTime * timeMultiplier * noiseScaleZ;
-
-      const rootStyle = getComputedStyle(document.documentElement);
-      const baseHue = parseFloat(rootStyle.getPropertyValue('--base-hue'));
-      const hueRange = parseFloat(rootStyle.getPropertyValue('--hue-range'));
-      const baseSat = parseFloat(rootStyle.getPropertyValue('--base-saturation')) / 100;
-      const satRange = parseFloat(rootStyle.getPropertyValue('--saturation-range')) / 100;
-      const baseLight = parseFloat(rootStyle.getPropertyValue('--base-lightness')) / 100;
-      const lightRange = parseFloat(rootStyle.getPropertyValue('--lightness-range')) / 100;
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const dx = x - cx;
-          const dy = y - cy;
-          const distSq = dx * dx + dy * dy;
-          const index = (y * width + x) * 4;
-
-          if (distSq <= radiusSq) {
-            const normX = dx / radius;
-            const normY = dy / radius;
-            const noiseX = normX * visualScaleXY;
-            const noiseY = normY * visualScaleXY;
-            const noiseVal = noise.noise3D(noiseX, noiseY, noiseZ);
-            const noiseNorm = (noiseVal + 1) / 2;
-
-            const h = ((baseHue + noiseNorm * hueRange) % 360) / 360;
-            const s = Math.max(0, Math.min(1, baseSat + (noiseVal * satRange)));
-            const l = Math.max(0, Math.min(1, baseLight + (noiseVal * lightRange)));
-            const [r, g, b] = hslToRgb(h, s, l);
-
-            pixelData[index]     = r;
-            pixelData[index + 1] = g;
-            pixelData[index + 2] = b;
-            pixelData[index + 3] = 255;
-          } else {
-            pixelData[index + 3] = 0;
-          }
-        }
-      }
-      ctx.putImageData(imageData, 0, 0);
-    }
-
-    function drawVisualizer() {
-      if (!isPlaying) return;
-      time += 0.016;
-      drawNoiseCircle(time);
-      animationFrameId = requestAnimationFrame(drawVisualizer);
-    }
-
-    // --- Control Handlers ---
-    function togglePlay() {
-      if (!audioContext) {
-        if (!setupAudio()) return;
-      }
-      if (isPlaying) {
-        if (audioContext.state === 'running') {
-          audioContext.suspend().then(() => console.log("AudioContext suspended."));
-        }
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId);
-          animationFrameId = null;
-        }
-        isPlaying = false;
-        playPauseButton.textContent = 'Play';
-        playPauseButton.classList.remove('playing');
-      } else {
-        if (audioContext.state === 'suspended') {
-          audioContext.resume().then(() => {
-            console.log("AudioContext resumed.");
-            if (!oscillatorL) setupAudio();
-            startAudio();
-            if (!animationFrameId) {
-              animationFrameId = requestAnimationFrame(drawVisualizer);
-            }
-          });
-        } else {
-          if (!oscillatorL) setupAudio();
-          startAudio();
-          if (!animationFrameId) {
-            animationFrameId = requestAnimationFrame(drawVisualizer);
-          }
-        }
-        isPlaying = true;
-        playPauseButton.textContent = 'Pause';
-        playPauseButton.classList.add('playing');
-      }
-    }
-
-    function updateDelta(newDelta) {
-      delta = newDelta;
-      currentDeltaDisplay.textContent = delta;
-      updateFrequencies();
-      deltaButtons.forEach(btn => {
-        btn.classList.toggle('active-delta', parseInt(btn.dataset.delta) === delta);
+      driftEnabled.addEventListener("change", () => {
+        layer.drift = layer.drift || {};
+        layer.drift.enabled = driftEnabled.checked;
+        scheduleSave();
+        if (engine.isPlaying) engine.updateLayer(layer.id, layer);
       });
-    }
 
-    function changeBaseFrequency(amount) {
-      baseFrequency += amount;
-      baseFrequency = Math.max(MIN_BASE_FREQ, Math.min(MAX_BASE_FREQ, baseFrequency));
-      currentBaseFreqDisplay.textContent = baseFrequency;
-      updateFrequencies();
-    }
+      const syncDrift = () => {
+        layer.drift = layer.drift || {};
+        layer.drift.amountHz = clamp(parseFloat(driftAmt.value), 0.01, 1.0);
+        layer.drift.periodSec = clamp(parseFloat(driftPer.value), 20, 900);
+        driftAmt.value = layer.drift.amountHz;
+        driftPer.value = layer.drift.periodSec;
+        scheduleSave();
+        if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+      };
+      driftAmt.addEventListener("change", syncDrift);
+      driftPer.addEventListener("change", syncDrift);
 
-    // --- Event Listeners ---
-    playPauseButton.addEventListener('click', togglePlay);
-    deltaButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        updateDelta(parseInt(button.dataset.delta));
+      const restartBtn = controlsBox.querySelector('button[data-action="restartAudio"]');
+      restartBtn.addEventListener("click", () => {
+        if (engine.isPlaying){
+          engine.start(appState);
+          // reapply toggles
+          engine.setLimiterEnabled(!!appState.limiter);
+          engine.setComfortEqEnabled(!!appState.comfortEq);
+          engine.setMasterDb(appState.masterDb ?? -12);
+          engine.applyMixRules();
+          applySessionScheduling();
+          if (runtime.pomo.enabled) engine.startPomodoro(runtime.pomo);
+          else engine.stopPomodoro();
+        }
       });
-    });
-    baseFreqDownButton.addEventListener('click', () => changeBaseFrequency(-5));
-    baseFreqUpButton.addEventListener('click', () => changeBaseFrequency(5));
 
-    let resizeTimeout;
-    window.addEventListener('resize', () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(resizeCanvas, 100);
-    });
-
-    // --- Initialization ---
-    function initialize() {
-      currentDeltaDisplay.textContent = delta;
-      currentBaseFreqDisplay.textContent = baseFrequency;
-      document.querySelector(`#delta-controls button[data-delta="${delta}"]`)
-              .classList.add('active-delta');
-      resizeCanvas();
-      drawStaticVisualizer();
-      console.log("Visualizer Initialized");
+    } else if (layer.mode === "noise"){
+      controlsBox.innerHTML = `
+        <div class="row">
+          <span class="label">Type</span>
+          <div class="inline">
+            <select data-k="noiseType">
+              <option value="pink" ${layer.noiseType==="pink"?"selected":""}>Pink</option>
+              <option value="brown" ${layer.noiseType==="brown"?"selected":""}>Brown</option>
+              <option value="white" ${layer.noiseType==="white"?"selected":""}>White</option>
+            </select>
+          </div>
+        </div>
+        <div class="mini">Type changes rebuild the noise source live.</div>
+      `;
+      const sel = controlsBox.querySelector('select[data-k="noiseType"]');
+      sel.addEventListener("change", () => {
+        layer.noiseType = sel.value;
+        scheduleSave();
+        if (engine.isPlaying) engine.updateLayer(layer.id, layer);
+      });
+    } else {
+      controlsBox.innerHTML = `<div class="mini">Unsupported layer mode.</div>`;
     }
 
-    document.addEventListener('DOMContentLoaded', initialize);
-  </script>
+    body.appendChild(gainBox);
+    body.appendChild(controlsBox);
+
+    card.appendChild(header);
+    card.appendChild(body);
+    layersRoot.appendChild(card);
+  }
+
+  renderHudDots();
+}
+
+/* =========================
+   HUD controls
+   ========================= */
+function setStatus(playing){
+  if (playing){
+    statusDot.classList.add("ok");
+    statusText.textContent = "Playing";
+  } else {
+    statusDot.classList.remove("ok");
+    statusText.textContent = "Idle";
+  }
+}
+function uiSetPhaseLabel(text){
+  phaseLabel.textContent = text;
+}
+
+hudExpandBtn.addEventListener("click", () => {
+  runtime.hudExpanded = !runtime.hudExpanded;
+  hudExpanded.style.display = runtime.hudExpanded ? "" : "none";
+  hudExpandBtn.textContent = runtime.hudExpanded ? "Details" : "Details";
+});
+
+collapseHudBtn.addEventListener("click", () => {
+  runtime.hudCollapsed = !runtime.hudCollapsed;
+  vizHud.style.display = runtime.hudCollapsed ? "none" : "";
+  collapseHudBtn.textContent = runtime.hudCollapsed ? "HUD" : "HUD";
+});
+
+/* =========================
+   Headphones toast
+   ========================= */
+function maybeShowHeadphonesToast(){
+  if (runtime.headphonesDismissed) return;
+  headphonesToast.style.display = "";
+}
+dismissHeadphonesBtn.addEventListener("click", () => {
+  runtime.headphonesDismissed = true;
+  headphonesToast.style.display = "none";
+  prefs.headphonesDismissed = true;
+  savePrefs(prefs);
+});
+
+/* =========================
+   Play/Pause
+   ========================= */
+playBtn.addEventListener("click", async () => {
+  if (!engine.isPlaying){
+    // Must resume on gesture
+    const ctx = engine.ensureContext();
+    if (ctx.state === "suspended") await ctx.resume();
+
+    engine.start(appState);
+    engine.setLimiterEnabled(!!appState.limiter, true);
+    engine.setComfortEqEnabled(!!appState.comfortEq, true);
+    engine.setMasterDb(appState.masterDb ?? -12, true);
+    engine.applyMixRules();
+
+    playBtn.textContent = "Pause";
+    playBtn.classList.add("playing");
+    setStatus(true);
+    uiSetPhaseLabel("Playing");
+
+    applySessionScheduling();
+
+    if (runtime.pomo.enabled) engine.startPomodoro(runtime.pomo);
+
+    maybeShowHeadphonesToast();
+  } else {
+    engine.stop(false);
+    playBtn.textContent = "Play";
+    playBtn.classList.remove("playing");
+    setStatus(false);
+    uiSetPhaseLabel("Idle");
+    sessionClock.textContent = "00:00";
+  }
+});
+
+/* =========================
+   UI sync helper
+   ========================= */
+function uiSyncAll(){
+  masterDb.value = String(appState.masterDb ?? -12);
+  masterDbLabel.textContent = `${masterDb.value} dB`;
+  limiterOn.checked = !!appState.limiter;
+  comfortEqOn.checked = !!appState.comfortEq;
+  renderLayers();
+  renderMixLabel();
+  renderHudDots();
+  scheduleSave();
+}
+
+/* =========================
+   Clock
+   ========================= */
+setInterval(() => {
+  if (!engine.isPlaying){
+    sessionClock.textContent = "00:00";
+    return;
+  }
+  const elapsed = nowSec() - engine.startedAt;
+  sessionClock.textContent = formatTime(elapsed);
+
+  // Update phase label from engine phase (pomodoro overrides)
+  if (runtime.pomo.enabled){
+    // engine updates via uiSetPhaseLabel inside pomodoro tick
+  } else {
+    uiSetPhaseLabel(engine.phase === "Idle" ? "Idle" : "Playing");
+  }
+}, 250);
+
+/* =========================
+   Visualization
+   - Multi-layer aware: uses analyser energy + weighted beat from active layers
+   - Fast: render offscreen 256² then scale
+   ========================= */
+const viz = document.getElementById("viz");
+const vizCtx = viz.getContext("2d");
+
+const off = document.createElement("canvas");
+const OFF_SIZE = 256;
+off.width = OFF_SIZE;
+off.height = OFF_SIZE;
+const offCtx = off.getContext("2d", { willReadFrequently: true });
+let offImage = offCtx.createImageData(OFF_SIZE, OFF_SIZE);
+let offPixels = offImage.data;
+
+const noise = new SimplexNoise();
+let mask = new Uint8Array(OFF_SIZE * OFF_SIZE);
+(function buildMask(){
+  const cx = OFF_SIZE/2, cy = OFF_SIZE/2;
+  const r = OFF_SIZE/2;
+  const r2 = r*r;
+  for (let y=0;y<OFF_SIZE;y++){
+    for (let x=0;x<OFF_SIZE;x++){
+      const dx = x - cx, dy = y - cy;
+      mask[y*OFF_SIZE + x] = ((dx*dx + dy*dy) <= r2) ? 1 : 0;
+    }
+  }
+})();
+
+function resizeViz(){
+  const rect = viz.getBoundingClientRect();
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  viz.width = Math.floor(rect.width * dpr);
+  viz.height = Math.floor(rect.height * dpr);
+  vizCtx.imageSmoothingEnabled = true;
+}
+window.addEventListener("resize", () => {
+  clearTimeout(resizeViz._t);
+  resizeViz._t = setTimeout(resizeViz, 120);
+});
+
+function getWeightedBeat(){
+  const anySolo = appState.layers.some(l => l.solo);
+  const bins = appState.layers.filter(l => {
+    const active = anySolo ? l.solo : true;
+    return active && l.enabled && !l.muted && l.mode === "binaural";
+  });
+  if (!bins.length) return 0;
+
+  let sum = 0;
+  let wsum = 0;
+  for (const l of bins){
+    const w = dbToGain(l.gainDb ?? -18);
+    sum += (l.beatHz ?? 0) * w;
+    wsum += w;
+  }
+  return wsum ? (sum/wsum) : 0;
+}
+
+let vizT = 0;
+let lastFrame = 0;
+
+function draw(){
+  const fps = parseInt(vizFps.value, 10);
+  vizFpsLabel.textContent = String(fps);
+  const frameInterval = 1000 / fps;
+  const nowMs = performance.now();
+  if (nowMs - lastFrame < frameInterval){
+    requestAnimationFrame(draw);
+    return;
+  }
+  lastFrame = nowMs;
+
+  const bands = engine.getBands();
+  bandLow.textContent  = fmt2(bands.low);
+  bandMid.textContent  = fmt2(bands.mid);
+  bandHigh.textContent = fmt2(bands.high);
+
+  const weightedBeat = getWeightedBeat();
+  const energy = clamp(bands.low*0.65 + bands.mid*0.25 + bands.high*0.10, 0, 1);
+  const calm = clamp(1 - bands.high, 0, 1);
+  const rms = clamp(bands.rms * 2.4, 0, 1);
+
+  const baseSpeed = engine.isPlaying ? (0.35 + weightedBeat * 0.02) : 0.07;
+  vizT += baseSpeed * (0.6 + energy*1.2);
+
+  // Update HUD mix label
+  renderMixLabel();
+
+  const root = getComputedStyle(document.documentElement);
+  const baseHue = parseFloat(root.getPropertyValue('--base-hue'));
+  const hueRange = parseFloat(root.getPropertyValue('--hue-range'));
+  const baseSat = parseFloat(root.getPropertyValue('--base-sat')) / 100;
+  const satRange = parseFloat(root.getPropertyValue('--sat-range')) / 100;
+  const baseLit = parseFloat(root.getPropertyValue('--base-lit')) / 100;
+  const litRange = parseFloat(root.getPropertyValue('--lit-range')) / 100;
+
+  const hueOffset = (energy * 22) - (calm * 6);
+  const scaleXY = 0.26 + energy * 0.22;
+  const warp = 0.8 + rms * 1.6;
+
+  const cx = OFF_SIZE/2, cy = OFF_SIZE/2;
+  const r = OFF_SIZE/2;
+  const z = vizT * 0.14;
+
+  for (let y=0;y<OFF_SIZE;y++){
+    const ny = (y - cy) / r;
+    for (let x=0;x<OFF_SIZE;x++){
+      const idx1 = y*OFF_SIZE + x;
+      const idx = idx1 * 4;
+
+      if (!mask[idx1]){
+        offPixels[idx+3] = 0;
+        continue;
+      }
+
+      const nx = (x - cx) / r;
+
+      const radial = Math.sqrt(nx*nx + ny*ny);
+      const pulse = engine.isPlaying ? (0.5 + 0.5*Math.sin((vizT*0.9) + radial * 6.0)) : 0.45;
+
+      const n = noise.noise3D(nx*scaleXY*warp, ny*scaleXY*warp, z);
+      const nNorm = (n + 1) / 2;
+
+      const h = (((baseHue + hueOffset) + nNorm * hueRange) % 360) / 360;
+      const s = clamp(baseSat + (n * satRange) + energy*0.08, 0, 1);
+      const l = clamp(baseLit + (n * litRange) + (pulse-0.5)*0.05 + energy*0.08, 0, 1);
+
+      const [rr, gg, bb] = hslToRgb(h, s, l);
+      offPixels[idx]   = rr;
+      offPixels[idx+1] = gg;
+      offPixels[idx+2] = bb;
+      offPixels[idx+3] = 255;
+    }
+  }
+
+  offCtx.putImageData(offImage, 0, 0);
+
+  const vw = viz.width, vh = viz.height;
+  vizCtx.clearRect(0,0,vw,vh);
+
+  const gx = vw/2, gy = vh/2;
+  const gr = Math.min(vw,vh)/2;
+
+  const grad = vizCtx.createRadialGradient(gx,gy, gr*0.15, gx,gy, gr*0.98);
+  grad.addColorStop(0, "rgba(255,255,255,0.03)");
+  grad.addColorStop(1, "rgba(0,0,0,0.35)");
+  vizCtx.fillStyle = grad;
+  vizCtx.beginPath();
+  vizCtx.arc(gx,gy, gr*0.98, 0, Math.PI*2);
+  vizCtx.fill();
+
+  vizCtx.drawImage(off, 0, 0, vw, vh);
+
+  vizCtx.strokeStyle = "rgba(255,255,255,0.09)";
+  vizCtx.lineWidth = Math.max(1, Math.min(3, gr*0.006));
+  vizCtx.beginPath();
+  vizCtx.arc(gx,gy, gr*0.97, 0, Math.PI*2);
+  vizCtx.stroke();
+
+  requestAnimationFrame(draw);
+}
+
+/* =========================
+   Init
+   ========================= */
+function init(){
+  refreshPresetSelect();
+
+  // Sync UI from appState
+  presetSelect.value = appState.id || PRESETS[0].id;
+
+  limiterOn.checked = !!appState.limiter;
+  comfortEqOn.checked = !!appState.comfortEq;
+
+  masterDb.value = String(appState.masterDb ?? -12);
+  masterDbLabel.textContent = `${masterDb.value} dB`;
+
+  // duration / pomo defaults
+  durationSelect.value = String(runtime.durationSec ?? 3600);
+  stopAtEndBtn.textContent = runtime.autoFadeEnabled ? "Auto Fade" : "No Fade";
+
+  pomoOn.checked = !!runtime.pomo.enabled;
+  pomoWork.value = runtime.pomo.workMin ?? 25;
+  pomoBreak.value = runtime.pomo.breakMin ?? 5;
+  pomoReps.value = runtime.pomo.reps ?? 4;
+
+  vizFpsLabel.textContent = vizFps.value;
+
+  renderLayers();
+  renderHudDots();
+  renderMixLabel();
+
+  resizeViz();
+  setStatus(false);
+  uiSetPhaseLabel("Idle");
+  hudExpanded.style.display = runtime.hudExpanded ? "" : "none";
+
+  requestAnimationFrame(draw);
+}
+document.addEventListener("DOMContentLoaded", init);
+</script>
 </body>
 </html>

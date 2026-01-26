@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Binaural Beats Visualizer</title>
+  <style>
+    :root {
+      /* A near-black background */
+      --background-color: #0b0b0b;
+
+      /* Subtle, dark control bar */
+      --control-bg-color: #1a1a1a;
+
+      /* Buttons: dark gray, with slightly lighter hover */
+      --button-bg-color: #2a2a2a;
+      --button-hover-bg-color: #333;
+
+      /* Text color is a neutral light gray */
+      --text-color: #ccc;
+
+      /* Accent color is subdued gray (used for active delta button and play state) */
+      --accent-color: #888;
+
+      /* Base HSL values for the noise color mapping (keeps the purple-ish gradient) */
+      --base-hue: 235;
+      --hue-range: 50;
+      --base-saturation: 70;
+      --saturation-range: 20;
+      --base-lightness: 45;
+      --lightness-range: 15;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: var(--background-color);
+      color: var(--text-color);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #visualizer-container {
+      flex-grow: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      position: relative;
+    }
+
+    #visualizerCanvas {
+      /* Size set by JS; keep it flexible */
+      max-width: 85vmin;
+      max-height: 85vmin;
+      border-radius: 50%;
+      background-color: transparent;
+      /* Remove or keep minimal shadow if desired
+         box-shadow: 0 0 20px rgba(255,255,255,0.03); */
+    }
+
+    #controls {
+      background-color: var(--control-bg-color);
+      padding: 10px 15px;
+      border-radius: 8px;
+      /* Minimal or no shadow to reduce distraction */
+      box-shadow: none;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 90%;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      /* Very subtle background for grouping */
+      background-color: rgba(255, 255, 255, 0.03);
+      padding: 5px 8px;
+      border-radius: 5px;
+    }
+
+    #controls button {
+      background-color: var(--button-bg-color);
+      color: var(--text-color);
+      border: none;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: background-color 0.2s ease, transform 0.1s ease;
+      min-width: 40px;
+      text-align: center;
+    }
+
+    #controls button:hover {
+      background-color: var(--button-hover-bg-color);
+    }
+
+    #controls button:active {
+      transform: scale(0.95);
+    }
+
+    /* Accent for the active delta button */
+    #controls button.active-delta {
+      background-color: var(--accent-color);
+      color: #000;
+      font-weight: bold;
+    }
+
+    #controls span {
+      font-weight: bold;
+      min-width: 30px;
+      text-align: center;
+      color: #fff;
+    }
+
+    #playPauseButton {
+      font-weight: bold;
+      width: 80px;
+    }
+
+    #playPauseButton.playing {
+      background-color: var(--accent-color);
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="visualizer-container">
+    <canvas id="visualizerCanvas"></canvas>
+  </div>
+
+  <div id="controls">
+    <button id="playPauseButton">Play</button>
+
+    <div class="control-group" id="delta-controls">
+      <span>Δ:</span>
+      <button data-delta="1">1 Hz</button>
+      <button data-delta="4">4 Hz</button>
+      <button data-delta="8">8 Hz</button>
+      <button data-delta="12">12 Hz</button>
+      <button data-delta="20">20 Hz</button>
+      <button data-delta="40">40 Hz</button>
+      <span id="currentDeltaDisplay">1</span>Hz
+    </div>
+
+    <div class="control-group" id="base-freq-controls">
+      <span>Base:</span>
+      <button id="baseFreqDown">-</button>
+      <span id="currentBaseFreqDisplay">100</span>Hz
+      <button id="baseFreqUp">+</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Simplex Noise Implementation (same as before) ---
+    var SimplexNoise = (function() {
+      function Alea() {
+        let s0 = 0; let s1 = 0; let s2 = 0; let c = 1;
+        const mash = (function() {
+          let n = 0xefc8249d;
+          return function(data) {
+            data = data.toString();
+            for (let i = 0; i < data.length; i++) {
+              n += data.charCodeAt(i);
+              let h = 0.02519603282416938 * n;
+              n = h >>> 0;
+              h -= n; h *= n; n = h >>> 0; h -= n; n += h * 0x100000000;
+            }
+            return (n >>> 0) * 2.3283064365386963e-10;
+          };
+        })();
+        return {
+          next: function() {
+            const t = 2091639 * s0 + c * 2.3283064365386963e-10;
+            s0 = s1; s1 = s2; return s2 = t - (c = t | 0);
+          },
+          seed: function(...args) {
+            s0 = mash(' '); s1 = mash(' '); s2 = mash(' ');
+            c = 1;
+            for (const arg of args) {
+              s0 -= mash(arg); if (s0 < 0) s0 += 1;
+              s1 -= mash(arg); if (s1 < 0) s1 += 1;
+              s2 -= mash(arg); if (s2 < 0) s2 += 1;
+            }
+          }
+        };
+      }
+      const F3 = 1.0 / 3.0; const G3 = 1.0 / 6.0;
+      const grad3 = new Float32Array([
+        1,1,0,-1,1,0,1,-1,0,-1,-1,0,
+        1,0,1,-1,0,1,1,0,-1,-1,0,-1,
+        0,1,1,0,-1,1,0,1,-1,0,-1,-1
+      ]);
+      const p = new Uint8Array(256); const perm = new Uint8Array(512);
+      const permMod12 = new Uint8Array(512);
+      const random = Alea(); random.seed(Date.now());
+      for (let i = 0; i < 256; i++) { p[i] = i; }
+      for (let i = 255; i > 0; i--) {
+        const j = Math.floor(random.next() * (i + 1));
+        [p[i], p[j]] = [p[j], p[i]];
+      }
+      for (let i = 0; i < 512; i++) {
+        perm[i] = p[i & 255];
+        permMod12[i] = perm[i] % 12;
+      }
+      return class SimplexNoise {
+        constructor(seed) {
+          if (seed) random.seed(seed);
+          for (let i = 0; i < 256; i++) { p[i] = i; }
+          for (let i = 255; i > 0; i--) {
+            const j = Math.floor(random.next() * (i + 1));
+            [p[i], p[j]] = [p[j], p[i]];
+          }
+          for (let i = 0; i < 512; i++) {
+            perm[i] = p[i & 255];
+            permMod12[i] = perm[i] % 12;
+          }
+        }
+        noise3D(xin, yin, zin) {
+          let n0, n1, n2, n3;
+          const s = (xin + yin + zin) * F3;
+          const i = Math.floor(xin + s);
+          const j = Math.floor(yin + s);
+          const k = Math.floor(zin + s);
+          const t = (i + j + k) * G3;
+          const X0 = i - t; const Y0 = j - t; const Z0 = k - t;
+          const x0 = xin - X0; const y0 = yin - Y0; const z0 = zin - Z0;
+          let i1, j1, k1; let i2, j2, k2;
+          if (x0 >= y0) {
+            if (y0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=1; k2=0; }
+            else if (x0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=0; k2=1; }
+            else { i1=0; j1=0; k1=1; i2=1; j2=0; k2=1; }
+          } else {
+            if (y0 < z0) { i1=0; j1=0; k1=1; i2=0; j2=1; k2=1; }
+            else if (x0 < z0) { i1=0; j1=1; k1=0; i2=0; j2=1; k2=1; }
+            else { i1=0; j1=1; k1=0; i2=1; j2=1; k2=0; }
+          }
+          const x1 = x0 - i1 + G3; const y1 = y0 - j1 + G3; const z1 = z0 - k1 + G3;
+          const x2 = x0 - i2 + 2.0*G3; const y2 = y0 - j2 + 2.0*G3; const z2 = z0 - k2 + 2.0*G3;
+          const x3 = x0 - 1.0 + 3.0*G3; const y3 = y0 - 1.0 + 3.0*G3; const z3 = z0 - 1.0 + 3.0*G3;
+          const ii = i & 255; const jj = j & 255; const kk = k & 255;
+          let t0 = 0.6 - x0*x0 - y0*y0 - z0*z0;
+          if (t0 < 0) n0 = 0.0;
+          else {
+            const gi0 = permMod12[ii + perm[jj + perm[kk]]];
+            t0 *= t0;
+            n0 = t0 * t0 * (grad3[gi0*3] * x0 + grad3[gi0*3+1] * y0 + grad3[gi0*3+2] * z0);
+          }
+          let t1 = 0.6 - x1*x1 - y1*y1 - z1*z1;
+          if (t1 < 0) n1 = 0.0;
+          else {
+            const gi1 = permMod12[ii + i1 + perm[jj + j1 + perm[kk + k1]]];
+            t1 *= t1;
+            n1 = t1 * t1 * (grad3[gi1*3] * x1 + grad3[gi1*3+1] * y1 + grad3[gi1*3+2] * z1);
+          }
+          let t2 = 0.6 - x2*x2 - y2*y2 - z2*z2;
+          if (t2 < 0) n2 = 0.0;
+          else {
+            const gi2 = permMod12[ii + i2 + perm[jj + j2 + perm[kk + k2]]];
+            t2 *= t2;
+            n2 = t2 * t2 * (grad3[gi2*3] * x2 + grad3[gi2*3+1] * y2 + grad3[gi2*3+2] * z2);
+          }
+          let t3 = 0.6 - x3*x3 - y3*y3 - z3*z3;
+          if (t3 < 0) n3 = 0.0;
+          else {
+            const gi3 = permMod12[ii + 1 + perm[jj + 1 + perm[kk + 1]]];
+            t3 *= t3;
+            n3 = t3 * t3 * (grad3[gi3*3] * x3 + grad3[gi3*3+1] * y3 + grad3[gi3*3+2] * z3);
+          }
+          return 32.0 * (n0 + n1 + n2 + n3);
+        }
+      };
+    })();
+
+    // --- HSL to RGB Converter ---
+    function hslToRgb(h, s, l) {
+      let r, g, b;
+      if (s === 0) {
+        r = g = b = l;
+      } else {
+        const hue2rgb = (p, q, t) => {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+    }
+
+    // --- Variables and Elements ---
+    const canvas = document.getElementById('visualizerCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const playPauseButton = document.getElementById('playPauseButton');
+    const deltaButtons = document.querySelectorAll('#delta-controls button[data-delta]');
+    const currentDeltaDisplay = document.getElementById('currentDeltaDisplay');
+    const baseFreqDownButton = document.getElementById('baseFreqDown');
+    const baseFreqUpButton = document.getElementById('baseFreqUp');
+    const currentBaseFreqDisplay = document.getElementById('currentBaseFreqDisplay');
+
+    let audioContext = null;
+    let oscillatorL = null;
+    let oscillatorR = null;
+    let gainL = null;
+    let gainR = null;
+    let merger = null;
+    let isPlaying = false;
+    let baseFrequency = 100; // Hz
+    let delta = 1; // Hz
+    let animationFrameId = null;
+    let time = 0;
+    const noise = new SimplexNoise();
+    let imageData = null;
+    let pixelData = null;
+
+    const MIN_BASE_FREQ = 30;
+    const MAX_BASE_FREQ = 500;
+
+    // --- Audio Functions ---
+    function setupAudio() {
+      if (!audioContext) {
+        try {
+          window.AudioContext = window.AudioContext || window.webkitAudioContext;
+          audioContext = new AudioContext();
+        } catch(e) {
+          alert('Web Audio API is not supported in this browser');
+          return false;
+        }
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      stopAudioNodes();
+      oscillatorL = audioContext.createOscillator();
+      oscillatorR = audioContext.createOscillator();
+      oscillatorL.type = 'sine';
+      oscillatorR.type = 'sine';
+
+      gainL = audioContext.createGain();
+      gainR = audioContext.createGain();
+      gainL.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainR.gain.setValueAtTime(0.3, audioContext.currentTime);
+
+      merger = audioContext.createChannelMerger(2);
+      oscillatorL.connect(gainL);
+      oscillatorR.connect(gainR);
+      gainL.connect(merger, 0, 0);
+      gainR.connect(merger, 0, 1);
+      merger.connect(audioContext.destination);
+
+      updateFrequencies();
+      return true;
+    }
+
+    function startAudio() {
+      if (!audioContext || !oscillatorL || !oscillatorR) {
+        if (!setupAudio()) return;
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      try {
+        if (!oscillatorL.startTimeSet) {
+          oscillatorL.start(0);
+          oscillatorL.startTimeSet = true;
+        }
+        if (!oscillatorR.startTimeSet) {
+          oscillatorR.start(0);
+          oscillatorR.startTimeSet = true;
+        }
+      } catch (e) {
+        console.warn("Audio start error:", e);
+      }
+    }
+
+    function stopAudioNodes() {
+      if (oscillatorL) {
+        try { oscillatorL.stop(); } catch(e) {}
+        oscillatorL.disconnect();
+        oscillatorL = null;
+      }
+      if (oscillatorR) {
+        try { oscillatorR.stop(); } catch(e) {}
+        oscillatorR.disconnect();
+        oscillatorR = null;
+      }
+      if (gainL) {
+        gainL.disconnect();
+        gainL = null;
+      }
+      if (gainR) {
+        gainR.disconnect();
+        gainR = null;
+      }
+      if (merger) {
+        merger.disconnect();
+        merger = null;
+      }
+    }
+
+    function updateFrequencies() {
+      const freqL = baseFrequency - delta / 2;
+      const freqR = baseFrequency + delta / 2;
+      if (oscillatorL && oscillatorR && audioContext) {
+        const now = audioContext.currentTime;
+        const rampTime = 0.05;
+        oscillatorL.frequency.setTargetAtTime(Math.max(20, freqL), now, rampTime);
+        oscillatorR.frequency.setTargetAtTime(Math.max(20, freqR), now, rampTime);
+      }
+    }
+
+    // --- Visualizer Functions ---
+    function resizeCanvas() {
+      const container = document.getElementById('visualizer-container');
+      const size = Math.min(container.clientWidth, container.clientHeight) * 0.80;
+      const finalSize = Math.max(100, Math.floor(size));
+
+      if (canvas.width !== finalSize) {
+        canvas.width = finalSize;
+        canvas.height = finalSize;
+        imageData = ctx.createImageData(canvas.width, canvas.height);
+        pixelData = imageData.data;
+
+        if (!isPlaying) {
+          drawStaticVisualizer();
+        }
+      }
+    }
+
+    function drawStaticVisualizer(staticTime = 0.1) {
+      drawNoiseCircle(staticTime);
+    }
+
+    function drawNoiseCircle(currentTime) {
+      const width = canvas.width;
+      const height = canvas.height;
+      if (!imageData || !pixelData || width === 0 || height === 0) {
+        return;
+      }
+
+      const cx = width / 2;
+      const cy = height / 2;
+      const radius = Math.min(width, height) / 2;
+      const radiusSq = radius * radius;
+
+      const timeMultiplier = 4.0 + Math.sqrt(delta);
+      const baseVisualScale = 0.3;
+      const visualScaleXY = baseVisualScale * Math.sqrt(delta);
+      const noiseScaleZ = 0.2;
+      const noiseZ = currentTime * timeMultiplier * noiseScaleZ;
+
+      const rootStyle = getComputedStyle(document.documentElement);
+      const baseHue = parseFloat(rootStyle.getPropertyValue('--base-hue'));
+      const hueRange = parseFloat(rootStyle.getPropertyValue('--hue-range'));
+      const baseSat = parseFloat(rootStyle.getPropertyValue('--base-saturation')) / 100;
+      const satRange = parseFloat(rootStyle.getPropertyValue('--saturation-range')) / 100;
+      const baseLight = parseFloat(rootStyle.getPropertyValue('--base-lightness')) / 100;
+      const lightRange = parseFloat(rootStyle.getPropertyValue('--lightness-range')) / 100;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const dx = x - cx;
+          const dy = y - cy;
+          const distSq = dx * dx + dy * dy;
+          const index = (y * width + x) * 4;
+
+          if (distSq <= radiusSq) {
+            const normX = dx / radius;
+            const normY = dy / radius;
+            const noiseX = normX * visualScaleXY;
+            const noiseY = normY * visualScaleXY;
+            const noiseVal = noise.noise3D(noiseX, noiseY, noiseZ);
+            const noiseNorm = (noiseVal + 1) / 2;
+
+            const h = ((baseHue + noiseNorm * hueRange) % 360) / 360;
+            const s = Math.max(0, Math.min(1, baseSat + (noiseVal * satRange)));
+            const l = Math.max(0, Math.min(1, baseLight + (noiseVal * lightRange)));
+            const [r, g, b] = hslToRgb(h, s, l);
+
+            pixelData[index]     = r;
+            pixelData[index + 1] = g;
+            pixelData[index + 2] = b;
+            pixelData[index + 3] = 255;
+          } else {
+            pixelData[index + 3] = 0;
+          }
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function drawVisualizer() {
+      if (!isPlaying) return;
+      time += 0.016;
+      drawNoiseCircle(time);
+      animationFrameId = requestAnimationFrame(drawVisualizer);
+    }
+
+    // --- Control Handlers ---
+    function togglePlay() {
+      if (!audioContext) {
+        if (!setupAudio()) return;
+      }
+      if (isPlaying) {
+        if (audioContext.state === 'running') {
+          audioContext.suspend().then(() => console.log("AudioContext suspended."));
+        }
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+        isPlaying = false;
+        playPauseButton.textContent = 'Play';
+        playPauseButton.classList.remove('playing');
+      } else {
+        if (audioContext.state === 'suspended') {
+          audioContext.resume().then(() => {
+            console.log("AudioContext resumed.");
+            if (!oscillatorL) setupAudio();
+            startAudio();
+            if (!animationFrameId) {
+              animationFrameId = requestAnimationFrame(drawVisualizer);
+            }
+          });
+        } else {
+          if (!oscillatorL) setupAudio();
+          startAudio();
+          if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(drawVisualizer);
+          }
+        }
+        isPlaying = true;
+        playPauseButton.textContent = 'Pause';
+        playPauseButton.classList.add('playing');
+      }
+    }
+
+    function updateDelta(newDelta) {
+      delta = newDelta;
+      currentDeltaDisplay.textContent = delta;
+      updateFrequencies();
+      deltaButtons.forEach(btn => {
+        btn.classList.toggle('active-delta', parseInt(btn.dataset.delta) === delta);
+      });
+    }
+
+    function changeBaseFrequency(amount) {
+      baseFrequency += amount;
+      baseFrequency = Math.max(MIN_BASE_FREQ, Math.min(MAX_BASE_FREQ, baseFrequency));
+      currentBaseFreqDisplay.textContent = baseFrequency;
+      updateFrequencies();
+    }
+
+    // --- Event Listeners ---
+    playPauseButton.addEventListener('click', togglePlay);
+    deltaButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        updateDelta(parseInt(button.dataset.delta));
+      });
+    });
+    baseFreqDownButton.addEventListener('click', () => changeBaseFrequency(-5));
+    baseFreqUpButton.addEventListener('click', () => changeBaseFrequency(5));
+
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(resizeCanvas, 100);
+    });
+
+    // --- Initialization ---
+    function initialize() {
+      currentDeltaDisplay.textContent = delta;
+      currentBaseFreqDisplay.textContent = baseFrequency;
+      document.querySelector(`#delta-controls button[data-delta="${delta}"]`)
+              .classList.add('active-delta');
+      resizeCanvas();
+      drawStaticVisualizer();
+      console.log("Visualizer Initialized");
+    }
+
+    document.addEventListener('DOMContentLoaded', initialize);
+  </script>
+</body>
+</html>
